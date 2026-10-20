@@ -1,0 +1,16 @@
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: InterfacePhysical
+  data:
+    # Phase 3 (P3-39, P3-60): server-facing access port for the PROD lab test host on the first DC1 single-homed leaf.
+    # Owned by this file, not by the fabric_site generator (role "access" is outside the reconciler's owned roles).
+    - device: DC1-L11
+      name: Ethernet1/1
+      description: Lab PROD test host
+      role: access
+      l2_mode: access
+      status: active
+      mtu: 9216
+      access_segment: PROD-1010

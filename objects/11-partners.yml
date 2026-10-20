@@ -1,0 +1,32 @@
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamPrefix
+  data:
+    # Phase 4 PC4: translated /28 of the first partner = first /28 of each site's PARTNER block (decided)
+    - prefix: 10.16.160.0/28
+      description: PARTNER01 translated /28 (DC1 VPN-partner FW source NAT)
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.20.160.0/28
+      description: PARTNER01 translated /28 (DC2 VPN-partner FW source NAT)
+      status: active
+      member_type: address
+      site: DC2
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: FabricPartner
+  data:
+    # Phase 4 PC4 (row 47: one partner). Documentation values, P4A-422: peer from 198.18.0.0/15 (RFC 2544 benchmarking),
+    # protected network from RFC 1918 space we do not use
+    - name: PARTNER01
+      description: Sample partner (documentation values)
+      peer_ip: 198.18.100.1
+      protected_prefixes: ["192.168.100.0/24"]
+      translated_prefixes:
+        - ["default", "10.16.160.0/28"]
+        - ["default", "10.20.160.0/28"]

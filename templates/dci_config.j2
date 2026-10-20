@@ -1,0 +1,140 @@
+{# Phase 4 PC1: DCI switch (N9K-C9332D-GX2B, routed, no NVE). eBGP IPv4 to the local BGW (upstream /31 from the BGW),
+   iBGP to the pair peer over port-channel23 with next-hop-self, eBGP across the vendor circuit (row 27 B: Eth1/25, the first
+   MACsec port) with MACsec (row 28 B: placeholder key, public repo) and BFD (row 29 B). Loopback0 advertised. #}
+{# Approved constants: Open-Phase4 rows 26-30 and Auto-approved-P4 #}
+{% set bgp_password = "cisco123" -%}
+{% set bfd_timers = "interval 999 min_rx 999 multiplier 3" -%}     {#- rows 25 B / 29 B -#}
+{% set macsec_keychain = "KC-DCI" -%}                               {#- P4A-05 -#}
+{% set macsec_policy = "MP-DCI" -%}
+{% set macsec_key_id = "01" -%}
+{% set macsec_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" -%}   {#- row 28 B: placeholder, public repo -#}
+{% set macsec_algorithm = "AES_256_CMAC" -%}
+{% set macsec_cipher = "GCM-AES-XPN-256" -%}
+{% set loopback_rm = "RM-LOOPBACK0" -%}
+{% set seq_step = 10 -%}
+{% macro peer31(a) %}{% set p = (a | ipaddress_interface("ip") | string).split(".") %}{% set n = p[3] | int %}{{ p[:3] | join(".") }}.{{ n + 1 if n % 2 == 0 else n - 1 }}{% endmacro -%}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set asn = device.asn.node.asn.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
+{% set virtual = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
+{% set portchannels = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list -%}
+{% set lo0 = virtual | selectattr("name.value", "equalto", "loopback0") | list | first -%}
+{% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
+{% set bgw_links = physical | selectattr("role.value", "equalto", "core") | rejectattr("port_channel.node") | list -%}
+{% set bgw_link_names = bgw_links | map(attribute="name.value") | list | sort_interface_list -%}
+{% set pair_members = physical | selectattr("role.value", "equalto", "core") | selectattr("port_channel.node") | list -%}
+{% set pair_member_names = pair_members | map(attribute="name.value") | list | sort_interface_list -%}
+{% set pair_po = portchannels | selectattr("role.value", "equalto", "core") | list | first -%}
+{% set circuits = physical | selectattr("role.value", "equalto", "dci_circuit") | list -%}
+{% set circuit_names = circuits | map(attribute="name.value") | list | sort_interface_list -%}
+{% set bgws = data.Bgws.edges | map(attribute="node") | list -%}
+{% set dcis = data.Dcis.edges | map(attribute="node") | list -%}
+{% set lo0_addr = lo0.ip_addresses.edges[0].node.address.value -%}
+{% set router_id = lo0_addr | ipaddress_interface("ip") -%}
+{% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
+{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+hostname {{ device.name.value }}
+username vamdadmin password 5 __VAMDADMIN_HASH__ role network-admin
+no ip domain-lookup
+feature bgp
+feature bfd
+feature lacp
+feature macsec
+
+key chain {{ macsec_keychain }} macsec
+  key {{ macsec_key_id }}
+    key-octet-string {{ macsec_key }} cryptographic-algorithm {{ macsec_algorithm }}
+
+macsec policy {{ macsec_policy }}
+  cipher-suite {{ macsec_cipher }}
+
+route-map {{ loopback_rm }} permit {{ seq_step }}
+  match interface {{ lo0.name.value }}
+
+vrf context management
+  ip route 0.0.0.0/0 {{ mgmt_gw }}
+
+interface {{ mgmt.name.value }}
+  description {{ mgmt.description.value }}
+  vrf member management
+  ip address {{ mgmt_addr }}
+
+interface {{ lo0.name.value }}
+  description {{ lo0.description.value }}
+  ip address {{ lo0_addr }}
+{% for name in bgw_link_names %}{% set intf = bgw_links | selectattr("name.value", "equalto", name) | list | first %}
+
+interface {{ intf.name.value }}
+  description {{ intf.description.value }}
+  no switchport
+  mtu {{ intf.mtu.value }}
+  ip address {{ intf.ip_addresses.edges[0].node.address.value }}
+  no ip redirects
+  no bfd echo
+  bfd {{ bfd_timers }}
+  no shutdown
+{% endfor %}
+{% for name in pair_member_names %}{% set intf = pair_members | selectattr("name.value", "equalto", name) | list | first %}
+
+interface {{ intf.name.value }}
+  description {{ intf.description.value }}
+  no switchport
+  mtu {{ intf.mtu.value }}
+  channel-group {{ intf.port_channel.node.name.value | replace("port-channel", "") }} mode active
+  no shutdown
+{% endfor %}
+
+interface {{ pair_po.name.value }}
+  description {{ pair_po.description.value }}
+  no switchport
+  mtu {{ pair_po.mtu.value }}
+  ip address {{ pair_po.ip_addresses.edges[0].node.address.value }}
+  no ip redirects
+  no shutdown
+{% for name in circuit_names %}{% set intf = circuits | selectattr("name.value", "equalto", name) | list | first %}
+
+interface {{ intf.name.value }}
+  description {{ intf.description.value }}
+  no switchport
+  mtu {{ intf.mtu.value }}
+  ip address {{ intf.ip_addresses.edges[0].node.address.value }}
+  no ip redirects
+  macsec keychain {{ macsec_keychain }} policy {{ macsec_policy }}
+  no bfd echo
+  bfd {{ bfd_timers }}
+  no shutdown
+{% endfor %}
+
+router bgp {{ asn }}
+  router-id {{ router_id }}
+  address-family ipv4 unicast
+    redistribute direct route-map {{ loopback_rm }}
+{% for name in bgw_link_names %}{% set intf = bgw_links | selectattr("name.value", "equalto", name) | list | first %}
+{% set far = intf.description.value.split(" ")[0] %}
+{% set far_dev = bgws | selectattr("name.value", "equalto", far) | list | first %}
+  neighbor {{ peer31(intf.ip_addresses.edges[0].node.address.value) }}
+    remote-as {{ far_dev.asn.node.asn.value }}
+    description {{ far }}
+    password {{ bgp_password }}
+    bfd
+    address-family ipv4 unicast
+{% endfor %}
+{% set pair_peer = pair_po.description.value.split(" ")[0] %}
+  neighbor {{ peer31(pair_po.ip_addresses.edges[0].node.address.value) }}
+    remote-as {{ asn }}
+    description {{ pair_peer }}
+    password {{ bgp_password }}
+    address-family ipv4 unicast
+      next-hop-self
+{% for name in circuit_names %}{% set intf = circuits | selectattr("name.value", "equalto", name) | list | first %}
+{% set far_ip = peer31(intf.ip_addresses.edges[0].node.address.value) | string %}
+{% set far_ns = namespace(dev=none) %}
+{% for d in dcis %}{% for c in d.interfaces.edges | map(attribute="node") | list %}{% for a in c.ip_addresses.edges %}{% if (a.node.address.value | ipaddress_interface("ip") | string) == far_ip %}{% set far_ns.dev = d %}{% endif %}{% endfor %}{% endfor %}{% endfor %}
+  neighbor {{ far_ip }}
+    remote-as {{ far_ns.dev.asn.node.asn.value }}
+    description {{ far_ns.dev.name.value }}
+    password {{ bgp_password }}
+    bfd
+    address-family ipv4 unicast
+{% endfor %}

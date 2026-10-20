@@ -1,0 +1,83 @@
+ansible-core==2.20.1
+    # via -r lab/requirements-lab.in
+ansible-pylibssh==1.4.0
+    # via -r lab/requirements-lab.in
+anyio==4.15.1
+    # via httpx
+bcrypt==5.0.0
+    # via paramiko
+certifi==2026.7.22
+    # via
+    #   httpcore
+    #   httpx
+cffi==2.1.1
+    # via
+    #   cryptography
+    #   pynacl
+cryptography==50.0.2
+    # via
+    #   ansible-core
+    #   paramiko
+h11==0.16.0
+    # via httpcore
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via -r lab/requirements-lab.in
+idna==3.20
+    # via
+    #   anyio
+    #   httpx
+invoke==3.0.3
+    # via paramiko
+jinja2==3.1.6
+    # via ansible-core
+markdown-it-py==4.2.0
+    # via rich
+markupsafe==3.0.4
+    # via jinja2
+mdurl==0.1.2
+    # via markdown-it-py
+netmiko==4.8.0
+    # via
+    #   -r lab/requirements-lab.in
+    #   nornir-netmiko
+nornir==3.6.0
+    # via -r lab/requirements-lab.in
+nornir-netmiko==1.0.1
+    # via -r lab/requirements-lab.in
+ntc-templates==9.3.0
+    # via netmiko
+packaging==26.3
+    # via ansible-core
+paramiko==5.0.0
+    # via
+    #   netmiko
+    #   scp
+pycparser==3.0
+    # via cffi
+pygments==2.21.0
+    # via rich
+pynacl==1.6.2
+    # via paramiko
+pyserial==3.5
+    # via netmiko
+pyyaml==6.0.3
+    # via
+    #   -r lab/requirements-lab.in
+    #   ansible-core
+    #   netmiko
+resolvelib==1.2.1
+    # via ansible-core
+rich==15.0.0
+    # via netmiko
+ruamel-yaml==0.19.1
+    # via nornir
+scp==0.16.2
+    # via netmiko
+textfsm==2.1.0
+    # via
+    #   netmiko
+    #   ntc-templates
+typing-extensions==4.16.0
+    # via anyio

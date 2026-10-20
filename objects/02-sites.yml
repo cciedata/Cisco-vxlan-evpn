@@ -1,0 +1,27 @@
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: LocationSite
+  data:
+    # Design sites (docs/design-decisions.md)
+    - name: DC1
+      shortname: MD01
+      description: Maryland datacenter
+      parent: Rockledge
+      vpc_leaf_pairs: 1
+      esi_leaf_pairs: 4
+      single_leaves: 10
+      member_of_groups:
+        - fabric-sites
+        - oob-sites
+    - name: DC2
+      shortname: VA01
+      description: Datacenter, home for DC2-local VRFs
+      parent: Ashburn
+      vpc_leaf_pairs: 1
+      esi_leaf_pairs: 4
+      single_leaves: 10
+      member_of_groups:
+        - fabric-sites
+        - oob-sites

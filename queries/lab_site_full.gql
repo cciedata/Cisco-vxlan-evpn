@@ -1,0 +1,82 @@
+# Option 5 (claude/option5-decisions.md): lab_site plus the other sites' BGW/DCI switches and the VPN partners.
+# Phase 3 (P3-45, P3-48): everything the containerlab topology and the post-check expectations are built from, for one site.
+query LabSiteFull($site: String!) {
+  LocationSite(name__value: $site) {
+    edges {
+      node {
+        name { value }
+        fabric_asn { node { asn { value } } }
+        owned_prefixes { edges { node { prefix { value } description { value } } } }
+        vrfs {
+          edges {
+            node {
+              name { value }
+              multisite { value }
+              summaries { edges { node { prefix { value } site { node { name { value } } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  DcimDevice(location__name__value: $site) {
+    edges {
+      node {
+        name { value }
+        role { value }
+        asn { node { asn { value } } }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+              ... on InterfacePhysical {
+                access_segment {
+                  node {
+                    name { value }
+                    vlan_id { value }
+                    prefix { node { prefix { value } } }
+                    vrf { node { name { value } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  FabricAttachment(site__name__value: $site) {
+    edges {
+      node {
+        name { value }
+        vlan_id { value }
+        prefix { node { prefix { value } } }
+        vrf { node { name { value } } }
+        switch_pair { node { name { value } members { edges { node { name { value } } } } } }
+        devices { edges { node { name { value } asn { node { asn { value } } } } } }
+      }
+    }
+  }
+  FabricAutonomousSystem {
+    edges { node { asn { value } provider { node { name { value } } } } }
+  }
+  # option 5 (D5-35): every BGW and DCI switch; the transform keeps the other sites' ones as FRR stand-ins
+  RemoteBgws: DcimDevice(role__value: "bgw") {
+    edges { node { name { value } role { value } asn { node { asn { value } } } location { node { name { value } } }
+      interfaces { edges { node { __typename name { value } description { value } role { value }
+        ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } } } } }
+  }
+  RemoteDcis: DcimDevice(role__value: "dci") {
+    edges { node { name { value } role { value } asn { node { asn { value } } } location { node { name { value } } }
+      interfaces { edges { node { __typename name { value } description { value } role { value }
+        ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } } } } }
+  }
+  # option 5 (D5-33): the partners with a translated prefix in the site get a stand-in
+  Partners: FabricPartner {
+    edges { node { name { value } translated_prefixes { edges { node { site { node { name { value } } } } } } } }
+  }
+}

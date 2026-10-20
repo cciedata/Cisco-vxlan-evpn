@@ -1,0 +1,52 @@
+# Phase 4 PC1: DCI switch (routed; eBGP to the local BGW, iBGP to the DCI pair peer, eBGP across the vendor circuit).
+# Every BGW and DCI switch is listed so the template can name the far end and its ASN of each link.
+query DciConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value }
+        asn { node { asn { value } } }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              mtu { value }
+              ... on InterfaceLayer3 {
+                ip_addresses { edges { node { address { value } } } }
+              }
+              ... on InterfacePhysical {
+                port_channel { node { name { value } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  Bgws: DcimDevice(role__value: "bgw") {
+    edges { node { name { value } asn { node { asn { value } } } } }
+  }
+  Dcis: DcimDevice(role__value: "dci") {
+    edges {
+      node {
+        name { value }
+        asn { node { asn { value } } }
+        interfaces(role__value: "dci_circuit") {
+          edges {
+            node {
+              name { value }
+              ... on InterfaceLayer3 {
+                ip_addresses { edges { node { address { value } } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,266 @@
+{# Phase 4 PC2: cloud router (Cisco 8201-24H8FH, IOS XR 25.2.1). One cloud-exchange port with two dot1q handoffs: AWS private
+   VIF to the Direct Connect Gateway and Azure ExpressRoute private peering; eBGP to AWS and Microsoft (MD5, BFD 300 ms x 3, echo
+   off, no graceful restart); iBGP to the pair peer over the direct /31 (next-hop-self); eBGP to both border leaves in TRANSIT over
+   a tagged sub-interface of the bundle toward the BL vPC port-channel. Out to the clouds: 0/0, own DC summary (aggregate), own
+   PARTNER summary; in: the cloud's block only. DC2 prepends 3x toward both clouds, only 0/0 and DC1's /16 (row 74 B). #}
+{# Approved constants (decisions.xlsx Open-Phase4 rows 52-60, design-decisions.md, Auto-approved-P4 P4A-1xx) #}
+{% set mgmt_vrf = "management" -%}                                         {#- same as the ISP routers (PC3) -#}
+{% set bgp_password = "cisco123" -%}                                       {#- design: every BGP session, public placeholder -#}
+{% set aws_md5_key = "cisco123" -%}                                        {#- P4A-115: AWS requires a key; placeholder -#}
+{% set azure_md5_key = "cisco123" -%}                                      {#- P4A-115: MD5 on toward Microsoft (optional there) -#}
+{% set cloud_bfd_interval = 300 -%}{% set cloud_bfd_mult = 3 -%}          {#- row 58 B -#}
+{% set bfd_interval = 999 -%}{% set bfd_mult = 3 -%}                      {#- P4A-116: iBGP and border-leaf sessions (BL SVIs run 999 x 3) -#}
+{% set aws_provider = "AWS" -%}{% set azure_provider = "Microsoft" -%}    {#- P4A-127: provider names; handoff descriptions start with them -#}
+{% set aws_peer_host = 1 -%}                                               {#- P4A-112: AWS side of the VIF /30 (placeholder convention) -#}
+{% set ms_peer_host = 2 -%}                                                {#- row 57 B: Microsoft takes the second usable -#}
+{% set backup_site = "DC2" -%}{% set prepend_count = 3 -%}                {#- row 59 B -#}
+{% set dc_summary = {"DC1": "10.16.0.0/16", "DC2": "10.20.0.0/16"} -%}    {#- design (IP plan): tenant /16 advertised toward the cloud; P4A-120 -#}
+{% set partner_vrf = "PARTNER" -%}                                         {#- design: PARTNER summaries advertised to the cloud -#}
+{% set aws_block = "172.16.0.0/13" -%}{% set azure_block = "172.30.0.0/15" -%}   {#- design: cloud address plan -#}
+{% set cloud_le = 24 -%}                                                   {#- P4A-119 -#}
+{% set fabric_le = 24 -%}                                                  {#- P4A-122 -#}
+{% set guardrail = ["10.19.0.0/16", "10.23.0.0/16", "10.0.0.0/16"] -%}   {#- design: guardrail on every external peer (le 32) -#}
+{% set max_prefix = 100 -%}{% set max_prefix_pct = 90 -%}                 {#- P4A-124 -#}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set asn = device.asn.node.asn.value -%}
+{% set site = device.location.node -%}
+{% set site_name = site.name.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
+{% set virtual = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
+{% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
+{% set lo0 = virtual | selectattr("name.value", "equalto", "loopback0") | list | first -%}
+{% set bundle = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | first -%}
+{% set members = physical | selectattr("role.value", "equalto", "peering") | list | sort(attribute="name.value") -%}
+{% set fabric_sub = virtual | selectattr("role.value", "equalto", "peering") | list | first -%}
+{% set xlink = physical | selectattr("role.value", "equalto", "core") | list | first -%}
+{% set xc = physical | selectattr("role.value", "equalto", "cloud_handoff") | list | first -%}
+{% set handoffs = virtual | selectattr("role.value", "equalto", "cloud_handoff") | list | sort(attribute="name.value") -%}
+{% set hs = namespace(aws=none, azure=none, aws_asn=none, azure_asn=none) -%}
+{% for h in handoffs %}{% if h.description.value.startswith(aws_provider ~ " ") %}{% set hs.aws = h %}{% elif h.description.value.startswith(azure_provider ~ " ") %}{% set hs.azure = h %}{% endif %}{% endfor -%}
+{% for a in data.ProviderAsns.edges | map(attribute="node") | list %}{% if a.provider.node is not none %}{% if a.provider.node.name.value == aws_provider %}{% set hs.aws_asn = a.asn.value %}{% elif a.provider.node.name.value == azure_provider %}{% set hs.azure_asn = a.asn.value %}{% endif %}{% endif %}{% endfor -%}
+{% set att = data.FabricAttachment.edges[0].node -%}
+{% set leaves = att.switch_pair.node.members.edges | map(attribute="node") | list | sort(attribute="name.value") -%}
+{% set pns = namespace(items=[]) -%}
+{% for v in site.vrfs.edges | map(attribute="node") | list %}{% if v.name.value == partner_vrf %}{% for s in v.summaries.edges | map(attribute="node") | list | sort(attribute="prefix.value") %}{% if s.site.node is not none and s.site.node.name.value == site_name %}{% set pns.items = pns.items + [s.prefix.value] %}{% endif %}{% endfor %}{% endif %}{% endfor -%}
+{# Values derived by rule #}
+{% macro host(addr, h) %}{% set o = (addr | ipaddress_interface("network") | string).split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + h }}{% endmacro -%}
+{% set lo0_ip = lo0.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
+{% set sub_addr = fabric_sub.ip_addresses.edges[0].node.address.value -%}
+{% set xlink_addr = xlink.ip_addresses.edges[0].node.address.value -%}
+{% set xlink_ip = xlink_addr | ipaddress_interface("ip") | string -%}
+{% set xo = xlink_ip.split(".") -%}
+{% set ibgp_peer = xo[:3] | join(".") ~ "." ~ ((xo[3] | int) + (1 if (xo[3] | int) % 2 == 0 else -1)) -%}
+{% set aws_addr = hs.aws.ip_addresses.edges[0].node.address.value -%}
+{% set azure_addr = hs.azure.ip_addresses.edges[0].node.address.value -%}
+{% set aws_peer = host(aws_addr, aws_peer_host) -%}
+{% set azure_peer = host(azure_addr, ms_peer_host) -%}
+{% set to_cloud = ["0.0.0.0/0", dc_summary[site_name]] + pns.items -%}
+{% set pp = namespace(items=["0.0.0.0/0"]) -%}   {#- row 74 B: prepended at the backup site: the default and the other DC's prefixes -#}
+{% for s, p in dc_summary | dictsort %}{% if s != site_name %}{% set pp.items = pp.items + [p ~ " le 32"] %}{% endif %}{% endfor -%}
+{% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
+{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+hostname {{ name }}
+vrf {{ mgmt_vrf }}
+ address-family ipv4 unicast
+ !
+!
+bfd
+ echo disable
+!
+interface {{ mgmt.name.value }}
+ description {{ mgmt.description.value }}
+ vrf {{ mgmt_vrf }}
+ ipv4 address {{ mgmt_addr | ipaddress_interface("ip") }} {{ mgmt_addr | ipaddress_interface("netmask") }}
+!
+interface Loopback0
+ description {{ lo0.description.value }}
+ ipv4 address {{ lo0_ip }} 255.255.255.255
+!
+interface {{ bundle.name.value }}
+ description {{ bundle.description.value }}
+ mtu {{ bundle.mtu.value }}
+!
+interface {{ fabric_sub.name.value }}
+ description {{ fabric_sub.description.value }}
+ ipv4 address {{ sub_addr | ipaddress_interface("ip") }} {{ sub_addr | ipaddress_interface("netmask") }}
+ encapsulation dot1q {{ fabric_sub.name.value.split(".")[1] }}
+!
+{% for m in members %}
+interface {{ m.name.value }}
+ description {{ m.description.value }}
+ mtu {{ m.mtu.value }}
+ bundle id {{ bundle.name.value | replace("Bundle-Ether", "") }} mode active
+!
+{% endfor %}
+interface {{ xlink.name.value }}
+ description {{ xlink.description.value }}
+ mtu {{ xlink.mtu.value }}
+ ipv4 address {{ xlink_ip }} {{ xlink_addr | ipaddress_interface("netmask") }}
+!
+interface {{ xc.name.value }}
+ description {{ xc.description.value }}
+ mtu {{ xc.mtu.value }}
+!
+{% for h in handoffs %}
+{% set a = h.ip_addresses.edges[0].node.address.value %}
+interface {{ h.name.value }}
+ description {{ h.description.value }}
+ ipv4 mtu {{ h.mtu.value }}
+ ipv4 address {{ a | ipaddress_interface("ip") }} {{ a | ipaddress_interface("netmask") }}
+ encapsulation dot1q {{ h.name.value.split(".")[1] }}
+!
+{% endfor %}
+prefix-set PS-GUARDRAIL
+{% for p in guardrail %}
+  {{ p }} le 32{{ "," if not loop.last }}
+{% endfor %}
+end-set
+!
+prefix-set PS-DEFAULT
+  0.0.0.0/0
+end-set
+!
+prefix-set PS-AWS
+  {{ aws_block }} le {{ cloud_le }}
+end-set
+!
+prefix-set PS-AZURE
+  {{ azure_block }} le {{ cloud_le }}
+end-set
+!
+prefix-set PS-TO-CLOUD
+{% for p in to_cloud %}
+  {{ p }}{{ "," if not loop.last }}
+{% endfor %}
+end-set
+!
+{% if site_name == backup_site %}
+prefix-set PS-PREPEND
+{% for p in pp.items %}
+  {{ p }}{{ "," if not loop.last }}
+{% endfor %}
+end-set
+!
+{% endif %}
+prefix-set PS-FROM-FABRIC
+  0.0.0.0/0,
+  {{ dc_summary[site_name] }} le {{ fabric_le }}
+end-set
+!
+route-policy RP-AWS-IN
+  if destination in PS-GUARDRAIL then
+    drop
+  elseif destination in PS-AWS then
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+route-policy RP-AZURE-IN
+  if destination in PS-GUARDRAIL then
+    drop
+  elseif destination in PS-AZURE then
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+route-policy RP-CLOUD-OUT
+  if destination in PS-TO-CLOUD then
+{% if site_name == backup_site %}
+    if destination in PS-PREPEND then
+      prepend as-path {{ asn }} {{ prepend_count }}
+    endif
+{% endif %}
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+route-policy RP-FABRIC-IN
+  if destination in PS-FROM-FABRIC then
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+route-policy RP-FABRIC-OUT
+  if destination in PS-AWS or destination in PS-AZURE then
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+router static
+ vrf {{ mgmt_vrf }}
+  address-family ipv4 unicast
+   0.0.0.0/0 {{ mgmt_gw }}
+  !
+ !
+!
+router bgp {{ asn }}
+ bgp router-id {{ lo0_ip }}
+ address-family ipv4 unicast
+  aggregate-address {{ dc_summary[site_name] }}
+ !
+ neighbor {{ aws_peer }}
+  remote-as {{ hs.aws_asn }}
+  description {{ hs.aws.description.value }}
+  password clear {{ aws_md5_key }}
+  bfd fast-detect
+  bfd minimum-interval {{ cloud_bfd_interval }}
+  bfd multiplier {{ cloud_bfd_mult }}
+  address-family ipv4 unicast
+   route-policy RP-AWS-IN in
+   maximum-prefix {{ max_prefix }} {{ max_prefix_pct }} warning-only
+   route-policy RP-CLOUD-OUT out
+  !
+ !
+ neighbor {{ azure_peer }}
+  remote-as {{ hs.azure_asn }}
+  description {{ hs.azure.description.value }}
+  password clear {{ azure_md5_key }}
+  bfd fast-detect
+  bfd minimum-interval {{ cloud_bfd_interval }}
+  bfd multiplier {{ cloud_bfd_mult }}
+  address-family ipv4 unicast
+   route-policy RP-AZURE-IN in
+   maximum-prefix {{ max_prefix }} {{ max_prefix_pct }} warning-only
+   route-policy RP-CLOUD-OUT out
+  !
+ !
+ neighbor {{ ibgp_peer }}
+  remote-as {{ asn }}
+  description {{ xlink.description.value.split(" ")[0] }}
+  password clear {{ bgp_password }}
+  bfd fast-detect
+  bfd minimum-interval {{ bfd_interval }}
+  bfd multiplier {{ bfd_mult }}
+  address-family ipv4 unicast
+   next-hop-self
+  !
+ !
+{% for leaf in leaves %}
+ neighbor {{ host(att.prefix.node.prefix.value, loop.index) }}
+  remote-as {{ leaf.asn.node.asn.value }}
+  description {{ leaf.name.value }} ({{ att.name.value }})
+  password clear {{ bgp_password }}
+  bfd fast-detect
+  bfd minimum-interval {{ bfd_interval }}
+  bfd multiplier {{ bfd_mult }}
+  address-family ipv4 unicast
+   route-policy RP-FABRIC-IN in
+   route-policy RP-FABRIC-OUT out
+  !
+ !
+{% endfor %}
+!
+end

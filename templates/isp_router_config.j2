@@ -1,0 +1,205 @@
+{# Phase 2 PC3: ISP router (Cisco 8201-24H8FH, IOS XR 25.2.1). Carrier eBGP (full table + default in, own /24 out),
+   iBGP to the peer router over the direct /31, eBGP to the Internet FW (conditional 0/0 out, own /24 in), VRRPv3 on
+   the edge VLAN for the SD-WAN/VPN firewalls' static routes, statics for the public /24 (Null0), NAT pool and /27. #}
+{# Approved constants (PC2/PC3 decisions) #}
+{% set mgmt_vrf = "management" -%}
+{% set bgp_password = "cisco123" -%}
+{% set bfd_interval = 999 -%}{% set bfd_mult = 3 -%}
+{% set max_prefix = 1200000 -%}{% set max_prefix_pct = 90 -%}
+{% set vrrp_id = 1 -%}
+{% set vrrp_priority = {1: 110, 2: 100} -%}
+{% set vrrp_preempt_delay = 180 -%}
+{% set vrrp_track_decrement = 20 -%}
+{% set vrrp_vip_host = 1 -%}
+{% set inetfw_host = 10 -%}
+{% set wan_fw_host = {"sdwan_fw": 11, "vpn_fw": 12} -%}   {#- Phase 4: edge VLAN host of each WAN FW (EDGE_VLAN_HOST) -#}
+{% set carrier_host = 1 -%}
+{% set bundle_id = 21 -%}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set n = name[-1] | int -%}
+{% set asn = device.asn.node.asn.value -%}
+{% set site = device.location.node -%}
+{% set site_name = site.name.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
+{% set virtual = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
+{% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
+{% set lo0 = virtual | selectattr("name.value", "equalto", "loopback0") | list | first -%}
+{% set bundle = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | first -%}
+{% set members = physical | selectattr("role.value", "equalto", "peering") | list | sort(attribute="name.value") -%}
+{% set subif = virtual | selectattr("role.value", "equalto", "peering") | list | first -%}
+{% set xlink = physical | selectattr("role.value", "equalto", "core") | list | first -%}
+{% set carrier = physical | selectattr("role.value", "equalto", "upstream") | list | first -%}
+{% set pns = namespace(asn=none, name=none) -%}
+{% for a in data.ProviderAsns.edges | map(attribute="node") | list %}{% if a.provider.node is not none and carrier.description.value.startswith(a.provider.node.name.value ~ " ") %}{% set pns.asn = a.asn.value %}{% set pns.name = a.provider.node.name.value %}{% endif %}{% endfor -%}
+{% set inetfw = data.InternetFws.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list | first -%}
+{% set pub_ns = namespace(items=[]) -%}
+{% for p in site.owned_prefixes.edges | map(attribute="node.prefix.value") | list %}{% if not p.startswith("10.") and (p.split("/")[1] | int) <= 27 %}{% set pub_ns.items = pub_ns.items + [p] %}{% endif %}{% endfor -%}
+{% set pfx = namespace(p24=none, p25=none, p27=none) -%}
+{% for p in pub_ns.items %}{% set l = p.split("/")[1] %}{% if l == "24" %}{% set pfx.p24 = p %}{% elif l == "25" %}{% set pfx.p25 = p %}{% elif l == "27" %}{% set pfx.p27 = p %}{% endif %}{% endfor -%}
+{# Values derived by rule #}
+{% macro host(addr, h) %}{% set o = (addr | ipaddress_interface("network") | string).split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + h }}{% endmacro -%}
+{% set sub_addr = subif.ip_addresses.edges[0].node.address.value -%}
+{% set xlink_addr = xlink.ip_addresses.edges[0].node.address.value -%}
+{% set xlink_ip = xlink_addr | ipaddress_interface("ip") | string -%}
+{% set xo = xlink_ip.split(".") -%}
+{% set ibgp_peer = xo[:3] | join(".") ~ "." ~ ((xo[3] | int) + (1 if (xo[3] | int) % 2 == 0 else -1)) -%}
+{% set carrier_addr = carrier.ip_addresses.edges[0].node.address.value -%}
+{% set carrier_peer = host(carrier_addr, carrier_host) -%}
+{% set inetfw_ip = host(sub_addr, inetfw_host) -%}
+{% set wan_fws = (data.SdwanFws.edges + data.VpnFws.edges) | map(attribute="node") | list -%}
+{% set wan_ns = namespace(routes=[]) -%}
+{% for f in wan_fws | selectattr("location.node.name.value", "equalto", site_name) | list | sort(attribute="name.value") %}{% for i in f.interfaces.edges | map(attribute="node") | list %}{% for a in i.ip_addresses.edges | map(attribute="node.address.value") | list %}{% set wan_ns.routes = wan_ns.routes + [(a | ipaddress_interface("network") | string, host(sub_addr, wan_fw_host[f.role.value]))] %}{% endfor %}{% endfor %}{% endfor -%}
+{% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
+{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+hostname {{ name }}
+vrf {{ mgmt_vrf }}
+ address-family ipv4 unicast
+ !
+!
+interface {{ mgmt.name.value }}
+ description {{ mgmt.description.value }}
+ vrf {{ mgmt_vrf }}
+ ipv4 address {{ mgmt_addr | ipaddress_interface("ip") }} {{ mgmt_addr | ipaddress_interface("netmask") }}
+!
+interface Loopback0
+ description {{ lo0.description.value }}
+ ipv4 address {{ lo0.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }} 255.255.255.255
+!
+interface {{ bundle.name.value }}
+ description {{ bundle.description.value }}
+ mtu {{ bundle.mtu.value }}
+!
+interface {{ subif.name.value }}
+ description {{ subif.description.value }}
+ ipv4 address {{ sub_addr | ipaddress_interface("ip") }} {{ sub_addr | ipaddress_interface("netmask") }}
+ encapsulation dot1q {{ subif.name.value.split(".")[1] }}
+!
+{% for m in members %}
+interface {{ m.name.value }}
+ description {{ m.description.value }}
+ mtu {{ m.mtu.value }}
+ bundle id {{ bundle_id }} mode active
+!
+{% endfor %}
+interface {{ xlink.name.value }}
+ description {{ xlink.description.value }}
+ mtu {{ xlink.mtu.value }}
+ ipv4 address {{ xlink_ip }} {{ xlink_addr | ipaddress_interface("netmask") }}
+!
+interface {{ carrier.name.value }}
+ description {{ carrier.description.value }}
+ mtu {{ carrier.mtu.value }}
+ ipv4 address {{ carrier_addr | ipaddress_interface("ip") }} {{ carrier_addr | ipaddress_interface("netmask") }}
+!
+prefix-set PS-OWN-PUBLIC
+  {{ pfx.p24 }}
+end-set
+!
+prefix-set PS-DEFAULT
+  0.0.0.0/0
+end-set
+!
+route-policy RP-CARRIER-IN
+  pass
+end-policy
+!
+route-policy RP-CARRIER-OUT
+  if destination in PS-OWN-PUBLIC and as-path in (ios-regex '^$') then
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+route-policy RP-INETFW-IN
+  if destination in PS-OWN-PUBLIC then
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+route-policy RP-INETFW-OUT
+  drop
+end-policy
+!
+route-policy RP-COND-DEFAULT
+  if rib-has-route in PS-DEFAULT then
+    pass
+  endif
+end-policy
+!
+router static
+ vrf {{ mgmt_vrf }}
+  address-family ipv4 unicast
+   0.0.0.0/0 {{ mgmt_gw }}
+  !
+ !
+ address-family ipv4 unicast
+  {{ pfx.p24 }} Null0
+  {{ pfx.p25 }} {{ inetfw_ip }}
+  {{ pfx.p27 }} {{ inetfw_ip }}
+{% for net, nh in wan_ns.routes %}
+  {{ net }} {{ nh }}
+{% endfor %}
+ !
+!
+router bgp {{ asn }}
+ bgp router-id {{ lo0.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }}
+ bgp graceful-restart
+ address-family ipv4 unicast
+  network {{ pfx.p24 }}
+ !
+ neighbor {{ carrier_peer }}
+  remote-as {{ pns.asn }}
+  description {{ pns.name }}
+  password clear {{ bgp_password }}
+  bfd fast-detect
+  bfd minimum-interval {{ bfd_interval }}
+  bfd multiplier {{ bfd_mult }}
+  address-family ipv4 unicast
+   route-policy RP-CARRIER-IN in
+   maximum-prefix {{ max_prefix }} {{ max_prefix_pct }} warning-only
+   route-policy RP-CARRIER-OUT out
+  !
+ !
+ neighbor {{ ibgp_peer }}
+  remote-as {{ asn }}
+  description {{ xlink.description.value.split(" ")[0] }}
+  bfd fast-detect
+  bfd minimum-interval {{ bfd_interval }}
+  bfd multiplier {{ bfd_mult }}
+  address-family ipv4 unicast
+   next-hop-self
+  !
+ !
+ neighbor {{ inetfw_ip }}
+  remote-as {{ inetfw.asn.node.asn.value }}
+  description {{ inetfw.name.value[:-1] }}
+  password clear {{ bgp_password }}
+  bfd fast-detect
+  bfd minimum-interval {{ bfd_interval }}
+  bfd multiplier {{ bfd_mult }}
+  address-family ipv4 unicast
+   route-policy RP-INETFW-IN in
+   default-originate policy RP-COND-DEFAULT
+   route-policy RP-INETFW-OUT out
+  !
+ !
+!
+router vrrp
+ interface {{ subif.name.value }}
+  address-family ipv4
+   vrrp {{ vrrp_id }} version 3
+    priority {{ vrrp_priority[n] }}
+    preempt delay {{ vrrp_preempt_delay }}
+    address {{ host(sub_addr, vrrp_vip_host) }}
+    track interface {{ carrier.name.value }} {{ vrrp_track_decrement }}
+   !
+  !
+ !
+!
+end

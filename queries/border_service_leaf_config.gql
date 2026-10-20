@@ -1,0 +1,116 @@
+# Phase 2 PC2: border and service leaves (VTEPs with firewall attachments on their vPC pair)
+query BorderServiceLeafConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value }
+        location {
+          node {
+            ... on LocationSite {
+              name { value }
+              vrfs {
+                edges {
+                  node {
+                    name { value }
+                    multisite { value }
+                    summaries {
+                      edges {
+                        node {
+                          prefix { value }
+                          site { node { name { value } } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        asn {
+          node {
+            asn { value }
+            devices {
+              edges {
+                node {
+                  name { value }
+                  role { value }
+                  interfaces(name__value: "loopback0") {
+                    edges {
+                      node {
+                        name { value }
+                        ... on InterfaceLayer3 {
+                          ip_addresses { edges { node { address { value } } } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        switch_pair {
+          node {
+            __typename
+            name { value }
+            ... on FabricVpcDomain {
+              domain_id { value }
+              anycast_vtep { node { address { value } } }
+              attachments {
+                edges {
+                  node {
+                    name { value }
+                    vlan_id { value }
+                    prefix { node { prefix { value } } }
+                    vrf { node { name { value } l3_vni { value } l3_vni_vlan { value } } }
+                    devices { edges { node { name { value } role { value } asn { node { asn { value } } } } } }
+                  }
+                }
+              }
+            }
+            members {
+              edges {
+                node {
+                  name { value }
+                  interfaces(role__value: "vpc_keepalive") {
+                    edges {
+                      node {
+                        name { value }
+                        ... on InterfaceLayer3 {
+                          ip_addresses { edges { node { address { value } } } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              mtu { value }
+              ... on InterfaceLayer3 {
+                ip_addresses { edges { node { address { value } } } }
+              }
+              ... on InterfacePhysical {
+                port_channel { node { name { value } } }
+              }
+              ... on InterfacePortChannel {
+                members { edges { node { name { value } } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

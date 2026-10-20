@@ -1,0 +1,105 @@
+# Phase 4 PC1: anycast border gateway (EVPN Multi-Site). The device, its site's segments and VRFs, its ASN's spines,
+# every BGW (remote overlay peers, the site VIP on BGW1's loopback2) and every DCI switch (underlay peer ASN).
+query BgwConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value }
+        location {
+          node {
+            ... on LocationSite {
+              name { value }
+              segments {
+                edges {
+                  node {
+                    name { value }
+                    vlan_id { value }
+                    l2_vni { value }
+                    vrf { node { name { value } } }
+                    sites { edges { node { name { value } } } }
+                  }
+                }
+              }
+              vrfs {
+                edges {
+                  node {
+                    name { value }
+                    l3_vni { value }
+                    l3_vni_vlan { value }
+                    multisite { value }
+                  }
+                }
+              }
+            }
+          }
+        }
+        asn {
+          node {
+            asn { value }
+            devices {
+              edges {
+                node {
+                  name { value }
+                  role { value }
+                  interfaces(name__value: "loopback0") {
+                    edges {
+                      node {
+                        name { value }
+                        ... on InterfaceLayer3 {
+                          ip_addresses { edges { node { address { value } } } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              mtu { value }
+              ... on InterfaceLayer3 {
+                ip_addresses { edges { node { address { value } } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  Bgws: DcimDevice(role__value: "bgw") {
+    edges {
+      node {
+        name { value }
+        location { node { ... on LocationSite { name { value } } } }
+        asn { node { asn { value } } }
+        interfaces {
+          edges {
+            node {
+              name { value }
+              ... on InterfaceLayer3 {
+                ip_addresses { edges { node { address { value } } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  Dcis: DcimDevice(role__value: "dci") {
+    edges {
+      node {
+        name { value }
+        asn { node { asn { value } } }
+      }
+    }
+  }
+}

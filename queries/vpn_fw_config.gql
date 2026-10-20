@@ -1,0 +1,96 @@
+# Phase 4 PC4: VPN-partner FortiGate units (FG-1800F). Shared A/P addresses sit on unit 1's interfaces only; the outside
+# and inside addresses are derived from the edge VLAN and the PARTNER attachment, the WAN loopback address is read
+# from the pair (VpnUnits), so both units render the same config. Partners: FabricPartner (row 49 B).
+query VpnFwConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value }
+        asn { node { asn { value } } }
+        location {
+          node {
+            ... on LocationSite {
+              name { value }
+              fabric_asn { node { asn { value } } }
+              vrfs {
+                edges {
+                  node {
+                    name { value }
+                    multisite { value }
+                    summaries { edges { node { prefix { value } site { node { name { value } } } } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              mtu { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+              ... on InterfacePhysical { port_channel { node { name { value } } } }
+              ... on InterfacePortChannel { members { edges { node { name { value } } } } }
+              ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  FabricAttachment(devices__name__value: $device) {
+    edges {
+      node {
+        name { value }
+        vlan_id { value }
+        prefix { node { prefix { value } } }
+        vrf { node { name { value } } }
+        switch_pair { node { name { value } members { edges { node { name { value } } } } } }
+      }
+    }
+  }
+  FabricL2Vlan {
+    edges {
+      node {
+        name { value }
+        vlan_id { value }
+        prefix { node { prefix { value } } }
+        site { node { name { value } } }
+        switch_pair { node { name { value } } }
+      }
+    }
+  }
+  VpnUnits: DcimDevice(role__value: "vpn_fw") {
+    edges {
+      node {
+        name { value }
+        location { node { name { value } } }
+        interfaces {
+          edges {
+            node {
+              name { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  FabricPartner {
+    edges {
+      node {
+        name { value }
+        description { value }
+        peer_ip { value }
+        protected_prefixes { value }
+        translated_prefixes { edges { node { prefix { value } site { node { name { value } } } } } }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+query DeviceAsn($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value label }
+        asn {
+          node {
+            asn { value }
+          }
+        }
+      }
+    }
+  }
+}

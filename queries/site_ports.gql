@@ -1,0 +1,22 @@
+query SitePorts($site: String!) {
+  DcimDevice(location__name__value: $site) {
+    edges { node {
+      name { value }
+      role { value }
+      device_type { node { name { value } } }
+      interfaces { edges { node {
+        id
+        __typename
+        name { value }
+        description { value }
+        ... on InterfacePhysical { role { value } connector { node { id } } }
+      } } }
+    } }
+  }
+  DcimCable {
+    edges { node {
+      name { value } cable_type { value } length_m { value }
+      connected_endpoints { edges { node { id } } }
+    } }
+  }
+}

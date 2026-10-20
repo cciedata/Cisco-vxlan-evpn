@@ -1,0 +1,1135 @@
+{
+  "site": "DC2",
+  "source": "Infrahub lab_expected transform; do not edit",
+  "lab_nodes": [
+    "DC2-BL1",
+    "DC2-BL2",
+    "DC2-EDGE1",
+    "DC2-EDGE2",
+    "DC2-INETFW1",
+    "DC2-INTFW1",
+    "DC2-ISP1",
+    "DC2-ISP2",
+    "DC2-L11",
+    "DC2-S1",
+    "DC2-S2",
+    "DC2-SL1",
+    "DC2-SL2"
+  ],
+  "bgp_sessions": [
+    {
+      "node": "DC2-BL1",
+      "vrf": "default",
+      "peer": "10.23.0.1",
+      "remote_as": 65200,
+      "description": "DC2-S1",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-S1",
+      "vrf": "default",
+      "peer": "10.23.0.23",
+      "remote_as": 65200,
+      "description": "DC2-BL1",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-BL1",
+      "vrf": "default",
+      "peer": "10.23.0.2",
+      "remote_as": 65200,
+      "description": "DC2-S2",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-S2",
+      "vrf": "default",
+      "peer": "10.23.0.23",
+      "remote_as": 65200,
+      "description": "DC2-BL1",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-BL2",
+      "vrf": "default",
+      "peer": "10.23.0.1",
+      "remote_as": 65200,
+      "description": "DC2-S1",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-S1",
+      "vrf": "default",
+      "peer": "10.23.0.24",
+      "remote_as": 65200,
+      "description": "DC2-BL2",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-BL2",
+      "vrf": "default",
+      "peer": "10.23.0.2",
+      "remote_as": 65200,
+      "description": "DC2-S2",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-S2",
+      "vrf": "default",
+      "peer": "10.23.0.24",
+      "remote_as": 65200,
+      "description": "DC2-BL2",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-L11",
+      "vrf": "default",
+      "peer": "10.23.0.1",
+      "remote_as": 65200,
+      "description": "DC2-S1",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-S1",
+      "vrf": "default",
+      "peer": "10.23.0.13",
+      "remote_as": 65200,
+      "description": "DC2-L11",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-L11",
+      "vrf": "default",
+      "peer": "10.23.0.2",
+      "remote_as": 65200,
+      "description": "DC2-S2",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-S2",
+      "vrf": "default",
+      "peer": "10.23.0.13",
+      "remote_as": 65200,
+      "description": "DC2-L11",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "default",
+      "peer": "10.23.0.1",
+      "remote_as": 65200,
+      "description": "DC2-S1",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-S1",
+      "vrf": "default",
+      "peer": "10.23.0.25",
+      "remote_as": 65200,
+      "description": "DC2-SL1",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "default",
+      "peer": "10.23.0.2",
+      "remote_as": 65200,
+      "description": "DC2-S2",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-S2",
+      "vrf": "default",
+      "peer": "10.23.0.25",
+      "remote_as": 65200,
+      "description": "DC2-SL1",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "default",
+      "peer": "10.23.0.1",
+      "remote_as": 65200,
+      "description": "DC2-S1",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-S1",
+      "vrf": "default",
+      "peer": "10.23.0.26",
+      "remote_as": 65200,
+      "description": "DC2-SL2",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "default",
+      "peer": "10.23.0.2",
+      "remote_as": 65200,
+      "description": "DC2-S2",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-S2",
+      "vrf": "default",
+      "peer": "10.23.0.26",
+      "remote_as": 65200,
+      "description": "DC2-SL2",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "TRANSIT",
+      "peer": "10.23.16.3",
+      "remote_as": 65210,
+      "description": "DC2-TRANSIT-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf1",
+      "peer": "10.23.16.1",
+      "remote_as": 65200,
+      "description": "DC2-SL1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "TRANSIT",
+      "peer": "10.23.16.3",
+      "remote_as": 65210,
+      "description": "DC2-TRANSIT-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf1",
+      "peer": "10.23.16.2",
+      "remote_as": 65200,
+      "description": "DC2-SL2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-BL1",
+      "vrf": "TRANSIT",
+      "peer": "10.23.16.11",
+      "remote_as": 65240,
+      "description": "DC2-TRANSIT-INETFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "peer": "10.23.16.9",
+      "remote_as": 65200,
+      "description": "DC2-BL1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-BL2",
+      "vrf": "TRANSIT",
+      "peer": "10.23.16.11",
+      "remote_as": 65240,
+      "description": "DC2-TRANSIT-INETFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "peer": "10.23.16.10",
+      "remote_as": 65200,
+      "description": "DC2-BL2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "PROD",
+      "peer": "10.23.8.3",
+      "remote_as": 65210,
+      "description": "DC2-PROD-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf10",
+      "peer": "10.23.8.1",
+      "remote_as": 65200,
+      "description": "DC2-SL1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "PROD",
+      "peer": "10.23.8.3",
+      "remote_as": 65210,
+      "description": "DC2-PROD-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf10",
+      "peer": "10.23.8.2",
+      "remote_as": 65200,
+      "description": "DC2-SL2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "DEV",
+      "peer": "10.23.8.11",
+      "remote_as": 65210,
+      "description": "DC2-DEV-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf11",
+      "peer": "10.23.8.9",
+      "remote_as": 65200,
+      "description": "DC2-SL1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "DEV",
+      "peer": "10.23.8.11",
+      "remote_as": 65210,
+      "description": "DC2-DEV-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf11",
+      "peer": "10.23.8.10",
+      "remote_as": 65200,
+      "description": "DC2-SL2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "DC2-PROD",
+      "peer": "10.23.8.19",
+      "remote_as": 65210,
+      "description": "DC2-DC2-PROD-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf12",
+      "peer": "10.23.8.17",
+      "remote_as": 65200,
+      "description": "DC2-SL1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "DC2-PROD",
+      "peer": "10.23.8.19",
+      "remote_as": 65210,
+      "description": "DC2-DC2-PROD-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf12",
+      "peer": "10.23.8.18",
+      "remote_as": 65200,
+      "description": "DC2-SL2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "DC2-DEV",
+      "peer": "10.23.8.27",
+      "remote_as": 65210,
+      "description": "DC2-DC2-DEV-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf13",
+      "peer": "10.23.8.25",
+      "remote_as": 65200,
+      "description": "DC2-SL1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "DC2-DEV",
+      "peer": "10.23.8.27",
+      "remote_as": 65210,
+      "description": "DC2-DC2-DEV-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf13",
+      "peer": "10.23.8.26",
+      "remote_as": 65200,
+      "description": "DC2-SL2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "CITRIX",
+      "peer": "10.23.8.43",
+      "remote_as": 65210,
+      "description": "DC2-CITRIX-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf15",
+      "peer": "10.23.8.41",
+      "remote_as": 65200,
+      "description": "DC2-SL1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "CITRIX",
+      "peer": "10.23.8.43",
+      "remote_as": 65210,
+      "description": "DC2-CITRIX-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf15",
+      "peer": "10.23.8.42",
+      "remote_as": 65200,
+      "description": "DC2-SL2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "PARTNER",
+      "peer": "10.23.8.51",
+      "remote_as": 65210,
+      "description": "DC2-PARTNER-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf16",
+      "peer": "10.23.8.49",
+      "remote_as": 65200,
+      "description": "DC2-SL1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "PARTNER",
+      "peer": "10.23.8.51",
+      "remote_as": 65210,
+      "description": "DC2-PARTNER-INTFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf16",
+      "peer": "10.23.8.50",
+      "remote_as": 65200,
+      "description": "DC2-SL2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "peer": "10.23.14.2",
+      "remote_as": 65050,
+      "description": "DC2-ISP1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-ISP1",
+      "vrf": "default",
+      "peer": "10.23.14.10",
+      "remote_as": 65240,
+      "description": "DC2-INETFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "peer": "10.23.14.3",
+      "remote_as": 65050,
+      "description": "DC2-ISP2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-ISP2",
+      "vrf": "default",
+      "peer": "10.23.14.10",
+      "remote_as": 65240,
+      "description": "DC2-INETFW",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-ISP1",
+      "vrf": "default",
+      "peer": "10.23.15.1",
+      "remote_as": 65050,
+      "description": "DC2-ISP2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-ISP2",
+      "vrf": "default",
+      "peer": "10.23.15.0",
+      "remote_as": 65050,
+      "description": "DC2-ISP1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-ISP1",
+      "vrf": "default",
+      "peer": "192.0.2.9",
+      "remote_as": 64496,
+      "description": "ISP-A",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-ISP-A",
+      "vrf": "default",
+      "peer": "192.0.2.10",
+      "remote_as": 65050,
+      "description": "DC2-ISP1",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-ISP2",
+      "vrf": "default",
+      "peer": "192.0.2.13",
+      "remote_as": 64497,
+      "description": "ISP-B",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC2-ISP-B",
+      "vrf": "default",
+      "peer": "192.0.2.14",
+      "remote_as": 65050,
+      "description": "DC2-ISP2",
+      "afi": "ipv4 unicast",
+      "bfd": true,
+      "state": "Established"
+    }
+  ],
+  "routes": [
+    {
+      "node": "DC2-BL1",
+      "vrf": "TRANSIT",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internet FW"
+    },
+    {
+      "node": "DC2-BL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.16.0.0/18",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.16.64.0/18",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.0.0/18",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.144.0/20",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.160.0/21",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.64.0/18",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL2",
+      "vrf": "TRANSIT",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internet FW"
+    },
+    {
+      "node": "DC2-BL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.16.0.0/18",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.16.64.0/18",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.0.0/18",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.144.0/20",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.160.0/21",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-BL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.64.0/18",
+      "present": true,
+      "why": "tenant summary from the service leaves (EVPN), sent on to the Internet FW"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "conditional default from the ISP routers"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "prefix": "10.16.0.0/18",
+      "present": true,
+      "why": "tenant summary from the border leaves"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "prefix": "10.16.64.0/18",
+      "present": true,
+      "why": "tenant summary from the border leaves"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "prefix": "10.20.0.0/18",
+      "present": true,
+      "why": "tenant summary from the border leaves"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "prefix": "10.20.144.0/20",
+      "present": true,
+      "why": "tenant summary from the border leaves"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "prefix": "10.20.160.0/21",
+      "present": true,
+      "why": "tenant summary from the border leaves"
+    },
+    {
+      "node": "DC2-INETFW1",
+      "vrf": "vrf1",
+      "prefix": "10.20.64.0/18",
+      "present": true,
+      "why": "tenant summary from the border leaves"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf1",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the service leaves in TRANSIT"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf15",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default leaked from TRANSIT"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf1",
+      "prefix": "10.20.144.0/20",
+      "present": true,
+      "why": "CITRIX summary leaked from vrf15"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf13",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default leaked from TRANSIT"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf1",
+      "prefix": "10.20.64.0/18",
+      "present": true,
+      "why": "DC2-DEV summary leaked from vrf13"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf12",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default leaked from TRANSIT"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf1",
+      "prefix": "10.20.0.0/18",
+      "present": true,
+      "why": "DC2-PROD summary leaked from vrf12"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf11",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default leaked from TRANSIT"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf1",
+      "prefix": "10.16.64.0/18",
+      "present": true,
+      "why": "DEV summary leaked from vrf11"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf16",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default leaked from TRANSIT"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf1",
+      "prefix": "10.20.160.0/21",
+      "present": true,
+      "why": "PARTNER summary leaked from vrf16"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf10",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default leaked from TRANSIT"
+    },
+    {
+      "node": "DC2-INTFW1",
+      "vrf": "vrf1",
+      "prefix": "10.16.0.0/18",
+      "present": true,
+      "why": "PROD summary leaked from vrf10"
+    },
+    {
+      "node": "DC2-ISP1",
+      "vrf": "default",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the carriers (rib-has-route condition)"
+    },
+    {
+      "node": "DC2-ISP1",
+      "vrf": "default",
+      "prefix": "203.0.113.0/24",
+      "present": true,
+      "why": "own public /24 (static Null0, network)"
+    },
+    {
+      "node": "DC2-ISP1",
+      "vrf": "default",
+      "prefix": "198.18.1.0/24",
+      "present": true,
+      "why": "ISP-A internet host subnet"
+    },
+    {
+      "node": "DC2-ISP1",
+      "vrf": "default",
+      "prefix": "198.18.2.0/24",
+      "present": true,
+      "why": "ISP-B internet host subnet"
+    },
+    {
+      "node": "DC2-ISP2",
+      "vrf": "default",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the carriers (rib-has-route condition)"
+    },
+    {
+      "node": "DC2-ISP2",
+      "vrf": "default",
+      "prefix": "203.0.113.0/24",
+      "present": true,
+      "why": "own public /24 (static Null0, network)"
+    },
+    {
+      "node": "DC2-ISP2",
+      "vrf": "default",
+      "prefix": "198.18.1.0/24",
+      "present": true,
+      "why": "ISP-A internet host subnet"
+    },
+    {
+      "node": "DC2-ISP2",
+      "vrf": "default",
+      "prefix": "198.18.2.0/24",
+      "present": true,
+      "why": "ISP-B internet host subnet"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "TRANSIT",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the border leaves (EVPN), sent on to the Internal FW"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "CITRIX",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in CITRIX"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.144.0/20",
+      "present": true,
+      "why": "CITRIX summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "DC2-DEV",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in DC2-DEV"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.64.0/18",
+      "present": true,
+      "why": "DC2-DEV summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "DC2-PROD",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in DC2-PROD"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.0.0/18",
+      "present": true,
+      "why": "DC2-PROD summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "DEV",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in DEV"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.16.64.0/18",
+      "present": true,
+      "why": "DEV summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "PARTNER",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in PARTNER"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.160.0/21",
+      "present": true,
+      "why": "PARTNER summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "PROD",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in PROD"
+    },
+    {
+      "node": "DC2-SL1",
+      "vrf": "TRANSIT",
+      "prefix": "10.16.0.0/18",
+      "present": true,
+      "why": "PROD summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "TRANSIT",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the border leaves (EVPN), sent on to the Internal FW"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "CITRIX",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in CITRIX"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.144.0/20",
+      "present": true,
+      "why": "CITRIX summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "DC2-DEV",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in DC2-DEV"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.64.0/18",
+      "present": true,
+      "why": "DC2-DEV summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "DC2-PROD",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in DC2-PROD"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.0.0/18",
+      "present": true,
+      "why": "DC2-PROD summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "DEV",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in DEV"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.16.64.0/18",
+      "present": true,
+      "why": "DEV summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "PARTNER",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in PARTNER"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.20.160.0/21",
+      "present": true,
+      "why": "PARTNER summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "PROD",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW in PROD"
+    },
+    {
+      "node": "DC2-SL2",
+      "vrf": "TRANSIT",
+      "prefix": "10.16.0.0/18",
+      "present": true,
+      "why": "PROD summary leaked by the Internal FW into TRANSIT"
+    },
+    {
+      "node": "DC2-ISP-A",
+      "vrf": "default",
+      "prefix": "203.0.113.0/24",
+      "present": true,
+      "why": "DC2 public /24 from DC2-ISP1"
+    },
+    {
+      "node": "DC2-ISP-B",
+      "vrf": "default",
+      "prefix": "203.0.113.0/24",
+      "present": true,
+      "why": "DC2 public /24 from DC2-ISP2"
+    }
+  ],
+  "pings": []
+}
+

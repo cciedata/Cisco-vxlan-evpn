@@ -1,0 +1,216 @@
+# DC1 Phase 3 lab topology for containerlab. Rendered by Infrahub (lab_topology), do not edit.
+# Startup configs: configs/<node>.cfg (NX-OS startup-config artifacts);
+# stand-in scripts: configs/<node>.sh (frr-lab-init artifacts, ISP routers included; carriers from the ISP routers' carrier-lab-init).
+name: vamd-dc1-p3
+mgmt:
+  network: vamd-dc1-mgmt
+  ipv4-subnet: 10.250.0.0/24
+topology:
+  nodes:
+    DC1-BL1:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv:10.6.4.M-lite
+      mgmt-ipv4: 10.250.0.24
+      startup-config: configs/DC1-BL1.cfg
+      env:
+        QEMU_MEMORY: 8192
+        QEMU_SMP: 3
+        CLAB_MGMT_PASSTHROUGH: "true"
+        SCRAPLI_TIMEOUT: 3600
+    DC1-BL2:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv:10.6.4.M-lite
+      mgmt-ipv4: 10.250.0.25
+      startup-config: configs/DC1-BL2.cfg
+      env:
+        QEMU_MEMORY: 8192
+        QEMU_SMP: 3
+        CLAB_MGMT_PASSTHROUGH: "true"
+        SCRAPLI_TIMEOUT: 3600
+    DC1-EDGE1:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv:10.6.4.M-lite
+      mgmt-ipv4: 10.250.0.30
+      startup-config: configs/DC1-EDGE1.cfg
+      env:
+        QEMU_MEMORY: 8192
+        QEMU_SMP: 3
+        CLAB_MGMT_PASSTHROUGH: "true"
+        SCRAPLI_TIMEOUT: 3600
+    DC1-EDGE2:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv:10.6.4.M-lite
+      mgmt-ipv4: 10.250.0.31
+      startup-config: configs/DC1-EDGE2.cfg
+      env:
+        QEMU_MEMORY: 8192
+        QEMU_SMP: 3
+        CLAB_MGMT_PASSTHROUGH: "true"
+        SCRAPLI_TIMEOUT: 3600
+    DC1-INETFW1:
+      kind: linux
+      image: quay.io/frrouting/frr:10.6.0
+      mgmt-ipv4: 10.250.0.38
+      binds:
+        - configs/DC1-INETFW1.sh:/lab/init.sh:ro
+      exec:
+        - sh /lab/init.sh
+    DC1-INTFW1:
+      kind: linux
+      image: quay.io/frrouting/frr:10.6.0
+      mgmt-ipv4: 10.250.0.40
+      binds:
+        - configs/DC1-INTFW1.sh:/lab/init.sh:ro
+      exec:
+        - sh /lab/init.sh
+    DC1-ISP1:
+      kind: linux
+      image: quay.io/frrouting/frr:10.6.0
+      mgmt-ipv4: 10.250.0.36
+      binds:
+        - configs/DC1-ISP1.sh:/lab/init.sh:ro
+      exec:
+        - sh /lab/init.sh
+    DC1-ISP2:
+      kind: linux
+      image: quay.io/frrouting/frr:10.6.0
+      mgmt-ipv4: 10.250.0.37
+      binds:
+        - configs/DC1-ISP2.sh:/lab/init.sh:ro
+      exec:
+        - sh /lab/init.sh
+    DC1-L11:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv:10.6.4.M-lite
+      mgmt-ipv4: 10.250.0.14
+      startup-config: configs/DC1-L11.cfg
+      env:
+        QEMU_MEMORY: 8192
+        QEMU_SMP: 3
+        CLAB_MGMT_PASSTHROUGH: "true"
+        SCRAPLI_TIMEOUT: 3600
+    DC1-S1:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv:10.6.4.M-lite
+      mgmt-ipv4: 10.250.0.2
+      startup-config: configs/DC1-S1.cfg
+      env:
+        QEMU_MEMORY: 8192
+        QEMU_SMP: 3
+        CLAB_MGMT_PASSTHROUGH: "true"
+        SCRAPLI_TIMEOUT: 3600
+    DC1-S2:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv:10.6.4.M-lite
+      mgmt-ipv4: 10.250.0.3
+      startup-config: configs/DC1-S2.cfg
+      env:
+        QEMU_MEMORY: 8192
+        QEMU_SMP: 3
+        CLAB_MGMT_PASSTHROUGH: "true"
+        SCRAPLI_TIMEOUT: 3600
+    DC1-SL1:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv:10.6.4.M-lite
+      mgmt-ipv4: 10.250.0.26
+      startup-config: configs/DC1-SL1.cfg
+      env:
+        QEMU_MEMORY: 8192
+        QEMU_SMP: 3
+        CLAB_MGMT_PASSTHROUGH: "true"
+        SCRAPLI_TIMEOUT: 3600
+    DC1-SL2:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv:10.6.4.M-lite
+      mgmt-ipv4: 10.250.0.27
+      startup-config: configs/DC1-SL2.cfg
+      env:
+        QEMU_MEMORY: 8192
+        QEMU_SMP: 3
+        CLAB_MGMT_PASSTHROUGH: "true"
+        SCRAPLI_TIMEOUT: 3600
+    DC1-ISP-A:
+      kind: linux
+      image: quay.io/frrouting/frr:10.6.0
+      mgmt-ipv4: 10.250.0.240
+      binds:
+        - configs/DC1-ISP-A.sh:/lab/init.sh:ro
+      exec:
+        - sh /lab/init.sh
+    DC1-HOST-ISP-A:
+      kind: linux
+      image: alpine:3.22
+      mgmt-ipv4: 10.250.0.246
+      exec:
+        - ip addr add 198.18.1.10/24 dev eth1
+        - ip link set eth1 up
+        - ip route replace default via 198.18.1.1 dev eth1
+    DC1-ISP-B:
+      kind: linux
+      image: quay.io/frrouting/frr:10.6.0
+      mgmt-ipv4: 10.250.0.241
+      binds:
+        - configs/DC1-ISP-B.sh:/lab/init.sh:ro
+      exec:
+        - sh /lab/init.sh
+    DC1-HOST-ISP-B:
+      kind: linux
+      image: alpine:3.22
+      mgmt-ipv4: 10.250.0.247
+      exec:
+        - ip addr add 198.18.2.10/24 dev eth1
+        - ip link set eth1 up
+        - ip route replace default via 198.18.2.1 dev eth1
+    DC1-HOST-PROD:
+      kind: linux
+      image: alpine:3.22
+      mgmt-ipv4: 10.250.0.245
+      exec:
+        - ip addr add 10.16.10.10/24 dev eth1
+        - ip link set eth1 up
+        - ip route replace default via 10.16.10.1 dev eth1
+  links:
+    - endpoints: ["DC1-BL1:eth1", "DC1-S1:eth41"]
+    - endpoints: ["DC1-BL1:eth2", "DC1-S2:eth41"]
+    - endpoints: ["DC1-BL1:eth3", "DC1-BL2:eth3"]
+    - endpoints: ["DC1-BL1:eth4", "DC1-BL2:eth4"]
+    - endpoints: ["DC1-BL1:eth5", "DC1-BL2:eth5"]
+    - endpoints: ["DC1-BL1:eth6", "DC1-BL2:eth6"]
+    - endpoints: ["DC1-BL1:eth7", "DC1-INETFW1:port19"]
+    - endpoints: ["DC1-BL1:eth34", "DC1-BL2:eth34"]
+    - endpoints: ["DC1-BL2:eth1", "DC1-S1:eth42"]
+    - endpoints: ["DC1-BL2:eth2", "DC1-S2:eth42"]
+    - endpoints: ["DC1-BL2:eth7", "DC1-INETFW1:port20"]
+    - endpoints: ["DC1-EDGE1:eth1", "DC1-EDGE2:eth1"]
+    - endpoints: ["DC1-EDGE1:eth2", "DC1-EDGE2:eth2"]
+    - endpoints: ["DC1-EDGE1:eth3", "DC1-EDGE2:eth3"]
+    - endpoints: ["DC1-EDGE1:eth4", "DC1-EDGE2:eth4"]
+    - endpoints: ["DC1-EDGE1:eth5", "DC1-ISP1:Gi0-0-0-0"]
+    - endpoints: ["DC1-EDGE1:eth6", "DC1-ISP2:Gi0-0-0-0"]
+    - endpoints: ["DC1-EDGE1:eth7", "DC1-INETFW1:port21"]
+    - endpoints: ["DC1-EDGE1:eth34", "DC1-EDGE2:eth34"]
+    - endpoints: ["DC1-EDGE2:eth5", "DC1-ISP1:Gi0-0-0-1"]
+    - endpoints: ["DC1-EDGE2:eth6", "DC1-ISP2:Gi0-0-0-1"]
+    - endpoints: ["DC1-EDGE2:eth7", "DC1-INETFW1:port22"]
+    - endpoints: ["DC1-INTFW1:port19", "DC1-SL1:eth7"]
+    - endpoints: ["DC1-INTFW1:port20", "DC1-SL2:eth7"]
+    - endpoints: ["DC1-ISP1:Gi0-0-0-2", "DC1-ISP2:Gi0-0-0-2"]
+    - endpoints: ["DC1-L11:eth49", "DC1-S1:eth21"]
+    - endpoints: ["DC1-L11:eth50", "DC1-S1:eth22"]
+    - endpoints: ["DC1-L11:eth51", "DC1-S2:eth21"]
+    - endpoints: ["DC1-L11:eth52", "DC1-S2:eth22"]
+    - endpoints: ["DC1-S1:eth43", "DC1-SL1:eth1"]
+    - endpoints: ["DC1-S1:eth44", "DC1-SL2:eth1"]
+    - endpoints: ["DC1-S2:eth43", "DC1-SL1:eth2"]
+    - endpoints: ["DC1-S2:eth44", "DC1-SL2:eth2"]
+    - endpoints: ["DC1-SL1:eth3", "DC1-SL2:eth3"]
+    - endpoints: ["DC1-SL1:eth4", "DC1-SL2:eth4"]
+    - endpoints: ["DC1-SL1:eth5", "DC1-SL2:eth5"]
+    - endpoints: ["DC1-SL1:eth6", "DC1-SL2:eth6"]
+    - endpoints: ["DC1-SL1:eth34", "DC1-SL2:eth34"]
+    - endpoints: ["DC1-ISP1:Gi0-0-0-3", "DC1-ISP-A:isp"]
+    - endpoints: ["DC1-ISP-A:host", "DC1-HOST-ISP-A:eth1"]
+    - endpoints: ["DC1-ISP2:Gi0-0-0-3", "DC1-ISP-B:isp"]
+    - endpoints: ["DC1-ISP-B:host", "DC1-HOST-ISP-B:eth1"]
+    - endpoints: ["DC1-L11:eth1", "DC1-HOST-PROD:eth1"]
+

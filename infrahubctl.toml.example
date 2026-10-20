@@ -1,0 +1,5 @@
+# infrahubctl settings for this repository's Infrahub. Copy to infrahubctl.toml (git-ignored) and fill in the token
+# (INFRAHUB_INITIAL_ADMIN_TOKEN from .env). The environment variables INFRAHUB_ADDRESS and INFRAHUB_API_TOKEN work as well.
+# Keys: docs.infrahub.app/infrahubctl/infrahubctl (server_address, api_token).
+server_address = "http://localhost:8000"
+api_token = "CHANGE_ME"

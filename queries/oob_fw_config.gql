@@ -1,0 +1,56 @@
+# Phase 4 PC6: OOB FortiGate units (FG-120G). Shared A/P addresses sit on unit 1's interfaces only; the template reads
+# them from the site's unit 1 (OobFws), so both units render the same config. OobFws also gives the other DC's WAN
+# address and zone subnets (IPsec between the DCs). The VLAN ids come from the OOB VLANs (FabricL2Vlan).
+query OobFwConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value }
+        location { node { name { value } } }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+              ... on InterfacePhysical { port_channel { node { name { value } } } }
+              ... on InterfacePortChannel { members { edges { node { name { value } } } } }
+              ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  OobFws: DcimDevice(role__value: "oob_fw") {
+    edges {
+      node {
+        name { value }
+        location { node { name { value } } }
+        interfaces {
+          edges {
+            node {
+              name { value }
+              role { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  FabricL2Vlan {
+    edges {
+      node {
+        name { value }
+        vlan_id { value }
+        site { node { name { value } } }
+        switch_pair { node { name { value } } }
+      }
+    }
+  }
+}

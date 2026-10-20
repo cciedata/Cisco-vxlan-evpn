@@ -1,0 +1,91 @@
+# Day-2 push with Ansible: Infrahub startup-config artifact -> NX-OS config replace (same steps as lab/day2/nornir_push.py).
+#   ansible-playbook day2_push.yml -e site=DC1 -e devices=DC1-L11 -e check=true     preview the replace patch only
+#   ansible-playbook day2_push.yml -e site=DC1 -e devices=DC1-L11                   apply: checkpoint, replace, verify, save
+# Inventory: every NX-OS device in Infrahub (groups nxos, site_<SITE>, role_<role>); -e site picks the group, -e devices limits it.
+- name: Day-2 push (Infrahub artifact -> NX-OS config replace)
+  hosts: "{{ ('site_' ~ site) if site is defined else 'nxos' }}"
+  gather_facts: false
+  vars:
+    branch: main
+    check: false
+    remote_file: "day2-{{ inventory_hostname }}.cfg"
+    work: "{{ playbook_dir }}/../../build/day2/ansible"
+    repo_python: "{{ playbook_dir }}/../../../.venv/bin/python"
+    stamp: "{{ lookup('ansible.builtin.pipe', 'date +%Y%m%d-%H%M%S') }}"
+  tasks:
+    - name: Limit to the selected devices
+      ansible.builtin.meta: end_host
+      when: devices is defined and inventory_hostname not in (devices.split(','))
+
+    - name: Work folder
+      ansible.builtin.file:
+        path: "{{ work }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Read the running-config (the kept lines come from it)
+      cisco.nxos.nxos_command:
+        commands: [show running-config]
+      register: running
+
+    - name: Save it locally
+      ansible.builtin.copy:
+        content: "{{ running.stdout[0] }}\n"
+        dest: "{{ work }}/{{ inventory_hostname }}.running.cfg"
+        mode: "0644"
+      delegate_to: localhost
+
+    - name: Build the Day-2 file (Infrahub artifact + kept lines, lab/day2/build_cfg.py)
+      ansible.builtin.command:
+        argv: ["{{ repo_python }}", "{{ playbook_dir }}/../build_cfg.py", "{{ inventory_hostname }}",
+               "--running", "{{ work }}/{{ inventory_hostname }}.running.cfg",
+               "--out", "{{ work }}/{{ inventory_hostname }}.day2.cfg", "--branch", "{{ branch }}"]
+      delegate_to: localhost
+      register: built
+      changed_when: false
+
+    - name: Show what was built
+      ansible.builtin.debug:
+        msg: "{{ built.stdout }}"
+
+    - name: Copy it to bootflash (SCP)
+      cisco.nxos.nxos_file_copy:
+        local_file: "{{ work }}/{{ inventory_hostname }}.day2.cfg"
+        remote_file: "{{ remote_file }}"
+        file_system: "bootflash:"
+
+    - name: Preview the replace patch
+      cisco.nxos.nxos_command:
+        commands: ["configure replace bootflash:{{ remote_file }} show-patch"]
+      register: patch
+      when: check | bool
+
+    - name: Patch
+      ansible.builtin.debug:
+        var: patch.stdout_lines
+      when: check | bool
+
+    - name: Checkpoint before the replace
+      cisco.nxos.nxos_command:
+        commands: ["checkpoint day2-before-{{ stamp }}"]
+      when: not (check | bool)
+
+    - name: Config replace
+      cisco.nxos.nxos_config:
+        replace: config
+        replace_src: "bootflash:{{ remote_file }}"
+      when: not (check | bool)
+
+    - name: Config replace status
+      cisco.nxos.nxos_command:
+        commands: [show config-replace status]
+      register: status
+      when: not (check | bool)
+      failed_when: "'fail' in (status.stdout[0] | lower)"
+
+    - name: Save
+      cisco.nxos.nxos_config:
+        save_when: always
+      when: not (check | bool)

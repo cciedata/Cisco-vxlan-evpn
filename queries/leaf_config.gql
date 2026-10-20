@@ -1,0 +1,99 @@
+query LeafConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value }
+        location {
+          node {
+            ... on LocationSite {
+              name { value }
+              segments {
+                edges {
+                  node {
+                    name { value }
+                    vlan_id { value }
+                    l2_vni { value }
+                    prefix { node { prefix { value } } }
+                    vrf { node { name { value } l3_vni { value } l3_vni_vlan { value } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+        asn {
+          node {
+            asn { value }
+            devices {
+              edges {
+                node {
+                  name { value }
+                  role { value }
+                  interfaces(name__value: "loopback0") {
+                    edges {
+                      node {
+                        name { value }
+                        ... on InterfaceLayer3 {
+                          ip_addresses { edges { node { address { value } } } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        switch_pair {
+          node {
+            __typename
+            name { value }
+            ... on FabricVpcDomain {
+              domain_id { value }
+              anycast_vtep { node { address { value } } }
+            }
+            members {
+              edges {
+                node {
+                  name { value }
+                  interfaces(role__value: "vpc_keepalive") {
+                    edges {
+                      node {
+                        name { value }
+                        ... on InterfaceLayer3 {
+                          ip_addresses { edges { node { address { value } } } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              mtu { value }
+              ... on InterfaceLayer3 {
+                ip_addresses { edges { node { address { value } } } }
+              }
+              ... on InterfacePortChannel {
+                members { edges { node { name { value } } } }
+              }
+              ... on InterfacePhysical {
+                access_segment { node { name { value } vlan_id { value } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

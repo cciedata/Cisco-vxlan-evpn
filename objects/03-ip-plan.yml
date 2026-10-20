@@ -1,0 +1,705 @@
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamPrefix
+  data:
+    # --- Top level (design-decisions.md > IP plan > Top level) ---
+    - prefix: 10.0.0.0/16
+      description: Shared infrastructure (belongs to no single site)
+      status: active
+      member_type: prefix
+    - prefix: 10.0.255.0/24
+      description: Inter-site links (DCI-1, DCI-2)
+      status: active
+      member_type: prefix
+      role: link
+    - prefix: 10.16.0.0/14
+      description: DC1 site block
+      status: active
+      member_type: prefix
+    - prefix: 10.20.0.0/14
+      description: DC2 site block
+      status: active
+      member_type: prefix
+    - prefix: 10.24.0.0/14
+      description: Reserved for a future DC3
+      status: reserved
+      member_type: prefix
+    - prefix: 10.64.0.0/12
+      description: Branches (SD-WAN)
+      status: active
+      member_type: prefix
+    - prefix: 10.98.0.0/24
+      description: Cloud handoffs (ExpressRoute /30s)
+      status: active
+      member_type: prefix
+      role: link
+    - prefix: 10.250.0.0/16
+      description: OOB management
+      status: active
+      member_type: prefix
+      role: management
+    - prefix: 10.19.4.0/22
+      description: DC1 fabric p2p /31s
+      status: active
+      member_type: prefix
+      role: link
+      site: DC1
+    - prefix: 10.23.4.0/22
+      description: DC2 fabric p2p /31s
+      status: active
+      member_type: prefix
+      role: link
+      site: DC2
+    - prefix: 10.250.0.0/20
+      description: DC1 OOB
+      status: active
+      member_type: prefix
+      role: management
+      site: DC1
+    - prefix: 10.250.0.0/24
+      description: DC1 network-device mgmt (mgmt0)
+      status: active
+      member_type: address
+      role: management
+      site: DC1
+    - prefix: 10.250.16.0/20
+      description: DC2 OOB
+      status: active
+      member_type: prefix
+      role: management
+      site: DC2
+    - prefix: 10.250.16.0/24
+      description: DC2 network-device mgmt (mgmt0)
+      status: active
+      member_type: address
+      role: management
+      site: DC2
+    - prefix: 172.16.0.0/13
+      description: AWS
+      status: active
+      member_type: prefix
+    - prefix: 172.24.0.0/14
+      description: Reserved for another cloud or growth
+      status: reserved
+      member_type: prefix
+    - prefix: 172.28.0.0/15
+      description: Reserved for growth
+      status: reserved
+      member_type: prefix
+    - prefix: 172.30.0.0/15
+      description: Azure
+      status: active
+      member_type: prefix
+    - prefix: 198.51.100.0/24
+      description: DC1 public (documentation range)
+      status: active
+      member_type: prefix
+      site: DC1
+    - prefix: 198.51.100.0/25
+      description: DC1 Internet FW NAT pool
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 198.51.100.160/27
+      description: DC1 published services (DMZ inbound)
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 203.0.113.0/24
+      description: DC2 public (documentation range)
+      status: active
+      member_type: prefix
+      site: DC2
+    - prefix: 203.0.113.0/25
+      description: DC2 Internet FW NAT pool
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 203.0.113.160/27
+      description: DC2 published services (DMZ inbound)
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 192.0.2.0/24
+      description: Carrier handoff /30s (documentation range)
+      status: active
+      member_type: prefix
+      role: link
+    # --- Inside the site /14s ---
+    - prefix: 10.16.0.0/16
+      description: DC1 tenants
+      status: active
+      member_type: prefix
+    - prefix: 10.19.0.0/16
+      description: DC1 infrastructure
+      status: active
+      member_type: prefix
+    - prefix: 10.19.0.0/19
+      description: DC1 infrastructure in use
+      status: active
+      member_type: prefix
+    - prefix: 10.19.0.0/24
+      description: DC1 loopback0 (router ID, BGP peering)
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.19.1.0/24
+      description: DC1 loopback1 (VTEP source)
+      status: active
+      member_type: address
+      site: DC1
+    # Phase 1: vPC anycast VTEPs, backup underlay SVIs, peer-keepalive links
+    - prefix: 10.19.2.0/25
+      description: DC1 vPC anycast VTEPs (one per vPC domain with NVE)
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.19.3.0/24
+      description: DC1 vPC backup underlay SVI /31s
+      status: active
+      member_type: prefix
+      role: link
+      site: DC1
+    - prefix: 10.19.17.0/24
+      description: DC1 vPC peer-keepalive /31s
+      status: active
+      member_type: prefix
+      role: link
+      site: DC1
+    - prefix: 10.20.0.0/16
+      description: DC2 tenants
+      status: active
+      member_type: prefix
+    - prefix: 10.23.0.0/16
+      description: DC2 infrastructure
+      status: active
+      member_type: prefix
+    - prefix: 10.23.0.0/19
+      description: DC2 infrastructure in use
+      status: active
+      member_type: prefix
+    - prefix: 10.23.0.0/24
+      description: DC2 loopback0 (router ID, BGP peering)
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.23.1.0/24
+      description: DC2 loopback1 (VTEP source)
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.23.2.0/25
+      description: DC2 vPC anycast VTEPs (one per vPC domain with NVE)
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.23.3.0/24
+      description: DC2 vPC backup underlay SVI /31s
+      status: active
+      member_type: prefix
+      role: link
+      site: DC2
+    - prefix: 10.23.17.0/24
+      description: DC2 vPC peer-keepalive /31s
+      status: active
+      member_type: prefix
+      role: link
+      site: DC2
+    # --- Phase 2: attachments, edge VLAN, ISP routers, TRANSIT, DMZ ---
+    - prefix: 10.19.8.0/22
+      description: "DC1 firewall attachments for tenant VRFs"
+      status: active
+      member_type: prefix
+      role: link
+      site: DC1
+    - prefix: 10.19.8.0/25
+      description: "DC1 Internal FW tenant VRF /29s (fixed slot per VRF)"
+      status: active
+      member_type: prefix
+      role: link
+      site: DC1
+    - prefix: 10.19.14.0/24
+      description: "DC1 edge VLAN 3200: VRRP VIP, ISP routers, FW outside legs"
+      status: active
+      member_type: address
+      role: link
+      site: DC1
+    - prefix: 10.19.15.0/24
+      description: "DC1 ISP routers: cross-link /31, loopbacks"
+      status: active
+      member_type: prefix
+      site: DC1
+    - prefix: 10.19.15.16/28
+      description: "DC1 ISP router loopback0"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.19.16.0/24
+      description: "DC1 TRANSIT attachment /29s (fixed slot per device)"
+      status: active
+      member_type: prefix
+      role: link
+      site: DC1
+    - prefix: 10.16.128.0/20
+      description: "DC1 DMZ block (behind the Internet FW)"
+      status: active
+      member_type: prefix
+      site: DC1
+    - prefix: 10.16.128.0/24
+      description: "DC1 DMZ VLAN 1400 (LB VIPs)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.129.0/24
+      description: "DC1 DMZ VLAN 1401 (LB self IPs and SNAT)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.130.0/24
+      description: "DC1 DMZ VLAN 1402 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.131.0/24
+      description: "DC1 DMZ VLAN 1403 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.132.0/24
+      description: "DC1 DMZ VLAN 1404 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.133.0/24
+      description: "DC1 DMZ VLAN 1405 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.134.0/24
+      description: "DC1 DMZ VLAN 1406 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.135.0/24
+      description: "DC1 DMZ VLAN 1407 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.136.0/24
+      description: "DC1 DMZ VLAN 1408 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.137.0/24
+      description: "DC1 DMZ VLAN 1409 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.138.0/24
+      description: "DC1 DMZ VLAN 1410 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.139.0/24
+      description: "DC1 DMZ VLAN 1411 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.140.0/24
+      description: "DC1 DMZ VLAN 1412 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.141.0/24
+      description: "DC1 DMZ VLAN 1413 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.142.0/24
+      description: "DC1 DMZ VLAN 1414 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.16.143.0/24
+      description: "DC1 DMZ VLAN 1415 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.23.8.0/22
+      description: "DC2 firewall attachments for tenant VRFs"
+      status: active
+      member_type: prefix
+      role: link
+      site: DC2
+    - prefix: 10.23.8.0/25
+      description: "DC2 Internal FW tenant VRF /29s (fixed slot per VRF)"
+      status: active
+      member_type: prefix
+      role: link
+      site: DC2
+    - prefix: 10.23.14.0/24
+      description: "DC2 edge VLAN 3200: VRRP VIP, ISP routers, FW outside legs"
+      status: active
+      member_type: address
+      role: link
+      site: DC2
+    - prefix: 10.23.15.0/24
+      description: "DC2 ISP routers: cross-link /31, loopbacks"
+      status: active
+      member_type: prefix
+      site: DC2
+    - prefix: 10.23.15.16/28
+      description: "DC2 ISP router loopback0"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.23.16.0/24
+      description: "DC2 TRANSIT attachment /29s (fixed slot per device)"
+      status: active
+      member_type: prefix
+      role: link
+      site: DC2
+    - prefix: 10.20.128.0/20
+      description: "DC2 DMZ block (behind the Internet FW)"
+      status: active
+      member_type: prefix
+      site: DC2
+    - prefix: 10.20.128.0/24
+      description: "DC2 DMZ VLAN 1400 (LB VIPs)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.129.0/24
+      description: "DC2 DMZ VLAN 1401 (LB self IPs and SNAT)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.130.0/24
+      description: "DC2 DMZ VLAN 1402 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.131.0/24
+      description: "DC2 DMZ VLAN 1403 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.132.0/24
+      description: "DC2 DMZ VLAN 1404 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.133.0/24
+      description: "DC2 DMZ VLAN 1405 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.134.0/24
+      description: "DC2 DMZ VLAN 1406 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.135.0/24
+      description: "DC2 DMZ VLAN 1407 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.136.0/24
+      description: "DC2 DMZ VLAN 1408 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.137.0/24
+      description: "DC2 DMZ VLAN 1409 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.138.0/24
+      description: "DC2 DMZ VLAN 1410 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.139.0/24
+      description: "DC2 DMZ VLAN 1411 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.140.0/24
+      description: "DC2 DMZ VLAN 1412 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.141.0/24
+      description: "DC2 DMZ VLAN 1413 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.142.0/24
+      description: "DC2 DMZ VLAN 1414 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.20.143.0/24
+      description: "DC2 DMZ VLAN 1415 (DMZ servers)"
+      status: active
+      member_type: address
+      site: DC2
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamIPAddress
+  data:
+    - address: 10.250.0.1/24
+      description: DC1 mgmt0 gateway (OOB FortiGate)
+      status: active
+    - address: 10.250.16.1/24
+      description: DC2 mgmt0 gateway (OOB FortiGate)
+      status: active
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamPrefix
+  data:
+    # Phase 4 PC1: Multi-Site VIPs, DCI switch blocks (row 2 B carving), inter-site DCI circuits (design)
+    - prefix: 10.19.2.128/25
+      description: DC1 Multi-Site VIP (anycast BGW pair)
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.23.2.128/25
+      description: DC2 Multi-Site VIP (anycast BGW pair)
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.19.12.0/24
+      description: "DC1 DCI switches: loopbacks .0/28, iBGP link .16/31, BGW<->DCI /31s from .32"
+      status: active
+      member_type: prefix
+      site: DC1
+    - prefix: 10.19.12.0/28
+      description: DC1 DCI switch loopback0
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.23.12.0/24
+      description: "DC2 DCI switches: loopbacks .0/28, iBGP link .16/31, BGW<->DCI /31s from .32"
+      status: active
+      member_type: prefix
+      site: DC2
+    - prefix: 10.23.12.0/28
+      description: DC2 DCI switch loopback0
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.0.255.0/31
+      description: "DCI-1: DC1-DCI1 <-> DC2-DCI1 (vendor circuit 1)"
+      status: active
+      member_type: address
+      role: link
+    - prefix: 10.0.255.2/31
+      description: "DCI-2: DC1-DCI2 <-> DC2-DCI2 (vendor circuit 2)"
+      status: active
+      member_type: address
+      role: link
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamPrefix
+  data:
+    # Phase 4 PC2: cloud router blocks (design: <infra>.13.0/24, .0/28 loopbacks, .16/31 iBGP link made by the generator),
+    # ExpressRoute private peering /30s (row 57 B), AWS private VIF /30s (placeholders until AWS generates them, P4A-112)
+    - prefix: 10.19.13.0/24
+      description: "DC1 cloud routers: loopbacks .0/28, iBGP link .16/31"
+      status: active
+      member_type: prefix
+      site: DC1
+    - prefix: 10.19.13.0/28
+      description: DC1 cloud router loopback0
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 10.23.13.0/24
+      description: "DC2 cloud routers: loopbacks .0/28, iBGP link .16/31"
+      status: active
+      member_type: prefix
+      site: DC2
+    - prefix: 10.23.13.0/28
+      description: DC2 cloud router loopback0
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.98.0.0/30
+      description: "DC1 ExpressRoute primary private peering (DC1-CLOUD1 .1, Microsoft .2, VLAN 200)"
+      status: active
+      member_type: address
+      role: link
+      site: DC1
+    - prefix: 10.98.0.4/30
+      description: "DC1 ExpressRoute secondary private peering (DC1-CLOUD2 .5, Microsoft .6, VLAN 200)"
+      status: active
+      member_type: address
+      role: link
+      site: DC1
+    - prefix: 10.98.0.8/30
+      description: "DC2 ExpressRoute primary private peering (DC2-CLOUD1 .9, Microsoft .10, VLAN 210)"
+      status: active
+      member_type: address
+      role: link
+      site: DC2
+    - prefix: 10.98.0.12/30
+      description: "DC2 ExpressRoute secondary private peering (DC2-CLOUD2 .13, Microsoft .14, VLAN 210)"
+      status: active
+      member_type: address
+      role: link
+      site: DC2
+    - prefix: 169.254.100.0/30
+      description: "DC1 AWS private VIF 1 (DC1-CLOUD1 .2, AWS .1, VLAN 100); placeholder until AWS generates the peer IPs"
+      status: active
+      member_type: address
+      role: link
+      site: DC1
+    - prefix: 169.254.101.0/30
+      description: "DC1 AWS private VIF 2 (DC1-CLOUD2 .2, AWS .1, VLAN 101); placeholder until AWS generates the peer IPs"
+      status: active
+      member_type: address
+      role: link
+      site: DC1
+    - prefix: 169.254.110.0/30
+      description: "DC2 AWS private VIF 1 (DC2-CLOUD1 .2, AWS .1, VLAN 110); placeholder until AWS generates the peer IPs"
+      status: active
+      member_type: address
+      role: link
+      site: DC2
+    - prefix: 169.254.111.0/30
+      description: "DC2 AWS private VIF 2 (DC2-CLOUD2 .2, AWS .1, VLAN 111); placeholder until AWS generates the peer IPs"
+      status: active
+      member_type: address
+      role: link
+      site: DC2
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamPrefix
+  data:
+    # Phase 4 PC3: SD-WAN hub WAN endpoints (design: public /24 carving); the hub uses the first host on loopback LO-WAN
+    - prefix: 198.51.100.144/28
+      description: DC1 SD-WAN FW (hub) WAN endpoints
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 203.0.113.144/28
+      description: DC2 SD-WAN FW (hub) WAN endpoints
+      status: active
+      member_type: address
+      site: DC2
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamPrefix
+  data:
+    # Phase 4 PC4: VPN-partner FW IPsec endpoints (design: public /24 carving; first host on loopback LO-WAN) and the
+    # VPN-partner FW attachment block (design: <infra>.9.0/26, .0/29 PARTNER)
+    - prefix: 198.51.100.128/28
+      description: DC1 VPN-partner FW IPsec endpoints
+      status: active
+      member_type: address
+      site: DC1
+    - prefix: 203.0.113.128/28
+      description: DC2 VPN-partner FW IPsec endpoints
+      status: active
+      member_type: address
+      site: DC2
+    - prefix: 10.19.9.0/26
+      description: "DC1 VPN-partner FW attachment /29s (border leaves, PARTNER)"
+      status: active
+      member_type: prefix
+      role: link
+      site: DC1
+    - prefix: 10.23.9.0/26
+      description: "DC2 VPN-partner FW attachment /29s (border leaves, PARTNER)"
+      status: active
+      member_type: prefix
+      role: link
+      site: DC2
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamPrefix
+  data:
+    # Phase 4 PC6: OOB carving inside 10.250.0.0/20 (DC1) and 10.250.16.0/20 (DC2) (decided: infra /24, BMC /22;
+    # remote-access pool and links: P4A-660, P4A-635)
+    - prefix: 10.250.1.0/24
+      description: DC1 OOB infrastructure (console servers, OOB switches, OOB FW)
+      status: active
+      member_type: address
+      role: management
+      site: DC1
+    - prefix: 10.250.2.0/24
+      description: DC1 OOB remote-access VPN pool
+      status: active
+      member_type: address
+      role: management
+      site: DC1
+    - prefix: 10.250.3.0/24
+      description: DC1 OOB links (/31s)
+      status: active
+      member_type: prefix
+      role: link
+      site: DC1
+    - prefix: 10.250.4.0/22
+      description: DC1 server BMCs
+      status: active
+      member_type: address
+      role: management
+      site: DC1
+    - prefix: 10.250.17.0/24
+      description: DC2 OOB infrastructure (console servers, OOB switches, OOB FW)
+      status: active
+      member_type: address
+      role: management
+      site: DC2
+    - prefix: 10.250.18.0/24
+      description: DC2 OOB remote-access VPN pool
+      status: active
+      member_type: address
+      role: management
+      site: DC2
+    - prefix: 10.250.19.0/24
+      description: DC2 OOB links (/31s)
+      status: active
+      member_type: prefix
+      role: link
+      site: DC2
+    - prefix: 10.250.20.0/22
+      description: DC2 server BMCs
+      status: active
+      member_type: address
+      role: management
+      site: DC2
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamIPAddress
+  data:
+    # Phase 4 PC6: OOB FortiGate = .1 of every OOB zone (P4A-620); owned here, linked (never saved) by oob_site
+    - address: 10.250.1.1/24
+      description: DC1 OOB infrastructure gateway (OOB FortiGate)
+      status: active
+    - address: 10.250.4.1/22
+      description: DC1 server BMC gateway (OOB FortiGate)
+      status: active
+    - address: 10.250.17.1/24
+      description: DC2 OOB infrastructure gateway (OOB FortiGate)
+      status: active
+    - address: 10.250.20.1/22
+      description: DC2 server BMC gateway (OOB FortiGate)
+      status: active

@@ -1,0 +1,293 @@
+{# Phase 4 PC6: OOB FortiGate (FG-120G, FortiOS 7.6.7), A/P HA, single VDOM, one routing table. Fully independent of
+   production: no route to any production prefix, only the OOB zones of both DCs and 0/0 to the OOB carrier.
+   Zones (row 66 B): network mgmt (VLAN 100), OOB infrastructure (101), server BMC (102), remote access, the other DC
+   (route-based IKEv2 over the OOB circuits, never the DCI). No policy from the BMC zone to the network-mgmt zone.
+   Remote access: IKEv2 dial-up skeleton with EAP; users and FortiToken assignment are not rendered (notes.md).
+   Rows = decisions.xlsx Open-Phase4 (62-67); P4A-6xx = p4-files/oob/auto_approved.md. #}
+{# Approved constants #}
+{% set ha_group_base = 50 -%}   {#- P4A-654: next free after the 10/20/30/40 FW groups -#}
+{% set ha_site_offset = 100 -%}   {#- same as the other FWs -#}
+{% set ha_priority = {1: 200, 2: 100} -%}   {#- same as the other FWs -#}
+{% set ha_hbdev = [("ha", 50), ("port16", 50)] -%}   {#- P4A-651 -#}
+{% set ha_monitor = ["agg-oob"] -%}   {#- P4A-655: the WAN is shared by both units, not monitored -#}
+{% set mgmt_access = "ping https ssh" -%}   {#- P4A-656 -#}
+{% set psk = "cisco123" -%}   {#- P4A-661: placeholder (public repo), same approach as row 43 B -#}
+{% set ike_proposal = "aes256gcm-prfsha384" -%}{% set ike_dhgrp = 20 -%}{% set ike_keylife = 28800 -%}   {#- P4A-661 (= P4A-315) -#}
+{% set esp_proposal = "aes256gcm" -%}{% set esp_keylife = 3600 -%}   {#- P4A-661 (= P4A-315) -#}
+{% set dpd_retry = 10 -%}   {#- (= P4A-316) -#}
+{% set zone_of = {"NETMGMT": "Z-NETMGMT", "OOBINFRA": "Z-OOBINFRA", "BMC": "Z-BMC"} -%}   {#- P4A-662 -#}
+{% set ra_zone = "Z-RA" -%}{% set dci_zone = "Z-OOB-DCI" -%}
+{% set ra_if = "RA-DIALUP" -%}   {#- P4A-660 -#}
+{% set ra_start_host = 10 -%}{% set ra_end_host = 253 -%}{% set ra_remote_host = 254 -%}   {#- P4A-660: pool .10 - .253; .1 tunnel, .254 remote-ip -#}
+{% set ra_net_group = "OOB-NET-TEAM" -%}{% set ra_srv_group = "OOB-SRV-TEAM" -%}   {#- P4A-663: network team / server team -#}
+{% set service = "ALL" -%}   {#- P4A-665: skeleton, tighten per zone later -#}
+{% set blackhole_distance = 254 -%}   {#- P4A-666 -#}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set unit = name[-1] | int -%}
+{% set site_name = device.location.node.name.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
+{% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
+{% set fw_ports = physical | selectattr("role.value", "equalto", "peering") | list | sort(attribute="name.value") -%}
+{% set aggs = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | sort(attribute="name.value") -%}
+{% set wan = physical | selectattr("role.value", "equalto", "upstream") | list | first -%}
+{% set subifs = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | selectattr("role.value", "equalto", "peering") | list | sort(attribute="name.value") -%}
+{% set oob_vlans = data.FabricL2Vlan.edges | map(attribute="node") | list | selectattr("site.node.name.value", "equalto", site_name) | list -%}
+{# Unit 1 of each site holds the shared addresses: interface name -> address #}
+{% macro unit1_addr(site, ifname) %}{% set ns = namespace(a="") %}{% for u in data.OobFws.edges | map(attribute="node") | list %}{% if u.location.node.name.value == site and u.name.value.endswith("1") %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.name.value == ifname and i.ip_addresses is defined and i.ip_addresses.edges %}{% set ns.a = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endfor %}{% endif %}{% endfor %}{{ ns.a }}{% endmacro -%}
+{% set others = data.OobFws.edges | map(attribute="node") | list | rejectattr("location.node.name.value", "equalto", site_name) | map(attribute="location.node.name.value") | unique | list | sort -%}
+{% macro net(p) %}{{ p | ipaddress_interface("network") | string }}{% endmacro -%}
+{% macro ipmask(addr) %}{{ addr | ipaddress_interface("ip") }} {{ addr | ipaddress_interface("netmask") }}{% endmacro -%}
+{% macro pfxmask(p) %}{{ p.split("/")[0] }} {{ p | ipaddress_interface("netmask") }}{% endmacro -%}
+{% macro host(p, n) %}{% set o = p.split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + n }}{% endmacro -%}
+{# Values derived by rule #}
+{% set z_ns = namespace(items=[]) -%}
+{% for s in subifs %}{% set key = s.name.value.split("-")[0] %}{% set v = oob_vlans | selectattr("name.value", "equalto", s.description.value) | list | first %}{% set z_ns.items = z_ns.items + [(key, s.name.value, v.vlan_id.value, unit1_addr(site_name, s.name.value), s.parent_interface.node.name.value, s.description.value)] %}{% endfor -%}
+{% set zone_list = z_ns.items -%}
+{% set wan_addr = unit1_addr(site_name, wan.name.value) -%}
+{% set wan_gw = net(wan_addr) | get_first_usable -%}
+{% set ra_addr = unit1_addr(site_name, ra_if) -%}
+{% set ra_net = net(ra_addr) -%}
+{% set ra_first = ra_net.split("/")[0] -%}
+{% macro addr_name(site, key) %}OOB-{{ site }}-{{ key }}{% endmacro -%}
+config system global
+    set hostname "{{ name }}"
+end
+config system ha
+    set group-id {{ ha_group_base + ha_site_offset * ((site_name[-1] | int) - 1) }}
+    set group-name "{{ name[:-1] }}-HA"
+    set mode a-p
+    set hbdev{% for p, w in ha_hbdev %} "{{ p }}" {{ w }}{% endfor %}
+
+    set session-pickup enable
+    set override disable
+    set priority {{ ha_priority[unit] }}
+    set monitor{% for m in ha_monitor %} "{{ m }}"{% endfor %}
+
+    set ha-mgmt-status enable
+    config ha-mgmt-interfaces
+        edit 1
+            set interface "{{ mgmt.name.value }}"
+            set gateway {{ net(mgmt.ip_addresses.edges[0].node.address.value) | get_first_usable }}
+        next
+    end
+end
+config system interface
+    edit "{{ mgmt.name.value }}"
+        set ip {{ ipmask(mgmt.ip_addresses.edges[0].node.address.value) }}
+        set allowaccess {{ mgmt_access }}
+        set description "{{ mgmt.description.value }}"
+    next
+{% for p in fw_ports %}
+    edit "{{ p.name.value }}"
+        set description "{{ p.description.value }}"
+    next
+{% endfor %}
+{% for a in aggs %}
+    edit "{{ a.name.value }}"
+        set type aggregate
+        set member{% for m in a.members.edges | map(attribute="node.name.value") | list | sort %} "{{ m }}"{% endfor %}
+
+        set lacp-mode active
+        set description "{{ a.description.value }}"
+    next
+{% endfor %}
+{% for key, ifname, vid, addr, parent, vdesc in zone_list %}
+    edit "{{ ifname }}"
+        set interface "{{ parent }}"
+        set vlanid {{ vid }}
+        set ip {{ ipmask(addr) }}
+        set allowaccess ping
+        set description "{{ vdesc }}"
+    next
+{% endfor %}
+    edit "{{ wan.name.value }}"
+        set ip {{ ipmask(wan_addr) }}
+        set role wan
+        set description "{{ wan.description.value }}"
+    next
+end
+config user group
+    edit "{{ ra_net_group }}"
+    next
+    edit "{{ ra_srv_group }}"
+    next
+end
+config vpn ipsec phase1-interface
+{% for o in others %}
+    edit "OOB-{{ o }}"
+        set interface "{{ wan.name.value }}"
+        set ike-version 2
+        set peertype any
+        set net-device disable
+        set proposal {{ ike_proposal }}
+        set dhgrp {{ ike_dhgrp }}
+        set keylife {{ ike_keylife }}
+        set remote-gw {{ unit1_addr(o, wan.name.value) | ipaddress_interface("ip") }}
+        set add-route disable
+        set dpd on-idle
+        set dpd-retryinterval {{ dpd_retry }}
+        set psksecret {{ psk }}
+    next
+{% endfor %}
+    edit "{{ ra_if }}"
+        set type dynamic
+        set interface "{{ wan.name.value }}"
+        set ike-version 2
+        set peertype any
+        set net-device disable
+        set mode-cfg enable
+        set proposal {{ ike_proposal }}
+        set dhgrp {{ ike_dhgrp }}
+        set keylife {{ ike_keylife }}
+        set eap enable
+        set eap-identity send-request
+        set assign-ip-from range
+        set ipv4-start-ip {{ host(ra_net, ra_start_host) }}
+        set ipv4-end-ip {{ host(ra_net, ra_end_host) }}
+        set ipv4-netmask {{ ra_net | ipaddress_interface("netmask") }}
+        set ipv4-split-include "G-{{ addr_name(site_name, 'ALL') }}"
+        set dpd on-idle
+        set dpd-retryinterval {{ dpd_retry }}
+        set psksecret {{ psk }}
+    next
+end
+config vpn ipsec phase2-interface
+{% for o in others %}
+    edit "OOB-{{ o }}"
+        set phase1name "OOB-{{ o }}"
+        set proposal {{ esp_proposal }}
+        set dhgrp {{ ike_dhgrp }}
+        set keylifeseconds {{ esp_keylife }}
+        set auto-negotiate enable
+        set src-subnet 0.0.0.0 0.0.0.0
+        set dst-subnet 0.0.0.0 0.0.0.0
+    next
+{% endfor %}
+    edit "{{ ra_if }}"
+        set phase1name "{{ ra_if }}"
+        set proposal {{ esp_proposal }}
+        set dhgrp {{ ike_dhgrp }}
+        set keylifeseconds {{ esp_keylife }}
+    next
+end
+config system interface
+{% for o in others %}
+    edit "OOB-{{ o }}"
+        set description "OOB IPsec to {{ o }} (OOB circuits)"
+    next
+{% endfor %}
+    edit "{{ ra_if }}"
+        set ip {{ ra_addr | ipaddress_interface("ip") }} 255.255.255.255
+        set remote-ip {{ host(ra_net, ra_remote_host) }} {{ ra_net | ipaddress_interface("netmask") }}
+        set description "Remote-access VPN (dial-up IKEv2, MFA)"
+    next
+end
+config system zone
+{% for key, ifname, vid, addr, parent, vdesc in zone_list %}
+    edit "{{ zone_of[key] }}"
+        set intrazone deny
+        set interface "{{ ifname }}"
+    next
+{% endfor %}
+    edit "{{ ra_zone }}"
+        set intrazone deny
+        set interface "{{ ra_if }}"
+    next
+    edit "{{ dci_zone }}"
+        set intrazone deny
+        set interface{% for o in others %} "OOB-{{ o }}"{% endfor %}
+
+    next
+end
+config firewall address
+{% for s in [site_name] + others %}
+{% for key, ifname, vid, addr, parent, vdesc in zone_list %}
+    edit "{{ addr_name(s, key) }}"
+        set subnet {{ pfxmask(net(unit1_addr(s, ifname))) }}
+    next
+{% endfor %}
+    edit "{{ addr_name(s, 'RA') }}"
+        set subnet {{ pfxmask(net(unit1_addr(s, ra_if))) }}
+    next
+{% endfor %}
+end
+config firewall addrgrp
+    edit "G-{{ addr_name(site_name, 'ALL') }}"
+        set member{% for key, ifname, vid, addr, parent, vdesc in zone_list %} "{{ addr_name(site_name, key) }}"{% endfor %}{% for o in others %}{% for key, ifname, vid, addr, parent, vdesc in zone_list %} "{{ addr_name(o, key) }}"{% endfor %}{% endfor %}
+
+    next
+end
+{# Policy matrix (P4A-664): (name, from zone, to zone, sources, destinations, user group or none) #}
+{% set p_ns = namespace(items=[]) -%}
+{% for key, ifname, vid, addr, parent, vdesc in zone_list %}{% set p_ns.items = p_ns.items + [("RA-NET-TO-" ~ key, ra_zone, zone_of[key], [addr_name(site_name, "RA")], [addr_name(site_name, key)], ra_net_group)] %}{% endfor -%}
+{% set p_ns.items = p_ns.items + [("RA-SRV-TO-BMC", ra_zone, zone_of["BMC"], [addr_name(site_name, "RA")], [addr_name(site_name, "BMC")], ra_srv_group)] -%}
+{% for o in others %}
+{% set d_ns = namespace(items=[]) %}{% for z in zone_list %}{% set d_ns.items = d_ns.items + [addr_name(o, z[0])] %}{% endfor -%}
+{% set p_ns.items = p_ns.items + [("RA-NET-TO-" ~ o, ra_zone, dci_zone, [addr_name(site_name, "RA")], d_ns.items, ra_net_group)] -%}
+{% set p_ns.items = p_ns.items + [("RA-SRV-TO-" ~ o ~ "-BMC", ra_zone, dci_zone, [addr_name(site_name, "RA")], [addr_name(o, "BMC")], ra_srv_group)] -%}
+{% for key, ifname, vid, addr, parent, vdesc in zone_list %}{% set p_ns.items = p_ns.items + [(key ~ "-TO-" ~ o, zone_of[key], dci_zone, [addr_name(site_name, key)], [addr_name(o, key)], none), (o ~ "-TO-" ~ key, dci_zone, zone_of[key], [addr_name(o, key), addr_name(o, "RA")], [addr_name(site_name, key)], none)] %}{% endfor -%}
+{% endfor %}
+config firewall policy
+{% for pname, src_zone, dst_zone, srcs, dsts, grp in p_ns.items %}
+    edit {{ loop.index }}
+        set name "{{ pname }}"
+        set srcintf "{{ src_zone }}"
+        set dstintf "{{ dst_zone }}"
+        set action accept
+        set srcaddr{% for a in srcs %} "{{ a }}"{% endfor %}
+
+        set dstaddr{% for a in dsts %} "{{ a }}"{% endfor %}
+
+        set schedule "always"
+        set service "{{ service }}"
+{% if grp %}
+        set groups "{{ grp }}"
+{% endif %}
+        set logtraffic all
+    next
+{% endfor %}
+end
+config router static
+    edit 1
+        set dst 0.0.0.0 0.0.0.0
+        set gateway {{ wan_gw }}
+        set device "{{ wan.name.value }}"
+        set comment "OOB carrier ({{ net(wan_addr) }})"
+    next
+{% set sid = namespace(n=1) %}
+{% for o in others %}
+{% for key, ifname, vid, addr, parent, vdesc in zone_list %}
+{% set sid.n = sid.n + 1 %}
+    edit {{ sid.n }}
+        set dst {{ pfxmask(net(unit1_addr(o, ifname))) }}
+        set device "OOB-{{ o }}"
+        set comment "{{ o }} OOB {{ key }}"
+    next
+{% endfor %}
+{% set sid.n = sid.n + 1 %}
+    edit {{ sid.n }}
+        set dst {{ pfxmask(net(unit1_addr(o, ra_if))) }}
+        set device "OOB-{{ o }}"
+        set comment "{{ o }} OOB remote-access pool"
+    next
+{% for key, ifname, vid, addr, parent, vdesc in zone_list %}
+{% set sid.n = sid.n + 1 %}
+    edit {{ sid.n }}
+        set dst {{ pfxmask(net(unit1_addr(o, ifname))) }}
+        set blackhole enable
+        set distance {{ blackhole_distance }}
+        set comment "{{ o }} OOB {{ key }}: never via the carrier"
+    next
+{% endfor %}
+{% set sid.n = sid.n + 1 %}
+    edit {{ sid.n }}
+        set dst {{ pfxmask(net(unit1_addr(o, ra_if))) }}
+        set blackhole enable
+        set distance {{ blackhole_distance }}
+        set comment "{{ o }} OOB remote-access pool: never via the carrier"
+    next
+{% endfor %}
+end

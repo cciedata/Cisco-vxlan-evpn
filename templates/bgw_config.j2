@@ -1,0 +1,223 @@
+{# Phase 4 PC1: anycast border gateway (EVPN Multi-Site, non-vPC BGW pair). Underlay OSPF + iBGP EVPN to the spines like
+   the leaves; Multi-Site VIP on loopback2 (row 15 C); eBGP IPv4 underlay to the local DCI switch over the upstream /31;
+   eBGP EVPN multihop to every BGW of the other site; only multisite VRFs and stretched segments (sites > 1) are on the BGW.
+   Sources: Cisco NX-OS VXLAN Configuration Guide 10.6(x) "Configure VXLAN EVPN Multi-Site" (claude/phase4-research.md). #}
+{# Approved constants: Phase 1 / PC2 values plus Open-Phase4 rows 14-25 and Auto-approved-P4 #}
+{% set ospf_process = "UNDERLAY" -%}
+{% set ospf_area = "0.0.0.0" -%}
+{% set rr_template = "SPINE-RR" -%}
+{% set bgp_password = "cisco123" -%}
+{% set bfd_timers = "interval 999 min_rx 999 multiplier 3" -%}   {#- row 25 B; NX-OS 10.6 single-hop 50-999 -#}
+{% set svi_mtu = 9216 -%}
+{% set ms_delay_restore = 300 -%}        {#- P4A-01 (Cisco examples) -#}
+{% set storm_level = 1 -%}               {#- row 24 B: 1% broadcast, multicast, unknown unicast -#}
+{% set ms_ttl = 64 -%}                   {#- row 21: 64 -#}
+{% set vip_if = "loopback2" -%}          {#- row 15 C -#}
+{% set underlay_rm = "RM-UNDERLAY-TO-DCI" -%}
+{% set seq_step = 10 -%}
+{% macro peer31(a) %}{% set p = (a | ipaddress_interface("ip") | string).split(".") %}{% set n = p[3] | int %}{{ p[:3] | join(".") }}.{{ n + 1 if n % 2 == 0 else n - 1 }}{% endmacro -%}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set asn = device.asn.node.asn.value -%}
+{% set site = device.location.node -%}
+{% set site_name = site.name.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
+{% set virtual = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
+{% set lo0 = virtual | selectattr("name.value", "equalto", "loopback0") | list | first -%}
+{% set lo1 = virtual | selectattr("name.value", "equalto", "loopback1") | list | first -%}
+{% set lo2 = virtual | selectattr("name.value", "equalto", vip_if) | list | first -%}
+{% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
+{% set core_all = physical | selectattr("role.value", "equalto", "core") | list -%}
+{% set core_names = core_all | map(attribute="name.value") | list | sort_interface_list -%}
+{% set up_all = physical | selectattr("role.value", "equalto", "upstream") | list -%}
+{% set up_names = up_all | map(attribute="name.value") | list | sort_interface_list -%}
+{% set spines_all = device.asn.node.devices.edges | map(attribute="node") | list | selectattr("role.value", "equalto", "spine") | list -%}
+{% set spine_names = spines_all | map(attribute="name.value") | list | sort_interface_list -%}
+{% set vrfs = site.vrfs.edges | map(attribute="node") | list | selectattr("multisite.value") | list | sort(attribute="l3_vni.value") -%}
+{% set ms_vrf_names = vrfs | map(attribute="name.value") | list -%}
+{% set seg_ns = namespace(items=[]) -%}
+{% for s in site.segments.edges | map(attribute="node") | list %}{% if s.vrf.node.name.value in ms_vrf_names and (s.sites.edges | length) > 1 %}{% set seg_ns.items = seg_ns.items + [s] %}{% endif %}{% endfor -%}
+{% set segs = seg_ns.items | sort(attribute="vlan_id.value") -%}
+{% set bgws = data.Bgws.edges | map(attribute="node") | list -%}
+{% set vip_ns = namespace(v=none) -%}
+{% for b in bgws %}{% if b.location.node.name.value == site_name %}{% for i in b.interfaces.edges | map(attribute="node") | list %}{% if i.name.value == vip_if and i.ip_addresses and i.ip_addresses.edges %}{% set vip_ns.v = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endfor %}{% endif %}{% endfor -%}
+{% set remote_bgws = bgws | rejectattr("location.node.name.value", "equalto", site_name) | list -%}
+{% set remote_names = remote_bgws | map(attribute="name.value") | list | sort_interface_list -%}
+{% set dcis = data.Dcis.edges | map(attribute="node") | list -%}
+{# Values derived by rule #}
+{% set lo0_addr = lo0.ip_addresses.edges[0].node.address.value -%}
+{% set router_id = lo0_addr | ipaddress_interface("ip") -%}
+{% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
+{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+hostname {{ device.name.value }}
+username vamdadmin password 5 __VAMDADMIN_HASH__ role network-admin
+no ip domain-lookup
+feature ospf
+feature bgp
+feature bfd
+feature interface-vlan
+feature vn-segment-vlan-based
+feature nv overlay
+nv overlay evpn
+
+evpn multisite border-gateway {{ asn }}
+  delay-restore time {{ ms_delay_restore }}
+  split-horizon per-site
+
+evpn storm-control broadcast level {{ storm_level }}
+evpn storm-control multicast level {{ storm_level }}
+evpn storm-control unicast level {{ storm_level }}
+
+route-map {{ underlay_rm }} permit {{ seq_step }}
+  match interface {{ lo0.name.value }} {{ lo1.name.value }} {{ lo2.name.value }}
+
+vrf context management
+  ip route 0.0.0.0/0 {{ mgmt_gw }}
+{% for vrf in vrfs %}
+
+vrf context {{ vrf.name.value }}
+  vni {{ vrf.l3_vni.value }}
+  rd auto
+  address-family ipv4 unicast
+    route-target both auto
+    route-target both auto evpn
+{% endfor %}
+{% for vrf in vrfs %}
+
+vlan {{ vrf.l3_vni_vlan.value }}
+  name L3VNI-{{ vrf.name.value }}
+  vn-segment {{ vrf.l3_vni.value }}
+{% endfor %}
+{% for seg in segs %}
+
+vlan {{ seg.vlan_id.value }}
+  name {{ seg.name.value }}
+  vn-segment {{ seg.l2_vni.value }}
+{% endfor %}
+
+interface {{ mgmt.name.value }}
+  description {{ mgmt.description.value }}
+  vrf member management
+  ip address {{ mgmt_addr }}
+
+interface {{ lo0.name.value }}
+  description {{ lo0.description.value }}
+  ip address {{ lo0_addr }}
+  ip router ospf {{ ospf_process }} area {{ ospf_area }}
+
+interface {{ lo1.name.value }}
+  description {{ lo1.description.value }}
+  ip address {{ lo1.ip_addresses.edges[0].node.address.value }}
+  ip router ospf {{ ospf_process }} area {{ ospf_area }}
+
+interface {{ lo2.name.value }}
+  description {{ lo2.description.value }}
+  ip address {{ vip_ns.v }}
+  ip router ospf {{ ospf_process }} area {{ ospf_area }}
+{% for vrf in vrfs %}
+
+interface Vlan{{ vrf.l3_vni_vlan.value }}
+  no shutdown
+  mtu {{ svi_mtu }}
+  vrf member {{ vrf.name.value }}
+  no ip redirects
+  ip forward
+{% endfor %}
+{% for name in core_names %}{% set intf = core_all | selectattr("name.value", "equalto", name) | list | first %}
+
+interface {{ intf.name.value }}
+  description {{ intf.description.value }}
+  no switchport
+  mtu {{ intf.mtu.value }}
+  ip address {{ intf.ip_addresses.edges[0].node.address.value }}
+  ip ospf network point-to-point
+  ip router ospf {{ ospf_process }} area {{ ospf_area }}
+  evpn multisite fabric-tracking
+  no shutdown
+{% endfor %}
+{% for name in up_names %}{% set intf = up_all | selectattr("name.value", "equalto", name) | list | first %}
+
+interface {{ intf.name.value }}
+  description {{ intf.description.value }}
+  no switchport
+  mtu {{ intf.mtu.value }}
+  ip address {{ intf.ip_addresses.edges[0].node.address.value }}
+  no ip redirects
+  no bfd echo
+  bfd {{ bfd_timers }}
+  evpn multisite dci-tracking
+  no shutdown
+{% endfor %}
+
+interface nve1
+  no shutdown
+  host-reachability protocol bgp
+  source-interface {{ lo1.name.value }}
+  multisite border-gateway interface {{ lo2.name.value }}
+  global ingress-replication protocol bgp
+{% for seg in segs %}
+  member vni {{ seg.l2_vni.value }}
+    multisite ingress-replication
+{% endfor %}
+{% for vrf in vrfs %}
+  member vni {{ vrf.l3_vni.value }} associate-vrf
+{% endfor %}
+
+router ospf {{ ospf_process }}
+  router-id {{ router_id }}
+
+router bgp {{ asn }}
+  router-id {{ router_id }}
+  address-family ipv4 unicast
+    redistribute direct route-map {{ underlay_rm }}
+  template peer {{ rr_template }}
+    remote-as {{ asn }}
+    update-source loopback0
+    password {{ bgp_password }}
+    bfd multihop
+    bfd multihop {{ bfd_timers }}
+    address-family l2vpn evpn
+      send-community
+      send-community extended
+{% for name in spine_names %}{% set spine = spines_all | selectattr("name.value", "equalto", name) | list | first %}
+  neighbor {{ spine.interfaces.edges[0].node.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }}
+    inherit peer {{ rr_template }}
+{% endfor %}
+{% for name in up_names %}{% set intf = up_all | selectattr("name.value", "equalto", name) | list | first %}
+{% set far = intf.description.value.split(" ")[0] %}
+{% set far_dev = dcis | selectattr("name.value", "equalto", far) | list | first %}
+  neighbor {{ peer31(intf.ip_addresses.edges[0].node.address.value) }}
+    remote-as {{ far_dev.asn.node.asn.value }}
+    description {{ far }}
+    password {{ bgp_password }}
+    bfd
+    address-family ipv4 unicast
+{% endfor %}
+{% for name in remote_names %}{% set rb = remote_bgws | selectattr("name.value", "equalto", name) | list | first %}
+{% set rb_lo0 = rb.interfaces.edges | map(attribute="node") | list | selectattr("name.value", "equalto", "loopback0") | list | first %}
+  neighbor {{ rb_lo0.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }}
+    remote-as {{ rb.asn.node.asn.value }}
+    description {{ rb.name.value }}
+    update-source loopback0
+    ebgp-multihop {{ ms_ttl }}
+    peer-type fabric-external
+    password {{ bgp_password }}
+    address-family l2vpn evpn
+      send-community
+      send-community extended
+      rewrite-evpn-rt-asn
+{% endfor %}
+{% for vrf in vrfs %}
+  vrf {{ vrf.name.value }}
+    address-family ipv4 unicast
+      advertise l2vpn evpn
+{% endfor %}
+
+evpn
+{% for seg in segs %}
+  vni {{ seg.l2_vni.value }} l2
+    rd auto
+    route-target import auto
+    route-target export auto
+{% endfor %}

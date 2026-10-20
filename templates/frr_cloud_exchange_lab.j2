@@ -1,0 +1,87 @@
+{# Option 5 (D5-34): lab stand-in for the cloud exchange behind one cloud router, rendered from the router's data (same query as
+   cloud_router_config.j2): one FRR container on the router's cloud-exchange port, with the AWS side (Direct Connect Gateway) in
+   VRF aws and the Microsoft side (ExpressRoute MSEE) in VRF azure. VLANs, addresses, peer hosts and ASNs come from the graph and
+   the same rules as the router's template; the announced cloud prefixes are lab-only (P5), inside the blocks the router accepts; their .1 answers pings (a dummy
+   interface in the VRF), so a PROD host can ping 172.16.1.1 (AWS) and 172.30.1.1 (Azure) end to end. #}
+{% set aws_provider = "AWS" -%}{% set azure_provider = "Microsoft" -%}
+{% set aws_peer_host = 1 -%}
+{% set ms_peer_host = 2 -%}
+{% set aws_md5_key = "cisco123" -%}{% set azure_md5_key = "cisco123" -%}
+{% set cloud_bfd_interval = 300 -%}{% set cloud_bfd_mult = 3 -%}
+{% set mtu = 9216 -%}
+{% set table_base = 1000 -%}
+{% set aws_test_net = "172.16.1.0/24" -%}{# P5 (D5-34): inside the AWS block 172.16.0.0/13 le 24 #}
+{% set azure_test_net = "172.30.1.0/24" -%}{# P5 (D5-34): inside the Azure block 172.30.0.0/15 le 24 #}
+{% set port = "cr" -%}{# P5: this node's port toward the cloud router #}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set asn = device.asn.node.asn.value -%}
+{% set site_name = device.location.node.name.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set virtual = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
+{% set handoffs = virtual | selectattr("role.value", "equalto", "cloud_handoff") | list | sort(attribute="name.value") -%}
+{% set hs = namespace(aws=none, azure=none, aws_asn=none, azure_asn=none) -%}
+{% for h in handoffs %}{% if h.description.value.startswith(aws_provider ~ " ") %}{% set hs.aws = h %}{% elif h.description.value.startswith(azure_provider ~ " ") %}{% set hs.azure = h %}{% endif %}{% endfor -%}
+{% for a in data.ProviderAsns.edges | map(attribute="node") | list %}{% if a.provider.node is not none %}{% if a.provider.node.name.value == aws_provider %}{% set hs.aws_asn = a.asn.value %}{% elif a.provider.node.name.value == azure_provider %}{% set hs.azure_asn = a.asn.value %}{% endif %}{% endif %}{% endfor -%}
+{% macro host(addr, h) %}{% set o = (addr | ipaddress_interface("network") | string).split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + h }}{% endmacro -%}
+{% set aws_addr = hs.aws.ip_addresses.edges[0].node.address.value -%}
+{% set azure_addr = hs.azure.ip_addresses.edges[0].node.address.value -%}
+{% set sides = [("aws", 1, hs.aws, hs.aws_asn, host(aws_addr, aws_peer_host), aws_addr, aws_md5_key, aws_test_net),
+                ("azure", 2, hs.azure, hs.azure_asn, host(azure_addr, ms_peer_host), azure_addr, azure_md5_key, azure_test_net)] -%}
+{% set cx = site_name ~ "-CX" ~ name[-1] -%}
+#!/bin/sh
+# {{ cx }}: lab stand-in for the cloud exchange behind {{ name }} (FRR in a Linux container). Rendered by Infrahub from {{ name }}'s
+# data, do not edit. Port "{{ port }}" toward {{ name }}; VRF aws = {{ aws_provider }} (AS {{ hs.aws_asn }}), VRF azure = {{ azure_provider }} (AS {{ hs.azure_asn }}).
+set -eu
+sysctl -qw net.ipv4.ip_forward=1
+sysctl -qw net.ipv4.tcp_l3mdev_accept=1
+ip route del default dev eth0 2>/dev/null || true
+ip link set {{ port }} mtu {{ mtu }} up
+{% for vrf, tid, h, pasn, peer, ours, key, test in sides %}
+{% set vid = h.name.value.split(".")[1] -%}
+ip link add {{ vrf }} type vrf table {{ table_base + tid }} 2>/dev/null || true
+ip link set {{ vrf }} up
+ip link add link {{ port }} name {{ port }}.{{ vid }} type vlan id {{ vid }} 2>/dev/null || true
+ip link set {{ port }}.{{ vid }} master {{ vrf }}
+ip addr replace {{ peer }}/{{ ours.split("/")[1] }} dev {{ port }}.{{ vid }}
+ip link set {{ port }}.{{ vid }} up
+ip link add {{ vrf }}-net type dummy 2>/dev/null || true
+ip link set {{ vrf }}-net master {{ vrf }}
+ip addr replace {{ test | ipaddress_interface("network") | string | get_first_usable }}/{{ test.split("/")[1] }} dev {{ vrf }}-net
+ip link set {{ vrf }}-net up
+{% endfor %}
+pgrep -x bfdd >/dev/null || /usr/lib/frr/bfdd -d -A 127.0.0.1
+pgrep -x bgpd >/dev/null || /usr/lib/frr/bgpd -d -A 127.0.0.1
+sleep 2
+cat > /etc/frr/frr.conf <<'FRREOF'
+hostname {{ cx }}
+service integrated-vtysh-config
+!
+bfd
+ profile CLOUD-BFD
+  transmit-interval {{ cloud_bfd_interval }}
+  receive-interval {{ cloud_bfd_interval }}
+  detect-multiplier {{ cloud_bfd_mult }}
+  no echo-mode
+ exit
+exit
+!
+{% for vrf, tid, h, pasn, peer, ours, key, test in sides %}
+{% set rtr = ours | ipaddress_interface("ip") %}
+router bgp {{ pasn }} vrf {{ vrf }}
+ bgp router-id {{ peer }}
+ no bgp ebgp-requires-policy
+ neighbor {{ rtr }} remote-as {{ asn }}
+ neighbor {{ rtr }} description {{ name }} {{ h.name.value }}
+ neighbor {{ rtr }} password {{ key }}
+ neighbor {{ rtr }} bfd profile CLOUD-BFD
+ address-family ipv4 unicast
+  network {{ test }}
+ exit-address-family
+exit
+!
+{% endfor %}
+FRREOF
+vtysh -f /etc/frr/frr.conf
+echo "{{ cx }} stand-in ready"

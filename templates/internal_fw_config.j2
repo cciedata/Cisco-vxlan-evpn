@@ -1,0 +1,283 @@
+{# Phase 2 PC3: Internal FortiGate (FortiOS 7.6.7), A/P HA, single VDOM, one VRF per tenant + TRANSIT (VRF 1).
+   Routing only (no policies, no NAT). Tenant VRFs reach TRANSIT through BGP leak-target over NPU vlink pairs (star). #}
+{# Approved constants (PC3 decisions) #}
+{% set vrf_id = {"TRANSIT": 1, "PROD": 10, "DEV": 11, "DC2-PROD": 12, "DC2-DEV": 13, "CITRIX": 15, "PARTNER": 16} -%}
+{% set transit_vrf = "TRANSIT" -%}
+{% set ha_group_base = 10 -%}
+{% set ha_site_offset = 100 -%}
+{% set ha_priority = {1: 200, 2: 100} -%}
+{% set ha_hbdev = [("ha3", 50), ("ha4", 50)] -%}
+{% set ha_monitor = ["agg-inside"] -%}
+{% set bgp_password = "cisco123" -%}
+{% set bfd_tx = 999 -%}{% set bfd_rx = 999 -%}{% set bfd_mult = 3 -%}
+{% set seq_step = 10 -%}
+{% set fw_host = 3 -%}
+{% set leak_third = 8 -%}{% set leak_base = 128 -%}
+{% set home_site = "DC1" -%}
+{% set prepended_vrfs = ["PROD", "DEV", "PARTNER"] -%}
+{% set prepend_count = 3 -%}
+{% set mtu = 9216 -%}
+{% set aspath_action = "replace" -%}   {#- 8 Oct (option 1, decided): every route the FW sends to a leaf carries only the FW AS (no fabric AS in the path, no loop drop) -#}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set unit = name[-1] | int -%}
+{% set asn = device.asn.node.asn.value -%}
+{% set site = device.location.node -%}
+{% set site_name = site.name.value -%}
+{% set fabric_asn = site.fabric_asn.node.asn.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
+{% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
+{% set aggs = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | sort(attribute="name.value") -%}
+{% set fw_ports = physical | selectattr("role.value", "equalto", "peering") | list -%}
+{% set attachments = data.FabricAttachment.edges | map(attribute="node") | list | sort(attribute="vlan_id.value") -%}
+{% set tenants = attachments | rejectattr("vrf.node.name.value", "equalto", transit_vrf) | list -%}
+{% set transit_att = attachments | selectattr("vrf.node.name.value", "equalto", transit_vrf) | list | first -%}
+{# Summaries per VRF for this site (same rule as the service leaf): owned by this site, or all of a multisite VRF #}
+{% set summ_ns = namespace(pairs=[]) -%}
+{% for v in site.vrfs.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for s in v.summaries.edges | map(attribute="node") | list | sort(attribute="prefix.value") %}{% if v.multisite.value or (s.site.node is not none and s.site.node.name.value == site_name) %}{% set summ_ns.pairs = summ_ns.pairs + [(v.name.value, s.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
+{% set site_summaries = summ_ns.pairs | rejectattr("0", "equalto", transit_vrf) | map(attribute="1") | unique | list -%}
+{% set is_standby_site = site_name != home_site -%}
+{% macro net(p) %}{{ p | ipaddress_interface("network") | string }}{% endmacro -%}
+{% macro ipmask(addr) %}{{ addr | ipaddress_interface("ip") }} {{ addr | ipaddress_interface("netmask") }}{% endmacro -%}
+{% macro pfxmask(p) %}{{ p.split("/")[0] }} {{ p | ipaddress_interface("netmask") }}{% endmacro -%}
+{% macro host(p, n) %}{% set o = p.split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + n }}/{{ p.split("/")[1] }}{% endmacro -%}
+{% macro leak(p, n) %}{% set o = p.split("/")[0].split(".") %}{{ o[:2] | join(".") }}.{{ leak_third }}.{{ leak_base + (o[3] | int) // 2 + n }}/30{% endmacro -%}
+config system global
+    set hostname "{{ name }}"
+    set single-vdom-npuvlink enable
+end
+config system settings
+    set allow-subnet-overlap enable
+    set bfd enable
+    set bfd-desired-min-tx {{ bfd_tx }}
+    set bfd-required-min-rx {{ bfd_rx }}
+    set bfd-detect-mult {{ bfd_mult }}
+end
+config system ha
+    set group-id {{ ha_group_base + ha_site_offset * ((site_name[-1] | int) - 1) }}
+    set group-name "{{ name[:-1] }}-HA"
+    set mode a-p
+    set hbdev{% for p, w in ha_hbdev %} "{{ p }}" {{ w }}{% endfor %}
+
+    set session-pickup enable
+    set override disable
+    set priority {{ ha_priority[unit] }}
+    set monitor{% for m in ha_monitor %} "{{ m }}"{% endfor %}
+
+    set ha-mgmt-status enable
+    config ha-mgmt-interfaces
+        edit 1
+            set interface "{{ mgmt.name.value }}"
+            set gateway {{ net(mgmt.ip_addresses.edges[0].node.address.value) | get_first_usable }}
+        next
+    end
+end
+config system interface
+    edit "{{ mgmt.name.value }}"
+        set ip {{ ipmask(mgmt.ip_addresses.edges[0].node.address.value) }}
+        set description "{{ mgmt.description.value }}"
+    next
+{% for p in fw_ports | sort(attribute="name.value") %}
+    edit "{{ p.name.value }}"
+        set description "{{ p.description.value }}"
+        set mtu-override enable
+        set mtu {{ p.mtu.value }}
+    next
+{% endfor %}
+{% for a in aggs %}
+    edit "{{ a.name.value }}"
+        set type aggregate
+        set member{% for m in a.members.edges | map(attribute="node.name.value") | list | sort %} "{{ m }}"{% endfor %}
+
+        set lacp-mode active
+        set description "{{ a.description.value }}"
+        set mtu-override enable
+        set mtu {{ a.mtu.value }}
+    next
+{% endfor %}
+{% for att in attachments %}
+{% set v = att.vrf.node.name.value %}
+    edit "{{ v }}-{{ att.vlan_id.value }}"
+        set vrf {{ vrf_id[v] }}
+        set interface "agg-inside"
+        set vlanid {{ att.vlan_id.value }}
+        set ip {{ ipmask(host(att.prefix.node.prefix.value, fw_host)) }}
+        set description "{{ att.name.value }}"
+        set mtu-override enable
+        set mtu {{ mtu }}
+        set bfd enable
+    next
+{% endfor %}
+{% for att in tenants %}
+{% set v = att.vrf.node.name.value %}
+    edit "LK-{{ v }}"
+        set vrf {{ vrf_id[v] }}
+        set interface "npu0_vlink0"
+        set vlanid {{ vrf_id[v] }}
+        set ip {{ ipmask(leak(att.prefix.node.prefix.value, 1)) }}
+        set description "vlink {{ v }} <-> {{ transit_vrf }}"
+    next
+    edit "LK-T-{{ v }}"
+        set vrf {{ vrf_id[transit_vrf] }}
+        set interface "npu0_vlink1"
+        set vlanid {{ vrf_id[v] }}
+        set ip {{ ipmask(leak(att.prefix.node.prefix.value, 2)) }}
+        set description "vlink {{ v }} <-> {{ transit_vrf }}"
+    next
+{% endfor %}
+end
+config router prefix-list
+    edit "PL-DEFAULT"
+        config rule
+            edit {{ seq_step }}
+                set prefix 0.0.0.0 0.0.0.0
+            next
+        end
+    next
+{% for att in tenants %}
+{% set v = att.vrf.node.name.value %}
+    edit "PL-{{ v }}-SUMMARY"
+        config rule
+{% for p in summ_ns.pairs | selectattr("0", "equalto", v) | map(attribute="1") | list %}
+            edit {{ loop.index * seq_step }}
+                set prefix {{ pfxmask(p) }}
+            next
+{% endfor %}
+        end
+    next
+{% endfor %}
+    edit "PL-{{ transit_vrf }}-SUMMARY"
+        config rule
+{% for p in site_summaries %}
+            edit {{ loop.index * seq_step }}
+                set prefix {{ pfxmask(p) }}
+            next
+{% endfor %}
+        end
+    next
+{% if is_standby_site %}
+    edit "PL-{{ transit_vrf }}-SUMMARY-PREPEND"
+        config rule
+{% for p in summ_ns.pairs | selectattr("0", "in", prepended_vrfs) | map(attribute="1") | unique | list %}
+            edit {{ loop.index * seq_step }}
+                set prefix {{ pfxmask(p) }}
+            next
+{% endfor %}
+        end
+    next
+{% endif %}
+end
+config router route-map
+{% for att in tenants %}
+{% set v = att.vrf.node.name.value %}
+    edit "RM-{{ v }}-FROM-LEAF"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-{{ v }}-SUMMARY"
+            next
+        end
+    next
+    edit "RM-{{ v }}-TO-LEAF"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-DEFAULT"
+                set set-aspath-action {{ aspath_action }}
+                set set-aspath "{{ ([asn] * (prepend_count if is_standby_site and v in prepended_vrfs else 1)) | join(' ') }}"
+            next
+        end
+    next
+    edit "RM-LEAK-{{ v }}-TO-{{ transit_vrf }}"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-{{ v }}-SUMMARY"
+            next
+        end
+    next
+    edit "RM-LEAK-{{ transit_vrf }}-TO-{{ v }}"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-DEFAULT"
+            next
+        end
+    next
+{% endfor %}
+    edit "RM-{{ transit_vrf }}-FROM-LEAF"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-DEFAULT"
+            next
+        end
+    next
+    edit "RM-{{ transit_vrf }}-TO-LEAF"
+        config rule
+{% if is_standby_site %}
+            edit {{ seq_step }}
+                set match-ip-address "PL-{{ transit_vrf }}-SUMMARY-PREPEND"
+                set set-aspath-action {{ aspath_action }}
+                set set-aspath "{{ ([asn] * prepend_count) | join(' ') }}"
+            next
+            edit {{ 2 * seq_step }}
+                set match-ip-address "PL-{{ transit_vrf }}-SUMMARY"
+                set set-aspath-action {{ aspath_action }}
+                set set-aspath "{{ asn }}"
+            next
+{% else %}
+            edit {{ seq_step }}
+                set match-ip-address "PL-{{ transit_vrf }}-SUMMARY"
+                set set-aspath-action {{ aspath_action }}
+                set set-aspath "{{ asn }}"
+            next
+{% endif %}
+        end
+    next
+end
+config router bgp
+    set as {{ asn }}
+    set router-id {{ host(transit_att.prefix.node.prefix.value, fw_host) | ipaddress_interface("ip") }}
+    set graceful-restart enable
+    config neighbor
+{% for att in attachments %}
+{% set v = att.vrf.node.name.value %}
+{% set leaves = att.switch_pair.node.members.edges | map(attribute="node.name.value") | list | sort_interface_list %}
+{% for k in [1, 2] %}
+        edit "{{ host(att.prefix.node.prefix.value, k) | ipaddress_interface("ip") }}"
+            set description "{{ leaves[k - 1] }}"
+            set remote-as {{ fabric_asn }}
+            set interface "{{ v }}-{{ att.vlan_id.value }}"
+            set update-source "{{ v }}-{{ att.vlan_id.value }}"
+            set bfd enable
+            set capability-graceful-restart enable
+            set password {{ bgp_password }}
+            set route-map-in "RM-{{ v }}-FROM-LEAF"
+            set route-map-out "RM-{{ v }}-TO-LEAF"
+        next
+{% endfor %}
+{% endfor %}
+    end
+    config vrf
+{% for att in tenants %}
+{% set v = att.vrf.node.name.value %}
+        edit "{{ vrf_id[v] }}"
+            config leak-target
+                edit "{{ vrf_id[transit_vrf] }}"
+                    set route-map "RM-LEAK-{{ v }}-TO-{{ transit_vrf }}"
+                    set interface "LK-{{ v }}"
+                next
+            end
+        next
+{% endfor %}
+        edit "{{ vrf_id[transit_vrf] }}"
+            config leak-target
+{% for att in tenants %}
+{% set v = att.vrf.node.name.value %}
+                edit "{{ vrf_id[v] }}"
+                    set route-map "RM-LEAK-{{ transit_vrf }}-TO-{{ v }}"
+                    set interface "LK-T-{{ v }}"
+                next
+{% endfor %}
+            end
+        next
+    end
+end

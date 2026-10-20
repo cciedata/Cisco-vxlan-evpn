@@ -1,0 +1,35 @@
+query VrfSegments($vrf: String!) {
+  FabricVRF(name__value: $vrf) {
+    count
+    edges {
+      node {
+        name { value }
+        l3_vni { value }
+        multisite { value }
+        segments {
+          count
+          edges {
+            node {
+              name { value }
+              vlan_id { value }
+              l2_vni { value }
+              prefix {
+                node {
+                  prefix { value }
+                }
+              }
+              sites {
+                count
+                edges {
+                  node {
+                    name { value }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

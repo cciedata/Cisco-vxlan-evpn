@@ -1,0 +1,32 @@
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamPrefix
+  data:
+    # Phase 4 PC3: sample branch LANs (row 41 B: one /24 per branch from 10.64.0.0/12, index = branch number)
+    - prefix: 10.64.1.0/24
+      description: BR001 LAN (SD-WAN branch 1)
+      status: active
+      member_type: address
+    - prefix: 10.64.2.0/24
+      description: BR002 LAN (SD-WAN branch 2)
+      status: active
+      member_type: address
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: FabricBranch
+  data:
+    # Phase 4 PC3 (row 40 B: 2 sample branches; P4A-322 model and names): dual-homed to the DC1 and DC2 hubs (row 44 C)
+    - name: BR001
+      branch_id: 1
+      description: Sample branch 1 (used for the branch lab stand-in later)
+      lan_prefix: ["default", "10.64.1.0/24"]
+      hubs: [DC1, DC2]
+    - name: BR002
+      branch_id: 2
+      description: Sample branch 2
+      lan_prefix: ["default", "10.64.2.0/24"]
+      hubs: [DC1, DC2]

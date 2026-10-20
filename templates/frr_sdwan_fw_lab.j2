@@ -1,0 +1,175 @@
+{# Option 5 (claude/option5-decisions.md D5-20): lab stand-in for the SD-WAN hub FortiGate, as one POSIX shell script run in an FRR
+   container (containerlab exec). Same query and derivation rules as sdwan_fw_config.j2. Linux side: LACP aggregates, the TRANSIT
+   leg in kernel VRF vrf1 (FortiOS VRF 1), the OUTSIDE leg and the WAN loopback in the main table (FortiOS VRF 0). FRR side mirrors
+   the FortiOS routing: BGP AS 65400, local-as toward the border leaves (no-prepend, replace-as), dynamic branch neighbours on the
+   overlay /21 (route-reflector client, next-hop-self), prefix-lists, route-maps, aggregates, BFD 999 x 3, graceful restart.
+   Lab-only (P5): the ADVPN 2.0 IPsec hub is one GRE tunnel to the branch stand-in; the static 0/0 goes to ISP1's address on the
+   edge VLAN instead of the VRRP VIP (the FRR ISP stand-ins run no VRRP). #}
+{# Approved constants: the FortiOS values of sdwan_fw_config.j2; lab-only values marked P5 #}
+{% set overlay_asn = 65400 -%}
+{% set table_vrf = 1 -%}
+{% set transit_vrf = "TRANSIT" -%}
+{% set bgp_password = "cisco123" -%}
+{% set bfd_tx = 999 -%}{% set bfd_rx = 999 -%}{% set bfd_mult = 3 -%}
+{% set seq_step = 10 -%}
+{% set fw_host = 3 -%}
+{% set edge_fw_host = 11 -%}
+{% set mtu = 9216 -%}
+{% set wan_lo = "LO-WAN" -%}
+{% set tunnel = "ADVPN-HUB" -%}
+{% set branch_group = "BRANCHES" -%}
+{% set branch_summary = "10.64.0.0/12" -%}
+{% set branch_lan_le = 24 -%}
+{% set cloud_summaries = ["172.16.0.0/13", "172.30.0.0/15"] -%}
+{% set cloud_in_le = 24 -%}
+{% set reflect_branches = true -%}
+{% set no_branch_vrfs = ["PARTNER"] -%}
+{% set table_base = 1000 -%}{# P3-63: kernel table = 1000 + FortiOS VRF id #}
+{% set bfd_profile = "FW-BFD" -%}{# P3-64 #}
+{% set bond_mode = "802.3ad" -%}{# P3-65 #}
+{% set isp_gw_host = 2 -%}{# P5 (D5-20): ISP1's address on the edge VLAN, instead of the VRRP VIP .1 #}
+{% set branch_wan = "198.18.3.10" -%}{# P5 (D5-32): the branch stand-in's WAN address behind carrier B #}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set fabric_side_asn = device.asn.node.asn.value -%}
+{% set site = device.location.node -%}
+{% set site_name = site.name.value -%}
+{% set fabric_asn = site.fabric_asn.node.asn.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set aggs = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | sort(attribute="name.value") -%}
+{% set transit_att = data.FabricAttachment.edges | map(attribute="node") | list | selectattr("vrf.node.name.value", "equalto", transit_vrf) | list | first -%}
+{% set l2_site = data.FabricL2Vlan.edges | map(attribute="node") | list | selectattr("site.node.name.value", "equalto", site_name) | list -%}
+{% set edge_vlan = l2_site | selectattr("switch_pair.node.name.value", "equalto", site_name ~ "-VPC-EDGE1-EDGE2") | list | first -%}
+{% set unit_ns = namespace(wan=none, tun=none) -%}
+{% for u in data.SdwanUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges %}{% if i.name.value == wan_lo %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% elif i.name.value == tunnel %}{% set unit_ns.tun = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endif %}{% endfor %}{% endfor -%}
+{% set summ_ns = namespace(pairs=[]) -%}
+{% for v in site.vrfs.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for s in v.summaries.edges | map(attribute="node") | list | sort(attribute="prefix.value") %}{% if v.multisite.value or (s.site.node is not none and s.site.node.name.value == site_name) %}{% set summ_ns.pairs = summ_ns.pairs + [(v.name.value, s.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
+{% set dc_summaries = summ_ns.pairs | rejectattr("0", "equalto", transit_vrf) | rejectattr("0", "in", no_branch_vrfs) | map(attribute="1") | unique | list -%}
+{% set sdwan_allow = dc_summaries + cloud_summaries -%}
+{% macro host(p, n) %}{% set o = p.split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + n }}/{{ p.split("/")[1] }}{% endmacro -%}
+{% set inside_if = transit_vrf ~ "-" ~ transit_att.vlan_id.value -%}
+{% set outside_if = "OUTSIDE-" ~ edge_vlan.vlan_id.value -%}
+{% set outside_ip = host(edge_vlan.prefix.node.prefix.value, edge_fw_host) -%}
+{% set isp_gw = host(edge_vlan.prefix.node.prefix.value, isp_gw_host) | ipaddress_interface("ip") -%}
+{% set wan_ip = unit_ns.wan | ipaddress_interface("ip") | string -%}
+{% set tun_ip = unit_ns.tun | ipaddress_interface("ip") | string -%}
+{% set tun_net = unit_ns.tun | ipaddress_interface("network") | string -%}
+{% set router_id = host(transit_att.prefix.node.prefix.value, fw_host) | ipaddress_interface("ip") -%}
+#!/bin/sh
+# {{ name }}: lab stand-in for the SD-WAN hub FortiGate (FRR in a Linux container). Rendered by Infrahub, do not edit.
+# Mirrors the FortiOS routing config. Not mirrored: HA (unit 2 runs with its data ports down), mgmt1 (the container's eth0),
+# firewall policies. Lab-only: GRE instead of the ADVPN IPsec hub ({{ tunnel }} to {{ branch_wan }}); 0/0 via {{ isp_gw }} instead of the VRRP VIP.
+set -eu
+sysctl -qw net.ipv4.ip_forward=1
+sysctl -qw net.ipv4.tcp_l3mdev_accept=1
+ip route del default dev eth0 2>/dev/null || true
+# --- VRF (FortiOS VRF {{ table_vrf }} -> vrf{{ table_vrf }}, table {{ table_base + table_vrf }}); VRF 0 is the main table
+ip link add vrf{{ table_vrf }} type vrf table {{ table_base + table_vrf }} 2>/dev/null || true
+ip link set vrf{{ table_vrf }} up
+# --- aggregates (members that exist in the lab; the others stay absent)
+{% for a in aggs %}
+ip link add {{ a.name.value }} type bond mode {{ bond_mode }} 2>/dev/null || true
+{% for m in a.members.edges | map(attribute="node.name.value") | list | sort %}
+if [ -e /sys/class/net/{{ m }} ]; then ip link set {{ m }} down; ip link set {{ m }} mtu {{ mtu }}; ip link set {{ m }} master {{ a.name.value }}; ip link set {{ m }} up; fi
+{% endfor %}
+ip link set {{ a.name.value }} mtu {{ mtu }} up
+{% endfor %}
+# --- inside leg (VRF {{ table_vrf }}), outside leg and WAN loopback (main table)
+ip link add link agg-inside name {{ inside_if }} type vlan id {{ transit_att.vlan_id.value }} 2>/dev/null || true
+ip link set {{ inside_if }} master vrf{{ table_vrf }}
+ip addr replace {{ host(transit_att.prefix.node.prefix.value, fw_host) }} dev {{ inside_if }}
+ip link set {{ inside_if }} mtu {{ mtu }} up
+ip link add link agg-outside name {{ outside_if }} type vlan id {{ edge_vlan.vlan_id.value }} 2>/dev/null || true
+ip addr replace {{ outside_ip }} dev {{ outside_if }}
+ip link set {{ outside_if }} mtu {{ mtu }} up
+ip link add {{ wan_lo }} type dummy 2>/dev/null || true
+ip addr replace {{ wan_ip }}/32 dev {{ wan_lo }}
+ip link set {{ wan_lo }} up
+# --- hub tunnel (lab-only GRE; FortiOS: ADVPN 2.0 dynamic IPsec on {{ wan_lo }}), overlay {{ tun_net }} in VRF {{ table_vrf }}
+ip tunnel add {{ tunnel }} mode gre local {{ wan_ip }} remote {{ branch_wan }} ttl 64 2>/dev/null || true
+ip link set {{ tunnel }} master vrf{{ table_vrf }}
+ip addr replace {{ tun_ip }}/{{ tun_net.split("/")[1] }} dev {{ tunnel }}
+ip link set {{ tunnel }} up
+# --- routing daemons (watchfrr starts zebra and staticd; bgpd and bfdd are started here)
+pgrep -x bfdd >/dev/null || /usr/lib/frr/bfdd -d -A 127.0.0.1
+pgrep -x bgpd >/dev/null || /usr/lib/frr/bgpd -d -A 127.0.0.1
+sleep 2
+cat > /etc/frr/frr.conf <<'FRREOF'
+hostname {{ name }}
+service integrated-vtysh-config
+!
+ip route 0.0.0.0/0 {{ isp_gw }}
+!
+{% for p in dc_summaries %}
+ip prefix-list PL-SDWAN-FROM-LEAF seq {{ loop.index * seq_step }} permit {{ p }}
+{% endfor %}
+{% for p in cloud_summaries %}
+ip prefix-list PL-SDWAN-FROM-LEAF seq {{ (dc_summaries | length + loop.index) * seq_step }} permit {{ p }} le {{ cloud_in_le }}
+{% endfor %}
+{% for p in sdwan_allow %}
+ip prefix-list PL-SDWAN-ALLOW seq {{ loop.index * seq_step }} permit {{ p }}
+{% endfor %}
+ip prefix-list PL-BRANCH-LAN seq {{ seq_step }} permit {{ branch_summary }} le {{ branch_lan_le }}
+ip prefix-list PL-BRANCH-SUMMARY seq {{ seq_step }} permit {{ branch_summary }}
+!
+route-map RM-{{ transit_vrf }}-FROM-LEAF permit {{ seq_step }}
+ match ip address prefix-list PL-SDWAN-FROM-LEAF
+route-map RM-{{ transit_vrf }}-TO-LEAF permit {{ seq_step }}
+ match ip address prefix-list PL-BRANCH-SUMMARY
+route-map RM-FROM-BRANCH permit {{ seq_step }}
+ match ip address prefix-list PL-BRANCH-LAN
+route-map RM-TO-BRANCH permit {{ seq_step }}
+ match ip address prefix-list PL-SDWAN-ALLOW
+{% if reflect_branches %}
+route-map RM-TO-BRANCH permit {{ 2 * seq_step }}
+ match ip address prefix-list PL-BRANCH-LAN
+{% endif %}
+!
+bfd
+ profile {{ bfd_profile }}
+  transmit-interval {{ bfd_tx }}
+  receive-interval {{ bfd_rx }}
+  detect-multiplier {{ bfd_mult }}
+  no echo-mode
+ exit
+exit
+!
+{% set leaves = transit_att.switch_pair.node.members.edges | map(attribute="node.name.value") | list | sort_interface_list %}
+router bgp {{ overlay_asn }} vrf vrf{{ table_vrf }}
+ bgp router-id {{ router_id }}
+ bgp graceful-restart
+ neighbor {{ branch_group }} peer-group
+ neighbor {{ branch_group }} remote-as {{ overlay_asn }}
+ neighbor {{ branch_group }} password {{ bgp_password }}
+ bgp listen range {{ tun_net }} peer-group {{ branch_group }}
+{% for k in [1, 2] %}
+{% set peer = host(transit_att.prefix.node.prefix.value, k) | ipaddress_interface("ip") %}
+ neighbor {{ peer }} remote-as {{ fabric_asn }}
+ neighbor {{ peer }} local-as {{ fabric_side_asn }} no-prepend replace-as
+ neighbor {{ peer }} description {{ leaves[k - 1] }}
+ neighbor {{ peer }} password {{ bgp_password }}
+ neighbor {{ peer }} update-source {{ inside_if }}
+ neighbor {{ peer }} bfd profile {{ bfd_profile }}
+{% endfor %}
+ address-family ipv4 unicast
+{% for p in [branch_summary] + cloud_summaries %}
+  aggregate-address {{ p }}{% if not (reflect_branches and p == branch_summary) %} summary-only{% endif %}
+
+{% endfor %}
+{% for k in [1, 2] %}
+{% set peer = host(transit_att.prefix.node.prefix.value, k) | ipaddress_interface("ip") %}
+  neighbor {{ peer }} route-map RM-{{ transit_vrf }}-FROM-LEAF in
+  neighbor {{ peer }} route-map RM-{{ transit_vrf }}-TO-LEAF out
+{% endfor %}
+  neighbor {{ branch_group }} next-hop-self
+{% if reflect_branches %}
+  neighbor {{ branch_group }} route-reflector-client
+{% endif %}
+  neighbor {{ branch_group }} route-map RM-FROM-BRANCH in
+  neighbor {{ branch_group }} route-map RM-TO-BRANCH out
+ exit-address-family
+exit
+FRREOF
+vtysh -f /etc/frr/frr.conf
+echo "{{ name }} stand-in ready"

@@ -1,0 +1,85 @@
+# Phase 4 PC3: SD-WAN hub FortiGate units (FG-1800F). Shared A/P addresses sit on unit 1's interfaces only; the outside
+# and inside addresses are derived from the edge VLAN and the TRANSIT attachment, the WAN loopback and hub tunnel
+# addresses are read from the pair (SdwanUnits), so both units render the same config.
+query SdwanFwConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value }
+        asn { node { asn { value } } }
+        location {
+          node {
+            ... on LocationSite {
+              name { value }
+              fabric_asn { node { asn { value } } }
+              vrfs {
+                edges {
+                  node {
+                    name { value }
+                    multisite { value }
+                    summaries { edges { node { prefix { value } site { node { name { value } } } } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              mtu { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+              ... on InterfacePhysical { port_channel { node { name { value } } } }
+              ... on InterfacePortChannel { members { edges { node { name { value } } } } }
+              ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  FabricAttachment(devices__name__value: $device) {
+    edges {
+      node {
+        name { value }
+        vlan_id { value }
+        prefix { node { prefix { value } } }
+        vrf { node { name { value } } }
+        switch_pair { node { name { value } members { edges { node { name { value } } } } } }
+      }
+    }
+  }
+  FabricL2Vlan {
+    edges {
+      node {
+        name { value }
+        vlan_id { value }
+        prefix { node { prefix { value } } }
+        site { node { name { value } } }
+        switch_pair { node { name { value } } }
+      }
+    }
+  }
+  SdwanUnits: DcimDevice(role__value: "sdwan_fw") {
+    edges {
+      node {
+        name { value }
+        location { node { name { value } } }
+        interfaces {
+          edges {
+            node {
+              name { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

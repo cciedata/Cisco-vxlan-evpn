@@ -1,0 +1,53 @@
+query SpineConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value }
+        asn {
+          node {
+            asn { value }
+            devices {
+              edges {
+                node {
+                  name { value }
+                  role { value }
+                  interfaces(name__value: "loopback0") {
+                    edges {
+                      node {
+                        name { value }
+                        ... on InterfaceLayer3 {
+                          ip_addresses { edges { node { address { value } } } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              ... on InterfacePhysical {
+                description { value }
+                role { value }
+                mtu { value }
+              }
+              ... on InterfaceVirtual {
+                description { value }
+              }
+              ... on InterfaceLayer3 {
+                ip_addresses { edges { node { address { value } } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

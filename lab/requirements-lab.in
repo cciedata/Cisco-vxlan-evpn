@@ -1,0 +1,8 @@
+# Lab tooling environment (.venv-lab): post-checks, failure tests, Day-2 push. Compiled to requirements-lab.txt with uv.
+nornir>=3.5
+nornir-netmiko
+netmiko
+httpx
+pyyaml
+ansible-core==2.20.1     # FU-21: Ansible runs from .venv-lab (laptop 1's system Python has no SSH library)
+ansible-pylibssh

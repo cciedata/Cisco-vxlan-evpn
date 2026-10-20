@@ -1,0 +1,66 @@
+# Phase 3 (P3-45, P3-48): everything the containerlab topology and the post-check expectations are built from, for one site.
+query LabSite($site: String!) {
+  LocationSite(name__value: $site) {
+    edges {
+      node {
+        name { value }
+        fabric_asn { node { asn { value } } }
+        owned_prefixes { edges { node { prefix { value } description { value } } } }
+        vrfs {
+          edges {
+            node {
+              name { value }
+              multisite { value }
+              summaries { edges { node { prefix { value } site { node { name { value } } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  DcimDevice(location__name__value: $site) {
+    edges {
+      node {
+        name { value }
+        role { value }
+        asn { node { asn { value } } }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+              ... on InterfacePhysical {
+                access_segment {
+                  node {
+                    name { value }
+                    vlan_id { value }
+                    prefix { node { prefix { value } } }
+                    vrf { node { name { value } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  FabricAttachment(site__name__value: $site) {
+    edges {
+      node {
+        name { value }
+        vlan_id { value }
+        prefix { node { prefix { value } } }
+        vrf { node { name { value } } }
+        switch_pair { node { name { value } members { edges { node { name { value } } } } } }
+        devices { edges { node { name { value } asn { node { asn { value } } } } } }
+      }
+    }
+  }
+  FabricAutonomousSystem {
+    edges { node { asn { value } provider { node { name { value } } } } }
+  }
+}

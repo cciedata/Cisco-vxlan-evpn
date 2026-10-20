@@ -1,0 +1,23 @@
+---
+# PDU vendor chosen early (P2-204, P2-205); model numbers stay open until Phase 5 (P2-140).
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: OrganizationManufacturer
+  data:
+    - name: APC by Schneider Electric
+---
+# Placeholder PDU device types until the model is chosen (P2-159, P2-199 amended by P2-204).
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimDeviceType
+  data:
+    - name: PDU 415V 3P 60A switched
+      manufacturer: APC by Schneider Electric
+      height: 0
+      description: Placeholder, 0U switched PDU, per-outlet metering, 415/240 V 3-phase 60 A (NET and growth racks)
+    - name: PDU 415V 3P 30A switched
+      manufacturer: APC by Schneider Electric
+      height: 0
+      description: Placeholder, 0U switched PDU, per-outlet metering, 415/240 V 3-phase 30 A (server, OOB, SAN racks)

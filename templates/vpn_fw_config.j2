@@ -1,0 +1,282 @@
+{# Phase 4 PC4: VPN-partner FortiGate (FG-1800F, FortiOS 7.6.7), A/P HA, single VDOM. Two routing tables: VRF 0 = WAN
+   underlay (outside leg on the edge VLAN, public WAN loopback that terminates IKE, static 0/0 to the ISP routers' VRRP
+   VIP); VRF 16 = PARTNER (inside leg to the border leaves, one route-based IKEv2 tunnel per partner, static routes to
+   the partner's protected networks). Each partner is source-NATed to its own translated /28 (ip pool defined here; the
+   policy that uses it is not rendered: routing only). eBGP to the border leaves: the translated /28s out, 0/0 in.
+   Rows = decisions.xlsx Open-Phase4; P4A-4xx = auto_approved.md. #}
+{# Approved constants #}
+{% set partner_vrf = "PARTNER" -%}
+{% set table_vrf = 16 -%}   {#- PARTNER VRF id (Phase 2 PC3 FW_VRF_ID) -#}
+{% set wan_vrf = 0 -%}   {#- P4A-410 (= P4A-310): WAN underlay in its own table -#}
+{% set ha_group_base = 30 -%}   {#- P4A-411: fabric-ASN offset rule (Internal 10, SD-WAN 20, Internet 40) -#}
+{% set ha_site_offset = 100 -%}   {#- same as the other FWs -#}
+{% set ha_priority = {1: 200, 2: 100} -%}   {#- same as the other FWs -#}
+{% set ha_hbdev = [("ha1", 50), ("ha2", 50)] -%}   {#- P4A-403 (= P4A-303) -#}
+{% set ha_monitor = ["agg-inside", "agg-outside"] -%}   {#- P4A-412 (= P4A-312) -#}
+{% set bgp_password = "cisco123" -%}   {#- every BGP session (decided) -#}
+{% set bfd_tx = 999 -%}{% set bfd_rx = 999 -%}{% set bfd_mult = 3 -%}   {#- toward the leaves: NX-OS single-hop max (decided) -#}
+{% set seq_step = 10 -%}
+{% set fw_host = 3 -%}   {#- attachment /29: .3 = the FW pair -#}
+{% set edge_fw_host = 12 -%}   {#- edge VLAN: .12 VPN-partner FW (decided, EDGE_VLAN_HOST) -#}
+{% set vip_host = 1 -%}   {#- edge VLAN: .1 VRRP VIP of the ISP routers (decided) -#}
+{% set mtu = 9216 -%}
+{% set wan_lo = "LO-WAN" -%}   {#- P4A-305 -#}
+{% set psk = "cisco123" -%}   {#- P4A-414: placeholder (public repo), same approach as row 43 B -#}
+{% set ike_proposal = "aes256gcm-prfsha384" -%}{% set ike_dhgrp = 20 -%}{% set ike_keylife = 28800 -%}   {#- P4A-415 (= P4A-315) -#}
+{% set esp_proposal = "aes256gcm" -%}{% set esp_keylife = 3600 -%}   {#- P4A-415 (= P4A-315) -#}
+{% set dpd_retry = 10 -%}   {#- P4A-416 (= P4A-316) -#}
+{% set local_selector = "0.0.0.0/0" -%}   {#- P4A-417: our side of every phase2 (partners reach our real addresses) -#}
+{% set snat_type = "overload" -%}   {#- P4A-418: ip pool type for the translated /28 -#}
+{% set static_base = 10 -%}   {#- P4A-419: static route ids: 1 = WAN default, 10 + n = partner routes and /28 blackholes -#}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set unit = name[-1] | int -%}
+{% set asn = device.asn.node.asn.value -%}
+{% set site = device.location.node -%}
+{% set site_name = site.name.value -%}
+{% set fabric_asn = site.fabric_asn.node.asn.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
+{% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
+{% set aggs = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | sort(attribute="name.value") -%}
+{% set fw_ports = physical | selectattr("role.value", "equalto", "peering") | list -%}
+{% set partner_att = data.FabricAttachment.edges | map(attribute="node") | list | selectattr("vrf.node.name.value", "equalto", partner_vrf) | list | first -%}
+{% set l2_site = data.FabricL2Vlan.edges | map(attribute="node") | list | selectattr("site.node.name.value", "equalto", site_name) | list -%}
+{% set edge_vlan = l2_site | selectattr("switch_pair.node.name.value", "equalto", site_name ~ "-VPC-EDGE1-EDGE2") | list | first -%}
+{# The pair's shared WAN loopback address (on unit 1) #}
+{% set unit_ns = namespace(wan=none) -%}
+{% for u in data.VpnUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges and i.name.value == wan_lo %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endfor %}{% endfor -%}
+{# Partners with a translated /28 in this site: (name, description, peer, protected prefixes, translated /28) #}
+{% set p_ns = namespace(items=[]) -%}
+{% for p in data.FabricPartner.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for t in p.translated_prefixes.edges | map(attribute="node") | list %}{% if t.site.node is not none and t.site.node.name.value == site_name %}{% set p_ns.items = p_ns.items + [(p.name.value, p.description.value or "", p.peer_ip.value, p.protected_prefixes.value | sort, t.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
+{% set partners = p_ns.items -%}
+{% macro net(p) %}{{ p | ipaddress_interface("network") | string }}{% endmacro -%}
+{% macro ipmask(addr) %}{{ addr | ipaddress_interface("ip") }} {{ addr | ipaddress_interface("netmask") }}{% endmacro -%}
+{% macro pfxmask(p) %}{{ p.split("/")[0] }} {{ p | ipaddress_interface("netmask") }}{% endmacro -%}
+{% macro host(p, n) %}{% set o = p.split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + n }}/{{ p.split("/")[1] }}{% endmacro -%}
+{# Values derived by rule #}
+{% set inside_if = partner_vrf ~ "-" ~ partner_att.vlan_id.value -%}
+{% set outside_if = "OUTSIDE-" ~ edge_vlan.vlan_id.value -%}
+{% set outside_ip = host(edge_vlan.prefix.node.prefix.value, edge_fw_host) -%}
+{% set isp_vip = host(edge_vlan.prefix.node.prefix.value, vip_host) | ipaddress_interface("ip") -%}
+{% set router_id = host(partner_att.prefix.node.prefix.value, fw_host) | ipaddress_interface("ip") -%}
+config system global
+    set hostname "{{ name }}"
+end
+config system settings
+    set bfd enable
+    set bfd-desired-min-tx {{ bfd_tx }}
+    set bfd-required-min-rx {{ bfd_rx }}
+    set bfd-detect-mult {{ bfd_mult }}
+end
+config system ha
+    set group-id {{ ha_group_base + ha_site_offset * ((site_name[-1] | int) - 1) }}
+    set group-name "{{ name[:-1] }}-HA"
+    set mode a-p
+    set hbdev{% for p, w in ha_hbdev %} "{{ p }}" {{ w }}{% endfor %}
+
+    set session-pickup enable
+    set override disable
+    set priority {{ ha_priority[unit] }}
+    set monitor{% for m in ha_monitor %} "{{ m }}"{% endfor %}
+
+    set ha-mgmt-status enable
+    config ha-mgmt-interfaces
+        edit 1
+            set interface "{{ mgmt.name.value }}"
+            set gateway {{ net(mgmt.ip_addresses.edges[0].node.address.value) | get_first_usable }}
+        next
+    end
+end
+config system interface
+    edit "{{ mgmt.name.value }}"
+        set ip {{ ipmask(mgmt.ip_addresses.edges[0].node.address.value) }}
+        set description "{{ mgmt.description.value }}"
+    next
+{% for p in fw_ports | sort(attribute="name.value") %}
+    edit "{{ p.name.value }}"
+        set description "{{ p.description.value }}"
+        set mtu-override enable
+        set mtu {{ p.mtu.value }}
+    next
+{% endfor %}
+{% for a in aggs %}
+    edit "{{ a.name.value }}"
+        set type aggregate
+        set member{% for m in a.members.edges | map(attribute="node.name.value") | list | sort %} "{{ m }}"{% endfor %}
+
+        set lacp-mode active
+        set description "{{ a.description.value }}"
+        set mtu-override enable
+        set mtu {{ a.mtu.value }}
+    next
+{% endfor %}
+    edit "{{ inside_if }}"
+        set vrf {{ table_vrf }}
+        set interface "agg-inside"
+        set vlanid {{ partner_att.vlan_id.value }}
+        set ip {{ ipmask(host(partner_att.prefix.node.prefix.value, fw_host)) }}
+        set description "{{ partner_att.name.value }}"
+        set mtu-override enable
+        set mtu {{ mtu }}
+        set bfd enable
+    next
+    edit "{{ outside_if }}"
+        set vrf {{ wan_vrf }}
+        set interface "agg-outside"
+        set vlanid {{ edge_vlan.vlan_id.value }}
+        set ip {{ ipmask(outside_ip) }}
+        set description "Edge VLAN {{ edge_vlan.vlan_id.value }}"
+        set mtu-override enable
+        set mtu {{ mtu }}
+    next
+    edit "{{ wan_lo }}"
+        set vrf {{ wan_vrf }}
+        set type loopback
+        set ip {{ unit_ns.wan | ipaddress_interface("ip") }} 255.255.255.255
+        set description "WAN endpoint (public {{ net(unit_ns.wan) }})"
+    next
+end
+config vpn ipsec phase1-interface
+{% for pname, pdesc, peer, protected, nat in partners %}
+    edit "{{ pname }}"
+        set interface "{{ wan_lo }}"
+        set ike-version 2
+        set peertype any
+        set net-device disable
+        set proposal {{ ike_proposal }}
+        set dhgrp {{ ike_dhgrp }}
+        set keylife {{ ike_keylife }}
+        set remote-gw {{ peer | ipaddress_interface("ip") }}
+        set add-route disable
+        set dpd on-idle
+        set dpd-retryinterval {{ dpd_retry }}
+        set psksecret {{ psk }}
+    next
+{% endfor %}
+end
+config vpn ipsec phase2-interface
+{% for pname, pdesc, peer, protected, nat in partners %}
+{% for p in protected %}
+    edit "{{ pname }}-{{ loop.index }}"
+        set phase1name "{{ pname }}"
+        set proposal {{ esp_proposal }}
+        set dhgrp {{ ike_dhgrp }}
+        set keylifeseconds {{ esp_keylife }}
+        set auto-negotiate enable
+        set src-subnet {{ pfxmask(local_selector) }}
+        set dst-subnet {{ pfxmask(p) }}
+    next
+{% endfor %}
+{% endfor %}
+end
+config system interface
+{% for pname, pdesc, peer, protected, nat in partners %}
+    edit "{{ pname }}"
+        set vrf {{ table_vrf }}
+        set description "{{ pdesc if pdesc else pname }}"
+    next
+{% endfor %}
+end
+config firewall ippool
+{% for pname, pdesc, peer, protected, nat in partners %}
+{% set nn = net(nat) | ipaddress_network("network_address") | string %}
+{% set nb = net(nat) | ipaddress_network("broadcast_address") | string %}
+    edit "SNAT-{{ pname }}"
+        set type {{ snat_type }}
+        set startip {{ nn }}
+        set endip {{ nb }}
+        set comments "{{ pname }} source NAT, translated {{ nat }} ({{ site_name }})"
+    next
+{% endfor %}
+end
+config router static
+    edit 1
+        set dst 0.0.0.0 0.0.0.0
+        set gateway {{ isp_vip }}
+        set device "{{ outside_if }}"
+        set vrf {{ wan_vrf }}
+    next
+{% set sid = namespace(n=static_base) %}
+{% for pname, pdesc, peer, protected, nat in partners %}
+{% for p in protected %}
+{% set sid.n = sid.n + 1 %}
+    edit {{ sid.n }}
+        set dst {{ pfxmask(p) }}
+        set device "{{ pname }}"
+        set vrf {{ table_vrf }}
+        set comment "{{ pname }} protected network"
+    next
+{% endfor %}
+{% set sid.n = sid.n + 1 %}
+    edit {{ sid.n }}
+        set dst {{ pfxmask(nat) }}
+        set blackhole enable
+        set vrf {{ table_vrf }}
+        set comment "{{ pname }} translated /28 (BGP network)"
+    next
+{% endfor %}
+end
+config router prefix-list
+    edit "PL-DEFAULT"
+        config rule
+            edit {{ seq_step }}
+                set prefix 0.0.0.0 0.0.0.0
+            next
+        end
+    next
+    edit "PL-{{ partner_vrf }}-NAT"
+        config rule
+{% for pname, pdesc, peer, protected, nat in partners %}
+            edit {{ loop.index * seq_step }}
+                set prefix {{ pfxmask(nat) }}
+            next
+{% endfor %}
+        end
+    next
+end
+config router route-map
+    edit "RM-{{ partner_vrf }}-FROM-LEAF"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-DEFAULT"
+            next
+        end
+    next
+    edit "RM-{{ partner_vrf }}-TO-LEAF"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-{{ partner_vrf }}-NAT"
+            next
+        end
+    next
+end
+config router bgp
+    set as {{ asn }}
+    set router-id {{ router_id }}
+    set graceful-restart enable
+    config neighbor
+{% set leaves = partner_att.switch_pair.node.members.edges | map(attribute="node.name.value") | list | sort_interface_list %}
+{% for k in [1, 2] %}
+        edit "{{ host(partner_att.prefix.node.prefix.value, k) | ipaddress_interface("ip") }}"
+            set description "{{ leaves[k - 1] }}"
+            set remote-as {{ fabric_asn }}
+            set interface "{{ inside_if }}"
+            set update-source "{{ inside_if }}"
+            set bfd enable
+            set capability-graceful-restart enable
+            set password {{ bgp_password }}
+            set route-map-in "RM-{{ partner_vrf }}-FROM-LEAF"
+            set route-map-out "RM-{{ partner_vrf }}-TO-LEAF"
+        next
+{% endfor %}
+    end
+    config network
+{% for pname, pdesc, peer, protected, nat in partners %}
+        edit {{ loop.index }}
+            set prefix {{ pfxmask(nat) }}
+        next
+{% endfor %}
+    end
+end

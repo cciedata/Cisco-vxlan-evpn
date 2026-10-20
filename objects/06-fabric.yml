@@ -1,0 +1,130 @@
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: FabricAutonomousSystem
+  data:
+    - asn: 65100
+      description: DC1 fabric
+      fabric_site: DC1
+    - asn: 65160
+      description: DC1 DCI switches
+    - asn: 65200
+      description: DC2 fabric
+      fabric_site: DC2
+    - asn: 65260
+      description: DC2 DCI switches
+    # Phase 2: firewalls, ISP routers, carriers (design-decisions.md > AS numbers)
+    - asn: 65050
+      description: ISP routers, all four (shared)
+    - asn: 65110
+      description: DC1 Internal FW
+    - asn: 65140
+      description: DC1 Internet FW
+    - asn: 65210
+      description: DC2 Internal FW
+    - asn: 65240
+      description: DC2 Internet FW
+    - asn: 64496
+      description: ISP-A (documentation ASN)
+      provider: ISP-A
+    - asn: 64497
+      description: ISP-B (documentation ASN)
+      provider: ISP-B
+    # Phase 4 PC2: cloud routers (fabric ASN + 70) and the two clouds (design-decisions.md > AS numbers)
+    - asn: 65170
+      description: DC1 cloud routers
+    - asn: 65270
+      description: DC2 cloud routers
+    - asn: 65500
+      description: AWS Direct Connect Gateway (Amazon side)
+      provider: AWS
+    - asn: 12076
+      description: Microsoft (Azure ExpressRoute)
+      provider: Microsoft
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: FabricVRF
+  data:
+    # L3 VNI VLAN = 2500 + (L3 VNI - 50000); TRANSIT is the exception (2599)
+    # summaries (Phase 2 PC2, decided): VRF blocks by [namespace, prefix]; REPLICATION and TRANSIT have none
+    - name: PROD
+      l3_vni: 50001
+      l3_vni_vlan: 2501
+      multisite: true
+      sites: [DC1, DC2]
+      summaries:
+        - ["default", "10.16.0.0/18"]
+    - name: DEV
+      l3_vni: 50002
+      l3_vni_vlan: 2502
+      multisite: true
+      sites: [DC1, DC2]
+      summaries:
+        - ["default", "10.16.64.0/18"]
+    - name: DC2-PROD
+      l3_vni: 50011
+      l3_vni_vlan: 2511
+      multisite: false
+      sites: [DC2]
+      summaries:
+        - ["default", "10.20.0.0/18"]
+    - name: DC2-DEV
+      l3_vni: 50012
+      l3_vni_vlan: 2512
+      multisite: false
+      sites: [DC2]
+      summaries:
+        - ["default", "10.20.64.0/18"]
+    - name: CITRIX
+      l3_vni: 50022
+      l3_vni_vlan: 2522
+      multisite: false
+      sites: [DC1, DC2]
+      summaries:
+        - ["default", "10.16.144.0/20"]
+        - ["default", "10.20.144.0/20"]
+    - name: PARTNER
+      l3_vni: 50031
+      l3_vni_vlan: 2531
+      multisite: false
+      sites: [DC1, DC2]
+      summaries:
+        - ["default", "10.16.160.0/21"]
+        - ["default", "10.20.160.0/21"]
+    - name: REPLICATION
+      l3_vni: 50041
+      l3_vni_vlan: 2541
+      multisite: true
+      sites: [DC1, DC2]
+    - name: TRANSIT
+      l3_vni: 50100
+      l3_vni_vlan: 2599
+      multisite: false
+      sites: [DC1, DC2]
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: FabricAutonomousSystem
+  data:
+    # Phase 4 PC3: SD-WAN hub FW, fabric side (local-as, row 38 B) and the overlay AS (branches and hubs)
+    - asn: 65120
+      description: DC1 SD-WAN FW (fabric side, local-as)
+    - asn: 65220
+      description: DC2 SD-WAN FW (fabric side, local-as)
+    - asn: 65400
+      description: SD-WAN overlay (hubs and branches)
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: FabricAutonomousSystem
+  data:
+    # Phase 4 PC4: VPN-partner FWs (design: AS numbers, fabric ASN + 30)
+    - asn: 65130
+      description: DC1 VPN-partner FW
+    - asn: 65230
+      description: DC2 VPN-partner FW

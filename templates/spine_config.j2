@@ -1,0 +1,75 @@
+{# Approved constants: one place to change them #}
+{% set ospf_process = "UNDERLAY" -%}
+{% set ospf_area = "0.0.0.0" -%}
+{% set rr_template = "RR-CLIENTS" -%}
+{% set bgp_password = "cisco123" -%}
+{% set bfd_timers = "interval 999 min_rx 999 multiplier 3" -%}   {#- L-13b: NX-OS 10.6 ranges 10-999 / multihop 250-999 -#}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set asn = device.asn.node.asn.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
+{% set lo0 = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | selectattr("name.value", "equalto", "loopback0") | list | first -%}
+{% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
+{% set core_all = physical | selectattr("role.value", "equalto", "core") | list -%}
+{% set core_names = core_all | map(attribute="name.value") | list | sort_interface_list -%}
+{% set peers_all = device.asn.node.devices.edges | map(attribute="node") | list | rejectattr("role.value", "equalto", "spine") | list -%}
+{% set peer_names = peers_all | map(attribute="name.value") | list | sort_interface_list -%}
+{# Values derived by rule #}
+{% set lo0_addr = lo0.ip_addresses.edges[0].node.address.value -%}
+{% set router_id = lo0_addr | ipaddress_interface("ip") -%}
+{% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
+{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+hostname {{ device.name.value }}
+username vamdadmin password 5 __VAMDADMIN_HASH__ role network-admin
+no ip domain-lookup
+feature ospf
+feature bgp
+feature bfd
+nv overlay evpn
+
+vrf context management
+  ip route 0.0.0.0/0 {{ mgmt_gw }}
+
+interface {{ mgmt.name.value }}
+  description {{ mgmt.description.value }}
+  vrf member management
+  ip address {{ mgmt_addr }}
+
+interface {{ lo0.name.value }}
+  description {{ lo0.description.value }}
+  ip address {{ lo0_addr }}
+  ip router ospf {{ ospf_process }} area {{ ospf_area }}
+{% for name in core_names %}{% set intf = core_all | selectattr("name.value", "equalto", name) | list | first %}
+
+interface {{ intf.name.value }}
+  description {{ intf.description.value }}
+  no switchport
+  mtu {{ intf.mtu.value }}
+  ip address {{ intf.ip_addresses.edges[0].node.address.value }}
+  ip ospf network point-to-point
+  ip router ospf {{ ospf_process }} area {{ ospf_area }}
+  no shutdown
+{% endfor %}
+
+router ospf {{ ospf_process }}
+  router-id {{ router_id }}
+
+router bgp {{ asn }}
+  router-id {{ router_id }}
+  address-family l2vpn evpn
+    retain route-target all
+  template peer {{ rr_template }}
+    remote-as {{ asn }}
+    update-source loopback0
+    password {{ bgp_password }}
+    bfd multihop
+    bfd multihop {{ bfd_timers }}
+    address-family l2vpn evpn
+      send-community
+      send-community extended
+      route-reflector-client
+{% for name in peer_names %}{% set peer = peers_all | selectattr("name.value", "equalto", name) | list | first %}
+  neighbor {{ peer.interfaces.edges[0].node.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }}
+    inherit peer {{ rr_template }}
+{% endfor %}

@@ -1,0 +1,4 @@
+ansible_connection: ansible.netcommon.network_cli
+ansible_user: "{{ lookup('env', 'DAY2_USER') | default('admin', true) }}"          # lab: vrnetlab login (P3D-07)
+ansible_password: "{{ lookup('env', 'DAY2_PASSWORD') | default('admin', true) }}"
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no"

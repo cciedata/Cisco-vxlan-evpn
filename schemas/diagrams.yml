@@ -1,0 +1,117 @@
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+# Racks, reserved rack space, cables and device-type power.
+# Decisions: P2-129, P2-151 to P2-195 (decisions.xlsx). DRAFT: not loaded anywhere.
+---
+version: "1.0"
+nodes:
+  - name: Rack
+    namespace: Location
+    label: Rack
+    description: A rack in a site row. Devices point at it through DcimDevice.rack (P2-195).
+    icon: mdi:server
+    inherit_from:
+      - LocationGeneric
+    include_in_menu: true
+    menu_placement: LocationGeneric
+    parent: LocationSite
+    children: ""
+    attributes:
+      - name: row
+        kind: Text
+        optional: false
+        description: Row letter (A to D).
+      - name: row_position
+        kind: Number
+        optional: false
+        description: Position in the row (1 to 10).
+      - name: height
+        kind: Number
+        optional: false
+        description: Rack height in U.
+      - name: purpose
+        kind: Dropdown
+        optional: false
+        choices:
+          - name: network
+            label: Network
+          - name: patch
+            label: Patch
+          - name: oob
+            label: OOB
+          - name: server
+            label: Server
+          - name: san
+            label: SAN
+          - name: growth
+            label: Growth
+      - name: power_budget_kw
+        kind: Number
+        optional: true
+        description: Power budget per feed (2N, P2-130).
+    relationships:
+      - name: devices
+        peer: DcimDevice
+        identifier: device__rack
+        kind: Generic
+        cardinality: many
+        optional: true
+
+  - name: RackReservation
+    namespace: Location
+    label: Rack Reservation
+    description: Rack space reserved for something that is not a device in Infrahub (patching, SAN edge, LB).
+    icon: mdi:tray
+    include_in_menu: false
+    human_friendly_id:
+      - name__value
+    display_label: "{{ name__value }}"
+    attributes:
+      - name: name
+        kind: Text
+        unique: true
+        optional: false
+      - name: position
+        kind: Number
+        optional: false
+        description: Lowest U.
+      - name: height
+        kind: Number
+        optional: false
+        description: Height in U.
+      - name: label
+        kind: Text
+        optional: false
+        description: Text drawn in the rack diagram.
+    # name format <rack>-U<start>, for example DC1-A01-U38 (P2-170)
+    relationships:
+      - name: rack
+        peer: LocationRack
+        kind: Parent
+        cardinality: one
+        optional: false
+
+# DcimCable: defined in schemas/oob.yml (Phase 4); smf + length_m added there (P2-231, P2-233)
+
+extensions:
+  nodes:
+    - kind: DcimDevice
+      relationships:
+        - name: rack
+          peer: LocationRack
+          identifier: device__rack
+          kind: Attribute
+          cardinality: one
+          optional: true
+          description: Rack the device is mounted in (location stays the site, P2-195).
+    - kind: DcimDeviceType
+      attributes:
+        - name: typical_power_w
+          kind: Number
+          optional: true
+        - name: max_power_w
+          kind: Number
+          optional: true
+        - name: power_source
+          kind: Text
+          optional: true
+          description: Datasheet the power figures come from.

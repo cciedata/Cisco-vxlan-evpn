@@ -1,0 +1,50 @@
+query SiteDiagrams($site: String!) {
+  DcimDevice(location__name__value: $site) {
+    edges { node {
+      id
+      name { value }
+      role { value }
+      position { value }
+      rack_face { value }
+      device_type { node { name { value } height { value } } }
+      rack { node { name { value } } }
+      asn { node { asn { value } } }
+      interfaces { edges { node {
+        id
+        __typename
+        name { value }
+        ... on InterfacePhysical { role { value } connector { node { id } } }
+        ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+      } } }
+    } }
+  }
+  DcimCable {
+    edges { node {
+      id
+      name { value }
+      cable_type { value }
+      length_m { value }
+      connected_endpoints { edges { node { id } } }
+    } }
+  }
+  LocationRack(parent__name__value: $site) {
+    edges { node {
+      name { value } row { value } row_position { value } height { value } purpose { value } power_budget_kw { value }
+    } }
+  }
+  LocationRackReservation {
+    edges { node { name { value } position { value } height { value } label { value } rack { node { name { value } } } } }
+  }
+  FabricVRF(sites__name__value: $site) {
+    edges { node { name { value } l3_vni { value } segments { count } } }
+  }
+  FabricAttachment(site__name__value: $site) {
+    edges { node {
+      name { value } vlan_id { value } slot { value }
+      vrf { node { name { value } } }
+      prefix { node { prefix { value } } }
+      switch_pair { node { ... on FabricSwitchPair { name { value } members { edges { node { name { value } } } } } } }
+      devices { edges { node { name { value } asn { node { asn { value } } } } } }
+    } }
+  }
+}

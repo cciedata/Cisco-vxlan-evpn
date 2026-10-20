@@ -1,0 +1,172 @@
+{# Phase 3 (P3-44, P3-62..P3-66): lab stand-in for an Internal FortiGate, as one POSIX shell script run in an FRR container
+   (containerlab exec). It builds the FortiOS interfaces in Linux (LACP aggregate, VLAN sub-interfaces, one kernel VRF per
+   FortiOS VRF id) and applies an FRR config that mirrors internal_fw_config.j2: prefix-lists, route-maps, per-VRF eBGP to
+   the service leaves with BFD 1000 x 3, graceful restart, password, standby-site prepend, tenant <-> TRANSIT leaking,
+   and (8 Oct) the AS path toward the leaves reduced to the FW AS.
+   Same query as the FortiOS config (fw_config), same derivation rules, so both sides of every session match the leaves. #}
+{# Approved constants: FortiOS values (PC3) reused; lab-only values (Phase 3, auto-approved) marked P3 #}
+{% set vrf_id = {"TRANSIT": 1, "PROD": 10, "DEV": 11, "DC2-PROD": 12, "DC2-DEV": 13, "CITRIX": 15, "PARTNER": 16} -%}
+{% set transit_vrf = "TRANSIT" -%}
+{% set bgp_password = "cisco123" -%}
+{% set bfd_tx = 999 -%}{% set bfd_rx = 999 -%}{% set bfd_mult = 3 -%}
+{% set seq_step = 10 -%}
+{% set fw_host = 3 -%}
+{% set home_site = "DC1" -%}
+{% set prepended_vrfs = ["PROD", "DEV", "PARTNER"] -%}
+{% set prepend_count = 3 -%}
+{% set mtu = 9216 -%}
+{% set table_base = 1000 -%}{# P3-63: kernel table = 1000 + FortiOS VRF id, VRF device vrf<id> #}
+{% set bfd_profile = "FW-BFD" -%}{# P3-64 #}
+{% set bond_mode = "802.3ad" -%}{# P3-65: LACP like FortiOS lacp-mode active #}
+{% set aspath_set = "set as-path exclude all" -%}{# 8 Oct (option 1): mirrors FortiOS set-aspath-action replace; job 290 proved the leaf then sees only the FW AS #}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set asn = device.asn.node.asn.value -%}
+{% set site = device.location.node -%}
+{% set site_name = site.name.value -%}
+{% set fabric_asn = site.fabric_asn.node.asn.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set aggs = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | sort(attribute="name.value") -%}
+{% set attachments = data.FabricAttachment.edges | map(attribute="node") | list | sort(attribute="vlan_id.value") -%}
+{% set tenants = attachments | rejectattr("vrf.node.name.value", "equalto", transit_vrf) | list -%}
+{% set transit_att = attachments | selectattr("vrf.node.name.value", "equalto", transit_vrf) | list | first -%}
+{% set summ_ns = namespace(pairs=[]) -%}
+{% for v in site.vrfs.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for s in v.summaries.edges | map(attribute="node") | list | sort(attribute="prefix.value") %}{% if v.multisite.value or (s.site.node is not none and s.site.node.name.value == site_name) %}{% set summ_ns.pairs = summ_ns.pairs + [(v.name.value, s.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
+{% set site_summaries = summ_ns.pairs | rejectattr("0", "equalto", transit_vrf) | map(attribute="1") | unique | list -%}
+{% set is_standby_site = site_name != home_site -%}
+{% macro host(p, n) %}{% set o = p.split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + n }}/{{ p.split("/")[1] }}{% endmacro -%}
+{% set router_id = host(transit_att.prefix.node.prefix.value, fw_host) | ipaddress_interface("ip") -%}
+#!/bin/sh
+# {{ name }}: lab stand-in for the Internal FortiGate (FRR in a Linux container). Rendered by Infrahub, do not edit.
+# Mirrors the FortiOS routing config. Not mirrored: HA (one unit runs), NPU vlinks (FRR leaks with "import vrf"),
+# mgmt1 (the container's eth0), firewall policies.
+set -eu
+sysctl -qw net.ipv4.ip_forward=1
+sysctl -qw net.ipv4.tcp_l3mdev_accept=1
+# --- VRFs (FortiOS VRF id -> vrf<id>, table {{ table_base }} + id)
+{% for v in [transit_vrf] + (tenants | map(attribute="vrf.node.name.value") | list) %}
+ip link add vrf{{ vrf_id[v] }} type vrf table {{ table_base + vrf_id[v] }} 2>/dev/null || true
+ip link set vrf{{ vrf_id[v] }} up
+{% endfor %}
+# --- aggregates (members that exist in the lab; the others stay absent)
+{% for a in aggs %}
+ip link add {{ a.name.value }} type bond mode {{ bond_mode }} 2>/dev/null || true
+{% for m in a.members.edges | map(attribute="node.name.value") | list | sort %}
+if [ -e /sys/class/net/{{ m }} ]; then ip link set {{ m }} down; ip link set {{ m }} mtu {{ mtu }}; ip link set {{ m }} master {{ a.name.value }}; ip link set {{ m }} up; fi
+{% endfor %}
+ip link set {{ a.name.value }} mtu {{ mtu }} up
+{% endfor %}
+# --- VLAN sub-interfaces, one per attachment
+{% for att in attachments %}
+{% set v = att.vrf.node.name.value %}
+{% set ifn = v ~ "-" ~ att.vlan_id.value %}
+ip link add link agg-inside name {{ ifn }} type vlan id {{ att.vlan_id.value }} 2>/dev/null || true
+ip link set {{ ifn }} master vrf{{ vrf_id[v] }}
+ip addr replace {{ host(att.prefix.node.prefix.value, fw_host) }} dev {{ ifn }}
+ip link set {{ ifn }} mtu {{ mtu }} up
+{% endfor %}
+# --- routing daemons (watchfrr starts zebra and staticd; bgpd and bfdd are started here)
+pgrep -x bfdd >/dev/null || /usr/lib/frr/bfdd -d -A 127.0.0.1
+pgrep -x bgpd >/dev/null || /usr/lib/frr/bgpd -d -A 127.0.0.1
+sleep 2
+cat > /etc/frr/frr.conf <<'FRREOF'
+hostname {{ name }}
+service integrated-vtysh-config
+!
+ip prefix-list PL-DEFAULT seq {{ seq_step }} permit 0.0.0.0/0
+{% for att in tenants %}
+{% set v = att.vrf.node.name.value %}
+{% for p in summ_ns.pairs | selectattr("0", "equalto", v) | map(attribute="1") | list %}
+ip prefix-list PL-{{ v }}-SUMMARY seq {{ loop.index * seq_step }} permit {{ p }}
+{% endfor %}
+{% endfor %}
+{% for p in site_summaries %}
+ip prefix-list PL-{{ transit_vrf }}-SUMMARY seq {{ loop.index * seq_step }} permit {{ p }}
+{% endfor %}
+{% if is_standby_site %}
+{% for p in summ_ns.pairs | selectattr("0", "in", prepended_vrfs) | map(attribute="1") | unique | list %}
+ip prefix-list PL-{{ transit_vrf }}-SUMMARY-PREPEND seq {{ loop.index * seq_step }} permit {{ p }}
+{% endfor %}
+{% endif %}
+!
+{% for att in tenants %}
+{% set v = att.vrf.node.name.value %}
+route-map RM-{{ v }}-FROM-LEAF permit {{ seq_step }}
+ match ip address prefix-list PL-{{ v }}-SUMMARY
+route-map RM-{{ v }}-TO-LEAF permit {{ seq_step }}
+ match ip address prefix-list PL-DEFAULT
+ {{ aspath_set }}
+{% if is_standby_site and v in prepended_vrfs %}
+ set as-path prepend {{ ([asn] * prepend_count) | join(' ') }}
+{% endif %}
+route-map RM-LEAK-{{ transit_vrf }}-TO-{{ v }} permit {{ seq_step }}
+ match ip address prefix-list PL-DEFAULT
+{% endfor %}
+{# FRR applies one import route-map per VRF: the TRANSIT side combines each tenant's RM-LEAK-<VRF>-TO-TRANSIT rule (P3-66) #}
+{% for att in tenants %}
+route-map RM-LEAK-TO-{{ transit_vrf }} permit {{ loop.index * seq_step }}
+ match ip address prefix-list PL-{{ att.vrf.node.name.value }}-SUMMARY
+{% endfor %}
+route-map RM-{{ transit_vrf }}-FROM-LEAF permit {{ seq_step }}
+ match ip address prefix-list PL-DEFAULT
+{% if is_standby_site %}
+route-map RM-{{ transit_vrf }}-TO-LEAF permit {{ seq_step }}
+ match ip address prefix-list PL-{{ transit_vrf }}-SUMMARY-PREPEND
+ {{ aspath_set }}
+ set as-path prepend {{ ([asn] * prepend_count) | join(' ') }}
+route-map RM-{{ transit_vrf }}-TO-LEAF permit {{ 2 * seq_step }}
+ match ip address prefix-list PL-{{ transit_vrf }}-SUMMARY
+ {{ aspath_set }}
+{% else %}
+route-map RM-{{ transit_vrf }}-TO-LEAF permit {{ seq_step }}
+ match ip address prefix-list PL-{{ transit_vrf }}-SUMMARY
+ {{ aspath_set }}
+{% endif %}
+!
+bfd
+ profile {{ bfd_profile }}
+  transmit-interval {{ bfd_tx }}
+  receive-interval {{ bfd_rx }}
+  detect-multiplier {{ bfd_mult }}
+  no echo-mode
+ exit
+exit
+!
+{% for att in attachments %}
+{% set v = att.vrf.node.name.value %}
+{% set ifn = v ~ "-" ~ att.vlan_id.value %}
+{% set leaves = att.switch_pair.node.members.edges | map(attribute="node.name.value") | list | sort_interface_list %}
+router bgp {{ asn }} vrf vrf{{ vrf_id[v] }}
+ bgp router-id {{ router_id }}
+ bgp graceful-restart
+{% for k in [1, 2] %}
+{% set peer = host(att.prefix.node.prefix.value, k) | ipaddress_interface("ip") %}
+ neighbor {{ peer }} remote-as {{ fabric_asn }}
+ neighbor {{ peer }} description {{ leaves[k - 1] }}
+ neighbor {{ peer }} password {{ bgp_password }}
+ neighbor {{ peer }} update-source {{ ifn }}
+ neighbor {{ peer }} bfd profile {{ bfd_profile }}
+{% endfor %}
+ address-family ipv4 unicast
+{% for k in [1, 2] %}
+{% set peer = host(att.prefix.node.prefix.value, k) | ipaddress_interface("ip") %}
+  neighbor {{ peer }} route-map RM-{{ v }}-FROM-LEAF in
+  neighbor {{ peer }} route-map RM-{{ v }}-TO-LEAF out
+{% endfor %}
+{% if v == transit_vrf %}
+{% for t in tenants %}
+  import vrf vrf{{ vrf_id[t.vrf.node.name.value] }}
+{% endfor %}
+  import vrf route-map RM-LEAK-TO-{{ transit_vrf }}
+{% else %}
+  import vrf vrf{{ vrf_id[transit_vrf] }}
+  import vrf route-map RM-LEAK-{{ transit_vrf }}-TO-{{ v }}
+{% endif %}
+ exit-address-family
+exit
+!
+{% endfor %}
+FRREOF
+vtysh -f /etc/frr/frr.conf
+echo "{{ name }} stand-in ready"

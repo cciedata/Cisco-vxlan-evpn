@@ -1,0 +1,82 @@
+# Phase 2 PC3: FortiGate units (Internal FW and Internet FW). Shared A/P addresses sit on unit 1's interfaces only,
+# so the templates derive every interface address from the attachments and L2-only VLANs (identical config on both units).
+query FwConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value }
+        asn { node { asn { value } } }
+        primary_address { node { address { value } } }
+        location {
+          node {
+            ... on LocationSite {
+              name { value }
+              fabric_asn { node { asn { value } } }
+              owned_prefixes { edges { node { prefix { value } } } }
+              vrfs {
+                edges {
+                  node {
+                    name { value }
+                    multisite { value }
+                    summaries { edges { node { prefix { value } site { node { name { value } } } } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              mtu { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+              ... on InterfacePhysical { port_channel { node { name { value } } } }
+              ... on InterfacePortChannel { members { edges { node { name { value } } } } }
+              ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  FabricAttachment(devices__name__value: $device) {
+    edges {
+      node {
+        name { value }
+        vlan_id { value }
+        prefix { node { prefix { value } } }
+        vrf { node { name { value } } }
+        switch_pair { node { name { value } members { edges { node { name { value } } } } } }
+      }
+    }
+  }
+  FabricL2Vlan {
+    edges {
+      node {
+        name { value }
+        vlan_id { value }
+        prefix { node { prefix { value } } }
+        site { node { name { value } } }
+        switch_pair { node { name { value } } }
+      }
+    }
+  }
+  IspRouters: DcimDevice(role__value: "isp_router") {
+    edges {
+      node {
+        name { value }
+        location { node { name { value } } }
+        asn { node { asn { value } } }
+        interfaces(name__value: "Bundle-Ether21.3200") {
+          edges { node { name { value } ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+# Phase 4 PC6: OOB switches (aggregation pair and access switches, NX-OS); one query, one template (oob_switch_config.j2)
+query OobSwitchConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        role { value }
+        description { value }
+        switch_pair {
+          node {
+            name { value }
+            ... on FabricVpcDomain { domain_id { value } }
+            members {
+              edges {
+                node {
+                  name { value }
+                  interfaces(role__value: "vpc_keepalive") {
+                    edges { node { name { value } ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              ... on InterfaceLayer2 { l2_mode { value } }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+              ... on InterfacePhysical {
+                port_channel { node { name { value } } }
+                access_vlan { node { name { value } vlan_id { value } } }
+              }
+              ... on InterfacePortChannel {
+                members { edges { node { name { value } } } }
+                tagged_vlans { edges { node { name { value } vlan_id { value } } } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

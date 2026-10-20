@@ -1,0 +1,31 @@
+query SiteTables($site: String!) {
+  IpamPrefix(site__name__value: $site) {
+    edges { node { prefix { value } description { value } role { value } member_type { value } } }
+  }
+  FabricSegment(sites__name__value: $site) {
+    edges { node { name { value } vlan_id { value } l2_vni { value } vrf { node { name { value } l3_vni { value } } } prefix { node { prefix { value } } } } }
+  }
+  FabricVRF(sites__name__value: $site) {
+    edges { node { name { value } l3_vni { value } l3_vni_vlan { value } } }
+  }
+  FabricAttachment(site__name__value: $site) {
+    edges { node {
+      name { value } vlan_id { value }
+      vrf { node { name { value } } }
+      prefix { node { prefix { value } } }
+      switch_pair { node { ... on FabricSwitchPair { members { edges { node { name { value } asn { node { asn { value } } } } } } } } }
+      devices { edges { node { name { value } asn { node { asn { value } } } } } }
+    } }
+  }
+  DcimDevice(location__name__value: $site) {
+    edges { node {
+      name { value } role { value }
+      asn { node { asn { value } } }
+      interfaces { edges { node {
+        name { value }
+        ... on InterfacePhysical { role { value } }
+        ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+      } } }
+    } }
+  }
+}

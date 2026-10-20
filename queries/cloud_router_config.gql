@@ -1,0 +1,55 @@
+# Phase 4 PC2: cloud routers (Cisco 8201-24H8FH, IOS XR)
+query CloudRouterConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        asn { node { asn { value } } }
+        location {
+          node {
+            ... on LocationSite {
+              name { value }
+              vrfs {
+                edges {
+                  node {
+                    name { value }
+                    summaries { edges { node { prefix { value } site { node { name { value } } } } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              mtu { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+              ... on InterfacePortChannel { members { edges { node { name { value } } } } }
+              ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  ProviderAsns: FabricAutonomousSystem {
+    edges { node { asn { value } provider { node { name { value } } } } }
+  }
+  FabricAttachment(devices__name__value: $device) {
+    edges {
+      node {
+        name { value }
+        vlan_id { value }
+        prefix { node { prefix { value } } }
+        vrf { node { name { value } } }
+        switch_pair { node { name { value } members { edges { node { name { value } asn { node { asn { value } } } } } } } }
+      }
+    }
+  }
+}

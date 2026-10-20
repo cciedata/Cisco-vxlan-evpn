@@ -1,0 +1,6 @@
+query SitePhysical($site: String!) {
+  LocationSite(name__value: $site) {
+    count
+    edges { node { name { value } } }
+  }
+}

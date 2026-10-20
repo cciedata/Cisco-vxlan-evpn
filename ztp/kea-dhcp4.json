@@ -1,0 +1,25 @@
+{
+  "Dhcp4": {
+    "interfaces-config": {
+      "interfaces": ["br-ztp"],
+      "dhcp-socket-type": "raw",
+      "service-sockets-max-retries": 200,
+      "service-sockets-retry-wait-time": 3000
+    },
+    "lease-database": {"type": "memfile", "persist": false},
+    "valid-lifetime": 3600,
+    "subnet4": [
+      {
+        "id": 1,
+        "subnet": "10.250.99.0/24",
+        "pools": [{"pool": "10.250.99.100 - 10.250.99.150"}],
+        "option-data": [
+          {"name": "routers", "data": "10.250.99.1"},
+          {"name": "tftp-server-name", "data": "http://10.250.99.1:8080"},
+          {"name": "boot-file-name", "data": "poap.py"}
+        ]
+      }
+    ],
+    "loggers": [{"name": "kea-dhcp4", "output-options": [{"output": "stdout"}], "severity": "INFO"}]
+  }
+}

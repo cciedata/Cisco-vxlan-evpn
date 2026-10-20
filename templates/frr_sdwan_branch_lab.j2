@@ -1,0 +1,57 @@
+{# Option 5 (D5-32): lab stand-in for one SD-WAN branch behind carrier B, rendered from the hub's data (same query as
+   sdwan_fw_config.j2): the hub's WAN loopback and overlay /21 come from the graph; the branch's own values are lab-only (P5).
+   GRE stands in for the ADVPN 2.0 IPsec spoke; iBGP AS 65400 to the hub's overlay address; one branch LAN announced. #}
+{% set overlay_asn = 65400 -%}
+{% set bgp_password = "cisco123" -%}
+{% set wan_lo = "LO-WAN" -%}
+{% set tunnel = "ADVPN-HUB" -%}
+{% set mtu = 9216 -%}
+{% set branch_wan = "198.18.3.10/24" -%}{# P5 (D5-31/D5-32): carrier B's branch subnet 198.18.3.0/24, branch .10 #}
+{% set branch_wan_gw = "198.18.3.254" -%}{# P5 (D5-31): carrier side .254 #}
+{% set branch_lan = "10.64.1.1/24" -%}{# P5 (D5-32): inside the branch range 10.64.0.0/12 le 24 #}
+{% set spoke_offset = 1 -%}{# P5 (D5-32): first address of the hub's mode-cfg pool = hub tunnel + 1 #}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set site_name = device.location.node.name.value -%}
+{% set unit_ns = namespace(wan=none, tun=none) -%}
+{% for u in data.SdwanUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges %}{% if i.name.value == wan_lo %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% elif i.name.value == tunnel %}{% set unit_ns.tun = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endif %}{% endfor %}{% endfor -%}
+{% set hub_wan = unit_ns.wan | ipaddress_interface("ip") | string -%}
+{% set hub_tun = unit_ns.tun | ipaddress_interface("ip") | string -%}
+{% set plen = unit_ns.tun | ipaddress_interface("network") | string -%}
+{% set o = hub_tun.split(".") -%}
+{% set spoke_tun = o[:3] | join(".") ~ "." ~ ((o[3] | int) + spoke_offset) -%}
+#!/bin/sh
+# {{ site_name }}-BRANCH1: lab stand-in for an SD-WAN branch of hub {{ name[:-1] }} (FRR in a Linux container). Rendered by Infrahub
+# from {{ name }}'s data, do not edit. Interface "wan" toward carrier B. Lab-only: GRE instead of ADVPN IPsec.
+set -eu
+sysctl -qw net.ipv4.ip_forward=1
+ip route del default dev eth0 2>/dev/null || true
+ip link set wan mtu {{ mtu }} up
+ip addr replace {{ branch_wan }} dev wan
+ip route replace default via {{ branch_wan_gw }} dev wan
+ip link add LAN type dummy 2>/dev/null || true
+ip addr replace {{ branch_lan }} dev LAN
+ip link set LAN up
+ip tunnel add {{ tunnel }} mode gre local {{ branch_wan.split("/")[0] }} remote {{ hub_wan }} ttl 64 2>/dev/null || true
+ip addr replace {{ spoke_tun }}/{{ plen.split("/")[1] }} dev {{ tunnel }}
+ip link set {{ tunnel }} up
+pgrep -x bgpd >/dev/null || /usr/lib/frr/bgpd -d -A 127.0.0.1
+sleep 2
+cat > /etc/frr/frr.conf <<'FRREOF'
+hostname {{ site_name }}-BRANCH1
+service integrated-vtysh-config
+!
+router bgp {{ overlay_asn }}
+ bgp router-id {{ spoke_tun }}
+ no bgp ebgp-requires-policy
+ neighbor {{ hub_tun }} remote-as {{ overlay_asn }}
+ neighbor {{ hub_tun }} description {{ name[:-1] }} hub
+ neighbor {{ hub_tun }} password {{ bgp_password }}
+ address-family ipv4 unicast
+  network {{ branch_lan | ipaddress_interface("network") }}
+ exit-address-family
+exit
+FRREOF
+vtysh -f /etc/frr/frr.conf
+echo "{{ site_name }}-BRANCH1 stand-in ready"

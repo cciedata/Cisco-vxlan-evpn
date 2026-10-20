@@ -1,0 +1,331 @@
+{# Phase 4 PC3: SD-WAN hub FortiGate (FG-1800F, FortiOS 7.6.7), A/P HA, single VDOM. Two routing tables: VRF 0 = WAN
+   underlay (outside leg on the edge VLAN, public WAN loopback, static 0/0 to the ISP routers' VRRP VIP); VRF 1 = TRANSIT
+   and the overlay (inside leg to the border leaves, ADVPN 2.0 hub tunnel). BGP AS 65400 toward the branches (iBGP,
+   dynamic neighbors, the hub reflects branch routes: row 73), local-as 65120 / 65220 toward the border leaves. Routing only (no policies,
+   no NAT). Rows = decisions.xlsx Open-Phase4; P4A-3xx = auto_approved.md. #}
+{# Approved constants #}
+{% set overlay_asn = 65400 -%}   {#- row 38 B: AS 65400 toward the branches -#}
+{% set table_vrf = 1 -%}   {#- TRANSIT VRF id (Phase 2 PC3 FW_VRF_ID); the overlay shares it (P4A-310) -#}
+{% set wan_vrf = 0 -%}   {#- P4A-310: WAN underlay in its own table -#}
+{% set transit_vrf = "TRANSIT" -%}
+{% set ha_group_base = 20 -%}   {#- P4A-311: fabric-ASN offset rule (Internal 10, Internet 40) -#}
+{% set ha_site_offset = 100 -%}   {#- same as the Phase 2 FWs -#}
+{% set ha_priority = {1: 200, 2: 100} -%}   {#- same as the Phase 2 FWs -#}
+{% set ha_hbdev = [("ha1", 50), ("ha2", 50)] -%}   {#- P4A-303: FG-1800F HA ports, weight as the Phase 2 FWs -#}
+{% set ha_monitor = ["agg-inside", "agg-outside"] -%}   {#- P4A-312 -#}
+{% set bgp_password = "cisco123" -%}   {#- every BGP session (decided) -#}
+{% set bfd_tx = 999 -%}{% set bfd_rx = 999 -%}{% set bfd_mult = 3 -%}   {#- toward the leaves: NX-OS single-hop max (decided) -#}
+{% set seq_step = 10 -%}
+{% set fw_host = 3 -%}   {#- attachment /29: .3 = the FW pair -#}
+{% set edge_fw_host = 11 -%}   {#- edge VLAN: .11 SD-WAN FW (decided, EDGE_VLAN_HOST) -#}
+{% set vip_host = 1 -%}   {#- edge VLAN: .1 VRRP VIP of the ISP routers (decided: SD-WAN/VPN legs route statically to it) -#}
+{% set mtu = 9216 -%}
+{% set wan_lo = "LO-WAN" -%}   {#- P4A-305 -#}
+{% set tunnel = "ADVPN-HUB" -%}   {#- P4A-306 -#}
+{% set branch_group = "BRANCHES" -%}   {#- P4A-313 -#}
+{% set branch_summary = "10.64.0.0/12" -%}   {#- design: branches; toward TRANSIT -#}
+{% set branch_lan_le = 24 -%}   {#- design: from the branches accept 10.64.0.0/12 le 24 (row 41 B) -#}
+{% set cloud_summaries = ["172.16.0.0/13", "172.30.0.0/15"] -%}   {#- design: allowlist toward the SD-WAN (AWS, Azure) -#}
+{% set cloud_in_le = 24 -%}   {#- P4A-327: TRANSIT carries the cloud prefixes le 24 (PC2 cloud routers); the hub aggregates them -#}
+{% set reflect_branches = true -%}   {#- Open-Phase4 row 73 D + follow-up (7 Oct): the hub reflects the branch /24s to its branches; hubs stay unpeered (row 44 C) -#}
+{% set no_branch_vrfs = ["PARTNER"] -%}   {#- design: never PARTNER summaries (and never 0/0) toward the branches -#}
+{% set psk = "cisco123" -%}   {#- row 43 B: placeholder (public repo), P4A-314 value -#}
+{% set ike_proposal = "aes256gcm-prfsha384" -%}{% set ike_dhgrp = 20 -%}{% set ike_keylife = 28800 -%}   {#- P4A-315 -#}
+{% set esp_proposal = "aes256gcm" -%}{% set esp_keylife = 3600 -%}   {#- P4A-315 -#}
+{% set dpd_retry = 10 -%}   {#- P4A-316 -#}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set unit = name[-1] | int -%}
+{% set fabric_side_asn = device.asn.node.asn.value -%}
+{% set site = device.location.node -%}
+{% set site_name = site.name.value -%}
+{% set fabric_asn = site.fabric_asn.node.asn.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
+{% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
+{% set aggs = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | sort(attribute="name.value") -%}
+{% set fw_ports = physical | selectattr("role.value", "equalto", "peering") | list -%}
+{% set transit_att = data.FabricAttachment.edges | map(attribute="node") | list | selectattr("vrf.node.name.value", "equalto", transit_vrf) | list | first -%}
+{% set l2_site = data.FabricL2Vlan.edges | map(attribute="node") | list | selectattr("site.node.name.value", "equalto", site_name) | list -%}
+{% set edge_vlan = l2_site | selectattr("switch_pair.node.name.value", "equalto", site_name ~ "-VPC-EDGE1-EDGE2") | list | first -%}
+{# The pair's shared addresses on unit 1: WAN loopback and hub tunnel #}
+{% set unit_ns = namespace(wan=none, tun=none) -%}
+{% for u in data.SdwanUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges %}{% if i.name.value == wan_lo %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% elif i.name.value == tunnel %}{% set unit_ns.tun = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endif %}{% endfor %}{% endfor -%}
+{# Summaries per VRF for this site (same rule as the border leaf); allowlist toward the branches #}
+{% set summ_ns = namespace(pairs=[]) -%}
+{% for v in site.vrfs.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for s in v.summaries.edges | map(attribute="node") | list | sort(attribute="prefix.value") %}{% if v.multisite.value or (s.site.node is not none and s.site.node.name.value == site_name) %}{% set summ_ns.pairs = summ_ns.pairs + [(v.name.value, s.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
+{% set dc_summaries = summ_ns.pairs | rejectattr("0", "equalto", transit_vrf) | rejectattr("0", "in", no_branch_vrfs) | map(attribute="1") | unique | list -%}
+{% set sdwan_allow = dc_summaries + cloud_summaries -%}
+{% macro net(p) %}{{ p | ipaddress_interface("network") | string }}{% endmacro -%}
+{% macro ipmask(addr) %}{{ addr | ipaddress_interface("ip") }} {{ addr | ipaddress_interface("netmask") }}{% endmacro -%}
+{% macro pfxmask(p) %}{{ p.split("/")[0] }} {{ p | ipaddress_interface("netmask") }}{% endmacro -%}
+{% macro host(p, n) %}{% set o = p.split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + n }}/{{ p.split("/")[1] }}{% endmacro -%}
+{% macro shift(ip, n) %}{% set o = ip.split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + n }}{% endmacro -%}
+{# Values derived by rule: tunnel = first host of the overlay /21 (hub), remote-ip = last host, mode-cfg pool in between #}
+{% set inside_if = transit_vrf ~ "-" ~ transit_att.vlan_id.value -%}
+{% set outside_if = "OUTSIDE-" ~ edge_vlan.vlan_id.value -%}
+{% set outside_ip = host(edge_vlan.prefix.node.prefix.value, edge_fw_host) -%}
+{% set isp_vip = host(edge_vlan.prefix.node.prefix.value, vip_host) | ipaddress_interface("ip") -%}
+{% set tun_ip = unit_ns.tun | ipaddress_interface("ip") | string -%}
+{% set tun_mask = unit_ns.tun | ipaddress_interface("netmask") | string -%}
+{% set tun_net = net(unit_ns.tun) -%}
+{% set tun_bcast = tun_net | ipaddress_network("broadcast_address") | string -%}
+{% set router_id = host(transit_att.prefix.node.prefix.value, fw_host) | ipaddress_interface("ip") -%}
+config system global
+    set hostname "{{ name }}"
+end
+config system settings
+    set bfd enable
+    set bfd-desired-min-tx {{ bfd_tx }}
+    set bfd-required-min-rx {{ bfd_rx }}
+    set bfd-detect-mult {{ bfd_mult }}
+end
+config system ha
+    set group-id {{ ha_group_base + ha_site_offset * ((site_name[-1] | int) - 1) }}
+    set group-name "{{ name[:-1] }}-HA"
+    set mode a-p
+    set hbdev{% for p, w in ha_hbdev %} "{{ p }}" {{ w }}{% endfor %}
+
+    set session-pickup enable
+    set override disable
+    set priority {{ ha_priority[unit] }}
+    set monitor{% for m in ha_monitor %} "{{ m }}"{% endfor %}
+
+    set ha-mgmt-status enable
+    config ha-mgmt-interfaces
+        edit 1
+            set interface "{{ mgmt.name.value }}"
+            set gateway {{ net(mgmt.ip_addresses.edges[0].node.address.value) | get_first_usable }}
+        next
+    end
+end
+config system interface
+    edit "{{ mgmt.name.value }}"
+        set ip {{ ipmask(mgmt.ip_addresses.edges[0].node.address.value) }}
+        set description "{{ mgmt.description.value }}"
+    next
+{% for p in fw_ports | sort(attribute="name.value") %}
+    edit "{{ p.name.value }}"
+        set description "{{ p.description.value }}"
+        set mtu-override enable
+        set mtu {{ p.mtu.value }}
+    next
+{% endfor %}
+{% for a in aggs %}
+    edit "{{ a.name.value }}"
+        set type aggregate
+        set member{% for m in a.members.edges | map(attribute="node.name.value") | list | sort %} "{{ m }}"{% endfor %}
+
+        set lacp-mode active
+        set description "{{ a.description.value }}"
+        set mtu-override enable
+        set mtu {{ a.mtu.value }}
+    next
+{% endfor %}
+    edit "{{ inside_if }}"
+        set vrf {{ table_vrf }}
+        set interface "agg-inside"
+        set vlanid {{ transit_att.vlan_id.value }}
+        set ip {{ ipmask(host(transit_att.prefix.node.prefix.value, fw_host)) }}
+        set description "{{ transit_att.name.value }}"
+        set mtu-override enable
+        set mtu {{ mtu }}
+        set bfd enable
+    next
+    edit "{{ outside_if }}"
+        set vrf {{ wan_vrf }}
+        set interface "agg-outside"
+        set vlanid {{ edge_vlan.vlan_id.value }}
+        set ip {{ ipmask(outside_ip) }}
+        set description "Edge VLAN {{ edge_vlan.vlan_id.value }}"
+        set mtu-override enable
+        set mtu {{ mtu }}
+    next
+    edit "{{ wan_lo }}"
+        set vrf {{ wan_vrf }}
+        set type loopback
+        set ip {{ unit_ns.wan | ipaddress_interface("ip") }} 255.255.255.255
+        set description "WAN endpoint (public {{ net(unit_ns.wan) }})"
+    next
+end
+config vpn ipsec phase1-interface
+    edit "{{ tunnel }}"
+        set type dynamic
+        set interface "{{ wan_lo }}"
+        set ike-version 2
+        set peertype any
+        set net-device disable
+        set mode-cfg enable
+        set ipv4-start-ip {{ shift(tun_ip, 1) }}
+        set ipv4-end-ip {{ shift(tun_bcast, -2) }}
+        set ipv4-netmask {{ tun_mask }}
+        set proposal {{ ike_proposal }}
+        set dhgrp {{ ike_dhgrp }}
+        set keylife {{ ike_keylife }}
+        set add-route disable
+        set dpd on-idle
+        set dpd-retryinterval {{ dpd_retry }}
+        set auto-discovery-sender enable
+        set auto-discovery-forwarder enable
+        set psksecret {{ psk }}
+    next
+end
+config vpn ipsec phase2-interface
+    edit "{{ tunnel }}"
+        set phase1name "{{ tunnel }}"
+        set proposal {{ esp_proposal }}
+        set dhgrp {{ ike_dhgrp }}
+        set keylifeseconds {{ esp_keylife }}
+        set src-subnet 0.0.0.0 0.0.0.0
+        set dst-subnet 0.0.0.0 0.0.0.0
+    next
+end
+config system interface
+    edit "{{ tunnel }}"
+        set vrf {{ table_vrf }}
+        set ip {{ tun_ip }} 255.255.255.255
+        set remote-ip {{ shift(tun_bcast, -1) }} {{ tun_mask }}
+        set description "ADVPN 2.0 hub, overlay {{ tun_net }}"
+    next
+end
+config router static
+    edit 1
+        set dst 0.0.0.0 0.0.0.0
+        set gateway {{ isp_vip }}
+        set device "{{ outside_if }}"
+        set vrf {{ wan_vrf }}
+    next
+end
+config router prefix-list
+    edit "PL-SDWAN-FROM-LEAF"
+        config rule
+{% for p in dc_summaries %}
+            edit {{ loop.index * seq_step }}
+                set prefix {{ pfxmask(p) }}
+            next
+{% endfor %}
+{% for p in cloud_summaries %}
+            edit {{ (dc_summaries | length + loop.index) * seq_step }}
+                set prefix {{ pfxmask(p) }}
+                set le {{ cloud_in_le }}
+            next
+{% endfor %}
+        end
+    next
+    edit "PL-SDWAN-ALLOW"
+        config rule
+{% for p in sdwan_allow %}
+            edit {{ loop.index * seq_step }}
+                set prefix {{ pfxmask(p) }}
+            next
+{% endfor %}
+        end
+    next
+    edit "PL-BRANCH-LAN"
+        config rule
+            edit {{ seq_step }}
+                set prefix {{ pfxmask(branch_summary) }}
+                set le {{ branch_lan_le }}
+            next
+        end
+    next
+    edit "PL-BRANCH-SUMMARY"
+        config rule
+            edit {{ seq_step }}
+                set prefix {{ pfxmask(branch_summary) }}
+            next
+        end
+    next
+end
+config router route-map
+    edit "RM-{{ transit_vrf }}-FROM-LEAF"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-SDWAN-FROM-LEAF"
+            next
+        end
+    next
+    edit "RM-{{ transit_vrf }}-TO-LEAF"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-BRANCH-SUMMARY"
+            next
+        end
+    next
+    edit "RM-FROM-BRANCH"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-BRANCH-LAN"
+            next
+        end
+    next
+    edit "RM-TO-BRANCH"
+        config rule
+            edit {{ seq_step }}
+                set match-ip-address "PL-SDWAN-ALLOW"
+            next
+{% if reflect_branches %}
+            edit {{ 2 * seq_step }}
+                set match-ip-address "PL-BRANCH-LAN"
+            next
+{% endif %}
+        end
+    next
+end
+config router bgp
+    set as {{ overlay_asn }}
+    set router-id {{ router_id }}
+    set graceful-restart enable
+    config neighbor
+{% set leaves = transit_att.switch_pair.node.members.edges | map(attribute="node.name.value") | list | sort_interface_list %}
+{% for k in [1, 2] %}
+        edit "{{ host(transit_att.prefix.node.prefix.value, k) | ipaddress_interface("ip") }}"
+            set description "{{ leaves[k - 1] }}"
+            set remote-as {{ fabric_asn }}
+            set local-as {{ fabric_side_asn }}
+            set local-as-no-prepend enable
+            set local-as-replace-as enable
+            set interface "{{ inside_if }}"
+            set update-source "{{ inside_if }}"
+            set bfd enable
+            set capability-graceful-restart enable
+            set password {{ bgp_password }}
+            set route-map-in "RM-{{ transit_vrf }}-FROM-LEAF"
+            set route-map-out "RM-{{ transit_vrf }}-TO-LEAF"
+        next
+{% endfor %}
+    end
+    config neighbor-group
+        edit "{{ branch_group }}"
+            set remote-as {{ overlay_asn }}
+            set interface "{{ tunnel }}"
+            set update-source "{{ tunnel }}"
+            set next-hop-self enable
+{% if reflect_branches %}
+            set next-hop-self-rr disable
+            set route-reflector-client enable
+{% endif %}
+            set capability-graceful-restart enable
+            set password {{ bgp_password }}
+            set route-map-in "RM-FROM-BRANCH"
+            set route-map-out "RM-TO-BRANCH"
+        next
+    end
+    config neighbor-range
+        edit 1
+            set prefix {{ pfxmask(tun_net) }}
+            set neighbor-group "{{ branch_group }}"
+        next
+    end
+    config aggregate-address
+{% for p in [branch_summary] + cloud_summaries %}
+        edit {{ loop.index }}
+            set prefix {{ pfxmask(p) }}
+{% if not (reflect_branches and p == branch_summary) %}
+            set summary-only enable
+{% endif %}
+        next
+{% endfor %}
+    end
+end

@@ -1,0 +1,115 @@
+{# Phase 2 PC2: DMZ pair (L2 only). Bridges the DMZ VLANs to the Internet FW DMZ legs (Po11/Po12); the gateway is the Internet FW. LB ports 1/1-1/4 come later. #}
+{# Approved constants: vPC values as on the VTEP leaves minus the L3 lines (decided PC2) #}
+{% set keepalive_vrf = "VPC-KEEPALIVE" -%}
+{% set keepalive_timers = "interval 1000 timeout 5 hold-timeout 3" -%}
+{% set role_priority = [10, 20] -%}
+{% set delay_restore = 360 -%}
+{% set auto_recovery_delay = 360 -%}
+{% set stp_priority = 8192 -%}
+{% set peer_link_po = 1000 -%}
+{% macro vlan_ranges(ids) %}{% set ns = namespace(out=[], start=none, prev=none) %}{% for v in ids %}{% if ns.start is none %}{% set ns.start = v %}{% elif v != ns.prev + 1 %}{% set ns.out = ns.out + [ns.start ~ ("-" ~ ns.prev if ns.prev != ns.start else "")] %}{% set ns.start = v %}{% endif %}{% set ns.prev = v %}{% endfor %}{% if ns.start is not none %}{% set ns.out = ns.out + [ns.start ~ ("-" ~ ns.prev if ns.prev != ns.start else "")] %}{% endif %}{{ ns.out | join(",") }}{% endmacro -%}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
+{% set portchannels = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list -%}
+{% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
+{% set pair = device.switch_pair.node -%}
+{% set l2vlans = pair.l2_vlans.edges | map(attribute="node") | list | sort(attribute="vlan_id.value") -%}
+{# Values derived by rule #}
+{% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
+{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+{% set member_nodes = pair.members.edges | map(attribute="node") | list -%}
+{% set member_names = member_nodes | map(attribute="name.value") | list | sort_interface_list -%}
+{% set peer = member_nodes | rejectattr("name.value", "equalto", device.name.value) | list | first -%}
+{% set my_priority = role_priority[0] if member_names[0] == device.name.value else role_priority[1] -%}
+{% set keepalive = physical | selectattr("role.value", "equalto", "vpc_keepalive") | list | first -%}
+{% set keepalive_ip = keepalive.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
+{% set peer_keepalive_ip = peer.interfaces.edges[0].node.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
+{% set po = portchannels | selectattr("role.value", "equalto", "vpc_peer_link") | list | first -%}
+{% set po_members = physical | selectattr("role.value", "equalto", "vpc_peer_link") | list -%}
+{% set po_member_names = po_members | map(attribute="name.value") | list | sort_interface_list -%}
+{% set host_pos = portchannels | selectattr("role.value", "equalto", "peering") | list -%}
+{% set host_po_names = host_pos | map(attribute="name.value") | list | sort_interface_list -%}
+{% set host_members = physical | selectattr("role.value", "equalto", "peering") | list -%}
+{% set host_member_names = host_members | map(attribute="name.value") | list | sort_interface_list -%}
+{% set vlan_list = vlan_ranges(l2vlans | map(attribute="vlan_id.value") | list) -%}
+hostname {{ device.name.value }}
+username vamdadmin password 5 __VAMDADMIN_HASH__ role network-admin
+no ip domain-lookup
+feature lacp
+feature vpc
+
+vrf context management
+  ip route 0.0.0.0/0 {{ mgmt_gw }}
+
+vrf context {{ keepalive_vrf }}
+{% for v in l2vlans %}
+
+vlan {{ v.vlan_id.value }}
+  name {{ v.name.value }}
+{% endfor %}
+
+spanning-tree vlan {{ vlan_list }} priority {{ stp_priority }}
+
+vpc domain {{ pair.domain_id.value }}
+  peer-switch
+  role priority {{ my_priority }}
+  peer-keepalive destination {{ peer_keepalive_ip }} source {{ keepalive_ip }} vrf {{ keepalive_vrf }} {{ keepalive_timers }}
+  delay restore {{ delay_restore }}
+  auto-recovery reload-delay {{ auto_recovery_delay }}
+  peer-gateway
+
+interface {{ mgmt.name.value }}
+  description {{ mgmt.description.value }}
+  vrf member management
+  ip address {{ mgmt_addr }}
+
+interface {{ keepalive.name.value }}
+  description {{ keepalive.description.value }}
+  no switchport
+  mtu {{ keepalive.mtu.value }}
+  vrf member {{ keepalive_vrf }}
+  ip address {{ keepalive.ip_addresses.edges[0].node.address.value }}
+  no shutdown
+{% for name in po_member_names %}{% set intf = po_members | selectattr("name.value", "equalto", name) | list | first %}
+
+interface {{ intf.name.value }}
+  description {{ intf.description.value }}
+  switchport
+  switchport mode trunk
+  switchport trunk allowed vlan {{ vlan_list }}
+  channel-group {{ peer_link_po }} mode active
+  no shutdown
+{% endfor %}
+
+interface {{ po.name.value }}
+  description {{ po.description.value }}
+  switchport
+  switchport mode trunk
+  switchport trunk allowed vlan {{ vlan_list }}
+  spanning-tree port type network
+  vpc peer-link
+{% for name in host_member_names %}{% set intf = host_members | selectattr("name.value", "equalto", name) | list | first %}
+
+interface {{ intf.name.value }}
+  description {{ intf.description.value }}
+  switchport
+  switchport mode trunk
+  switchport trunk allowed vlan {{ vlan_list }}
+  mtu {{ intf.mtu.value }}
+  channel-group {{ intf.port_channel.node.name.value | replace("port-channel", "") }} mode active
+  no shutdown
+{% endfor %}
+{% for name in host_po_names %}{% set intf = host_pos | selectattr("name.value", "equalto", name) | list | first %}
+
+interface {{ intf.name.value }}
+  description {{ intf.description.value }}
+  switchport
+  switchport mode trunk
+  switchport trunk allowed vlan {{ vlan_list }}
+  spanning-tree port type edge trunk
+  spanning-tree bpduguard enable
+  mtu {{ intf.mtu.value }}
+  vpc {{ intf.name.value | replace("port-channel", "") }}
+{% endfor %}

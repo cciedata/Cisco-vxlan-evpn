@@ -1,0 +1,38 @@
+{# Option 5 (D5-33): lab stand-in for the first VPN partner of the site (by name), behind carrier A, rendered from the VPN FW's
+   data (same query as vpn_fw_config.j2): peer address, protected networks, translated /28 and the FW's WAN loopback come from
+   the graph. GRE stands in for the IKEv2 tunnel; the protected networks sit on a dummy interface (.1 of each). #}
+{% set wan_lo = "LO-WAN" -%}
+{% set mtu = 9216 -%}
+{% set wan_gw_host = 254 -%}{# P5 (D5-31): carrier A's side of the partner subnet #}
+{% set wan_plen = 24 -%}{# P5 (D5-31): carrier A's partner subnet is the /24 around the peer address #}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set site_name = device.location.node.name.value -%}
+{% set unit_ns = namespace(wan=none) -%}
+{% for u in data.VpnUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges and i.name.value == wan_lo %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endfor %}{% endfor -%}
+{% set p_ns = namespace(items=[]) -%}
+{% for p in data.FabricPartner.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for t in p.translated_prefixes.edges | map(attribute="node") | list %}{% if t.site.node is not none and t.site.node.name.value == site_name %}{% set p_ns.items = p_ns.items + [(p.name.value, p.description.value or "", p.peer_ip.value, p.protected_prefixes.value | sort, t.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
+{% set pname, pdesc, peer, protected, nat = p_ns.items[0] -%}
+{% set peer_ip = peer | ipaddress_interface("ip") | string -%}
+{% set po = peer_ip.split(".") -%}
+{% set wan_gw = po[:3] | join(".") ~ "." ~ wan_gw_host -%}
+{% set fw_wan = unit_ns.wan | ipaddress_interface("ip") | string -%}
+#!/bin/sh
+# {{ site_name }}-{{ pname }}: lab stand-in for VPN partner {{ pname }}{% if pdesc %} ({{ pdesc }}){% endif %} of {{ name[:-1] }} (FRR container).
+# Rendered by Infrahub from {{ name }}'s data, do not edit. Interface "wan" toward carrier A. Lab-only: GRE instead of IKEv2.
+set -eu
+sysctl -qw net.ipv4.ip_forward=1
+ip route del default dev eth0 2>/dev/null || true
+ip link set wan mtu {{ mtu }} up
+ip addr replace {{ peer_ip }}/{{ wan_plen }} dev wan
+ip route replace default via {{ wan_gw }} dev wan
+ip link add PROTECTED type dummy 2>/dev/null || true
+{% for p in protected %}
+ip addr replace {{ p | ipaddress_interface("network") | string | get_first_usable }}/{{ p.split("/")[1] }} dev PROTECTED
+{% endfor %}
+ip link set PROTECTED up
+ip tunnel add {{ pname }} mode gre local {{ peer_ip }} remote {{ fw_wan }} ttl 64 2>/dev/null || true
+ip link set {{ pname }} up
+ip route replace {{ nat }} dev {{ pname }}
+echo "{{ site_name }}-{{ pname }} stand-in ready"

@@ -1,0 +1,38 @@
+query LoopbackCheck($name: String!) {
+  LocationSite(name__value: $name) {
+    count
+    edges {
+      node {
+        name { value }
+        fabric_asn {
+          node {
+            asn { value }
+            devices {
+              count
+              edges {
+                node {
+                  name { value }
+                  role { value }
+                  interfaces(name__value: "loopback0") {
+                    count
+                    edges {
+                      node {
+                        name { value }
+                        ... on InterfaceLayer3 {
+                          ip_addresses {
+                            count
+                            edges { node { address { value } } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

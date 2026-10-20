@@ -1,0 +1,55 @@
+# Phase 2 PC3: ISP routers (Cisco 8201-24H8FH, IOS XR)
+query IspRouterConfig($device: String!) {
+  DcimDevice(name__value: $device) {
+    count
+    edges {
+      node {
+        name { value }
+        asn { node { asn { value } } }
+        location { node { ... on LocationSite { name { value } owned_prefixes { edges { node { prefix { value } } } } } } }
+        interfaces {
+          edges {
+            node {
+              __typename
+              name { value }
+              description { value }
+              role { value }
+              mtu { value }
+              ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
+              ... on InterfacePortChannel { members { edges { node { name { value } } } } }
+              ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
+            }
+          }
+        }
+      }
+    }
+  }
+  ProviderAsns: FabricAutonomousSystem {
+    edges { node { asn { value } provider { node { name { value } } } } }
+  }
+  InternetFws: DcimDevice(role__value: "internet_fw") {
+    edges { node { name { value } location { node { name { value } } } asn { node { asn { value } } } } }
+  }
+  # Phase 4 PC4: WAN loopback of the VPN-partner FW (address on unit 1) -> static route for its public /28
+  VpnFws: DcimDevice(role__value: "vpn_fw") {
+    edges {
+      node {
+        name { value }
+        role { value }
+        location { node { name { value } } }
+        interfaces(name__value: "LO-WAN") { edges { node { name { value } ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } } }
+      }
+    }
+  }
+  # Phase 4 PC3: WAN loopback of the SD-WAN hub (address on unit 1) -> static route for its public /28
+  SdwanFws: DcimDevice(role__value: "sdwan_fw") {
+    edges {
+      node {
+        name { value }
+        role { value }
+        location { node { name { value } } }
+        interfaces(name__value: "LO-WAN") { edges { node { name { value } ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } } }
+      }
+    }
+  }
+}

@@ -1,0 +1,76 @@
+---
+# Phase 4 PC6 (OOB management, row 62 B): cabling and OOB access VLANs. Loaded with the other files under schemas/.
+# The base dcim schema has the generics DcimConnector / DcimEndpoint (InterfacePhysical inherits DcimEndpoint) but no
+# concrete connector node: DcimCable is that node (P4A-640). Written only by generator oob_site.
+version: "1.0"
+nodes:
+  - name: Cable
+    namespace: Dcim
+    label: Cable
+    description: A physical cable between two ports (InterfacePhysical); OOB management and console cabling (Phase 4).
+    icon: mdi:cable-data
+    include_in_menu: true
+    menu_placement: DcimDevice
+    inherit_from:
+      - DcimConnector
+    human_friendly_id:
+      - name__value
+    display_label: "{{ name__value }}"
+    order_by:
+      - name__value
+    attributes:
+      - name: name
+        description: "<device A> <port A> <-> <device B> <port B>; A = the cabled device, B = the OOB side (P4A-641)."
+        kind: Text
+        unique: true
+        optional: false
+      - name: cable_type
+        label: Cable Type
+        kind: Dropdown
+        optional: false
+        choices:
+          - name: copper
+            label: Copper (RJ45)
+            description: Twisted pair, 1G RJ45 (mgmt ports, OOB access ports, HA heartbeat, WAN).
+          - name: console
+            label: Console (RJ45 serial)
+            description: Serial console cable to a console server port.
+          - name: fiber
+            label: Fiber (SFP)
+            description: Optical link between SFP/SFP+/SFP28 ports.
+          - name: dac
+            label: Direct Attach Copper
+            description: Passive DAC between adjacent switches (vPC peer-link, keepalive).
+          - name: smf
+            label: Single-mode fiber
+            description: Fabric optics across racks via the patch racks (diagrams P2-175, P2-177, P2-193, P2-233).
+      - name: description
+        kind: Text
+        optional: true
+      - name: length_m
+        label: Length (m)
+        kind: Number
+        optional: true
+        description: Length in whole metres; set by site_physical on fabric cables (diagrams P2-168, P2-231).
+
+extensions:
+  nodes:
+    # OOB access ports: the VLAN of an access port; OOB trunks: the VLANs a port-channel carries (P4A-643)
+    - kind: InterfacePhysical
+      relationships:
+        - name: access_vlan
+          label: Access VLAN
+          peer: FabricL2Vlan
+          identifier: interface__access_vlan
+          kind: Attribute
+          cardinality: one
+          optional: true
+    - kind: InterfacePortChannel
+      relationships:
+        - name: tagged_vlans
+          label: Tagged VLANs
+          peer: FabricL2Vlan
+          identifier: portchannel__tagged_vlan
+          kind: Attribute
+          cardinality: many
+          optional: true

@@ -1,0 +1,22 @@
+query SiteCableSchedule($site: String!) {
+  DcimDevice(location__name__value: $site) {
+    edges { node {
+      name { value }
+      role { value }
+      position { value }
+      rack { node { name { value } } }
+      interfaces { edges { node { id name { value } } } }
+    } }
+  }
+  DcimCable {
+    edges { node {
+      name { value }
+      cable_type { value }
+      length_m { value }
+      connected_endpoints { edges { node { id } } }
+    } }
+  }
+  LocationRack(parent__name__value: $site) {
+    edges { node { name { value } row { value } row_position { value } purpose { value } } }
+  }
+}

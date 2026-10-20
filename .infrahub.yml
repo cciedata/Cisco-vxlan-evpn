@@ -1,0 +1,497 @@
+---
+schemas:
+  - schemas
+
+queries:
+  - name: spine_config
+    file_path: queries/spine_config.gql
+  - name: leaf_config
+    file_path: queries/leaf_config.gql
+  - name: fabric_site
+    file_path: queries/fabric_site.gql
+  - name: loopback_check
+    file_path: queries/loopback_check.gql
+  - name: border_service_leaf_config
+    file_path: queries/border_service_leaf_config.gql
+  - name: l2_pair_config
+    file_path: queries/l2_pair_config.gql
+  - name: fw_config
+    file_path: queries/fw_config.gql
+  # Phase 4 PC3
+  - name: sdwan_fw_config
+    file_path: queries/sdwan_fw_config.gql
+  # Phase 4 PC4
+  - name: vpn_fw_config
+    file_path: queries/vpn_fw_config.gql
+  # Phase 4 PC5
+  - name: isp_router_config
+    file_path: queries/isp_router_config.gql
+  # Phase 4 PC6
+  - name: oob_site
+    file_path: queries/oob_site.gql
+  - name: oob_switch_config
+    file_path: queries/oob_switch_config.gql
+  - name: oob_fw_config
+    file_path: queries/oob_fw_config.gql
+  # Phase 3 (lab)
+  - name: lab_site
+    file_path: queries/lab_site.gql
+  # Phase 4 PC1
+  - name: bgw_config
+    file_path: queries/bgw_config.gql
+  - name: dci_config
+    file_path: queries/dci_config.gql
+  # Phase 4 PC2
+  - name: cloud_router_config
+    file_path: queries/cloud_router_config.gql
+  - name: site_physical
+    file_path: queries/site_physical.gql
+  - name: site_diagrams
+    file_path: queries/site_diagrams.gql
+  - name: site_ports
+    file_path: queries/site_ports.gql
+  - name: site_tables
+    file_path: queries/site_tables.gql
+  - name: site_cable_schedule
+    file_path: queries/site_cable_schedule.gql
+  - name: lab_site_full
+    file_path: queries/lab_site_full.gql
+
+jinja2_transforms:
+  - name: spine_config
+    description: Spine NX-OS config
+    query: spine_config
+    template_path: templates/spine_config.j2
+  - name: leaf_config
+    description: Server leaf NX-OS config
+    query: leaf_config
+    template_path: templates/leaf_config.j2
+  - name: border_service_leaf_config
+    description: Border and service leaf NX-OS config
+    query: border_service_leaf_config
+    template_path: templates/border_service_leaf_config.j2
+  - name: edge_config
+    description: EDGE switch NX-OS config (L2 only)
+    query: l2_pair_config
+    template_path: templates/edge_config.j2
+  - name: dmz_config
+    description: DMZ switch NX-OS config (L2 only)
+    query: l2_pair_config
+    template_path: templates/dmz_config.j2
+  - name: internal_fw_config
+    description: Internal FortiGate FortiOS config (routing only)
+    query: fw_config
+    template_path: templates/internal_fw_config.j2
+  - name: internet_fw_config
+    description: Internet FortiGate FortiOS config (routing only)
+    query: fw_config
+    template_path: templates/internet_fw_config.j2
+  # Phase 4 PC3
+  - name: sdwan_fw_config
+    description: SD-WAN hub FortiGate FortiOS config (routing only, ADVPN 2.0 hub)
+    query: sdwan_fw_config
+    template_path: templates/sdwan_fw_config.j2
+  # Phase 4 PC4
+  - name: vpn_fw_config
+    description: VPN-partner FortiGate FortiOS config (routing only, route-based IKEv2 per partner)
+    query: vpn_fw_config
+    template_path: templates/vpn_fw_config.j2
+  - name: isp_router_config
+    description: ISP router IOS XR config
+    query: isp_router_config
+    template_path: templates/isp_router_config.j2
+  # Phase 4 PC6
+  - name: oob_switch_config
+    description: OOB aggregation and access switch NX-OS config (L2, OOB VLANs)
+    query: oob_switch_config
+    template_path: templates/oob_switch_config.j2
+  - name: oob_fw_config
+    description: OOB FortiGate FortiOS config (zones, policies, routes, IPsec to the other DC, remote access)
+    query: oob_fw_config
+    template_path: templates/oob_fw_config.j2
+  # Phase 3 (lab): stand-in scripts (FRR: FWs and, since 8 Oct, ISP routers) and the XRd variant of the ISP router config
+  - name: internal_fw_lab
+    description: Internal FW lab stand-in (FRR init script)
+    query: fw_config
+    template_path: templates/frr_internal_fw_lab.j2
+  - name: internet_fw_lab
+    description: Internet FW lab stand-in (FRR init script)
+    query: fw_config
+    template_path: templates/frr_internet_fw_lab.j2
+  - name: carrier_lab
+    description: Carrier lab stand-in facing one ISP router (FRR init script)
+    query: isp_router_config
+    template_path: templates/frr_carrier_lab.j2
+  - name: isp_router_lab_config
+    description: ISP router IOS XR config, XRd lab port names
+    query: isp_router_config
+    template_path: templates/isp_router_lab_config.j2
+  - name: isp_router_frr_lab
+    description: ISP router lab stand-in (FRR init script)
+    query: isp_router_config
+    template_path: templates/frr_isp_router_lab.j2
+  # Phase 4 PC1
+  - name: bgw_config
+    description: Border gateway NX-OS config (anycast BGW, EVPN Multi-Site)
+    query: bgw_config
+    template_path: templates/bgw_config.j2
+  - name: dci_config
+    description: DCI switch NX-OS config (routed, inter-site circuits)
+    query: dci_config
+    template_path: templates/dci_config.j2
+  # Phase 4 PC2
+  - name: cloud_router_config
+    description: Cloud router IOS XR config (AWS Direct Connect, Azure ExpressRoute, TRANSIT)
+    query: cloud_router_config
+    template_path: templates/cloud_router_config.j2
+  - name: sdwan_fw_lab
+    description: "SD-WAN hub lab stand-in (FRR init script)"
+    query: sdwan_fw_config
+    template_path: templates/frr_sdwan_fw_lab.j2
+  - name: sdwan_branch_lab
+    description: "SD-WAN branch lab stand-in behind carrier B (FRR init script)"
+    query: sdwan_fw_config
+    template_path: templates/frr_sdwan_branch_lab.j2
+  - name: vpn_fw_lab
+    description: "VPN-partner FW lab stand-in (FRR init script)"
+    query: vpn_fw_config
+    template_path: templates/frr_vpn_fw_lab.j2
+  - name: vpn_partner_lab
+    description: "VPN partner lab stand-in behind carrier A (init script)"
+    query: vpn_fw_config
+    template_path: templates/frr_vpn_partner_lab.j2
+  - name: cloud_router_lab
+    description: "Cloud router lab stand-in (FRR init script)"
+    query: cloud_router_config
+    template_path: templates/frr_cloud_router_lab.j2
+  - name: cloud_exchange_lab
+    description: "Cloud exchange lab stand-in: AWS and Microsoft peers (FRR init script)"
+    query: cloud_router_config
+    template_path: templates/frr_cloud_exchange_lab.j2
+  - name: dci_lab
+    description: "DCI switch lab stand-in for the other site (FRR init script)"
+    query: dci_config
+    template_path: templates/frr_dci_lab.j2
+  - name: bgw_lab
+    description: "BGW lab stand-in for the other site, control plane only (FRR init script)"
+    query: bgw_config
+    template_path: templates/frr_bgw_lab.j2
+
+artifact_definitions:
+  - name: spine_startup_config
+    artifact_name: startup-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-spines
+    transformation: spine_config
+  - name: leaf_startup_config
+    artifact_name: startup-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-server-leaves
+    transformation: leaf_config
+  - name: border_leaf_startup_config
+    artifact_name: startup-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-border-leaves
+    transformation: border_service_leaf_config
+  - name: service_leaf_startup_config
+    artifact_name: startup-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-service-leaves
+    transformation: border_service_leaf_config
+  - name: edge_startup_config
+    artifact_name: startup-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-edge-switches
+    transformation: edge_config
+  - name: dmz_startup_config
+    artifact_name: startup-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-dmz-switches
+    transformation: dmz_config
+  - name: internal_fw_fortios_config
+    artifact_name: fortios-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-internal-fws
+    transformation: internal_fw_config
+  - name: internet_fw_fortios_config
+    artifact_name: fortios-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-internet-fws
+    transformation: internet_fw_config
+  # Phase 4 PC3
+  - name: sdwan_fw_fortios_config
+    artifact_name: fortios-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-sdwan-fws
+    transformation: sdwan_fw_config
+  # Phase 4 PC4
+  - name: vpn_fw_fortios_config
+    artifact_name: fortios-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-vpn-fws
+    transformation: vpn_fw_config
+  - name: isp_router_iosxr_config
+    artifact_name: iosxr-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-isp-routers
+    transformation: isp_router_config
+  # Phase 4 PC6
+  - name: oob_switch_startup_config
+    artifact_name: startup-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: oob-switches
+    transformation: oob_switch_config
+  - name: oob_fw_fortios_config
+    artifact_name: fortios-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: oob-fws
+    transformation: oob_fw_config
+  # Phase 4 PC1
+  - name: bgw_startup_config
+    artifact_name: startup-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-bgws
+    transformation: bgw_config
+  - name: dci_startup_config
+    artifact_name: startup-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-dci-switches
+    transformation: dci_config
+  # Phase 4 PC2
+  - name: cloud_router_iosxr_config
+    artifact_name: iosxr-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-cloud-routers
+    transformation: cloud_router_config
+  # Phase 3 (lab)
+  - name: internal_fw_lab_init
+    artifact_name: frr-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-internal-fws
+    transformation: internal_fw_lab
+  - name: internet_fw_lab_init
+    artifact_name: frr-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-internet-fws
+    transformation: internet_fw_lab
+  - name: carrier_lab_init
+    artifact_name: carrier-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-isp-routers
+    transformation: carrier_lab
+  - name: isp_router_lab_config
+    artifact_name: iosxr-lab-config
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-isp-routers
+    transformation: isp_router_lab_config
+  - name: isp_router_frr_lab_init
+    artifact_name: frr-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-isp-routers
+    transformation: isp_router_frr_lab
+  - name: lab_topology
+    artifact_name: lab-topology
+    parameters:
+      site: name__value
+    content_type: application/yaml
+    targets: fabric-sites
+    transformation: lab_topology
+  - name: lab_expected
+    artifact_name: lab-expected
+    parameters:
+      site: name__value
+    content_type: application/json
+    targets: fabric-sites
+    transformation: lab_expected
+  - name: site_diagrams
+    artifact_name: site-diagrams
+    parameters:
+      site: name__value
+    content_type: application/xml
+    targets: fabric-sites
+    transformation: site_diagrams
+  - name: site_ports
+    artifact_name: site-ports
+    parameters:
+      site: name__value
+    content_type: application/xml
+    targets: fabric-sites
+    transformation: site_ports
+  - name: site_tables
+    artifact_name: site-tables
+    parameters:
+      site: name__value
+    content_type: text/markdown
+    targets: fabric-sites
+    transformation: site_tables
+  - name: site_cable_schedule
+    artifact_name: site-cable-schedule
+    parameters:
+      site: name__value
+    content_type: text/markdown
+    targets: fabric-sites
+    transformation: site_cable_schedule
+  - name: sdwan_fw_lab_init
+    artifact_name: frr-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-sdwan-fws
+    transformation: sdwan_fw_lab
+  - name: sdwan_branch_lab_init
+    artifact_name: branch-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-sdwan-fws
+    transformation: sdwan_branch_lab
+  - name: vpn_fw_lab_init
+    artifact_name: frr-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-vpn-fws
+    transformation: vpn_fw_lab
+  - name: vpn_partner_lab_init
+    artifact_name: partner-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-vpn-fws
+    transformation: vpn_partner_lab
+  - name: cloud_router_lab_init
+    artifact_name: frr-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-cloud-routers
+    transformation: cloud_router_lab
+  - name: cloud_exchange_lab_init
+    artifact_name: cx-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-cloud-routers
+    transformation: cloud_exchange_lab
+  - name: dci_lab_init
+    artifact_name: frr-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-dci-switches
+    transformation: dci_lab
+  - name: bgw_lab_init
+    artifact_name: frr-lab-init
+    parameters:
+      device: name__value
+    content_type: text/plain
+    targets: fabric-bgws
+    transformation: bgw_lab
+  - name: lab_topology_full
+    artifact_name: lab-topology-full
+    parameters:
+      site: name__value
+    content_type: application/yaml
+    targets: fabric-sites
+    transformation: lab_topology_full
+
+generator_definitions:
+  - name: fabric_site
+    file_path: generators/fabric_site.py
+    targets: fabric-sites
+    query: fabric_site
+    class_name: FabricSiteGenerator
+    convert_query_response: false
+    parameters:
+      site: name__value
+  # Phase 4 PC6: OOB devices and cabling (runs after fabric_site: it cables the production management ports)
+  - name: oob_site
+    file_path: generators/oob_site.py
+    targets: oob-sites
+    query: oob_site
+    class_name: OobSiteGenerator
+    convert_query_response: false
+    parameters:
+      site: name__value
+  - name: site_physical
+    file_path: generators/site_physical.py
+    targets: fabric-sites
+    query: site_physical
+    class_name: SitePhysicalGenerator
+    convert_query_response: false
+    parameters:
+      site: name__value
+
+check_definitions:
+  - name: loopback0_check
+    file_path: checks/loopback0_check.py
+    class_name: Loopback0Check
+    targets: fabric-sites
+    parameters:
+      name: name__value
+
+python_transforms:
+  # Phase 3 (lab)
+  - name: lab_topology
+    class_name: LabTopology
+    file_path: transforms/lab.py
+  - name: lab_expected
+    class_name: LabExpected
+    file_path: transforms/lab.py
+  - name: site_diagrams
+    class_name: SiteDiagrams
+    file_path: transforms/site_diagrams.py
+  - name: site_ports
+    class_name: SitePorts
+    file_path: transforms/site_ports.py
+  - name: site_tables
+    class_name: SiteTables
+    file_path: transforms/site_tables.py
+  - name: site_cable_schedule
+    class_name: SiteCableSchedule
+    file_path: transforms/site_cable_schedule.py
+  - name: lab_topology_full
+    class_name: LabTopologyFull
+    file_path: transforms/lab.py

@@ -1,0 +1,16 @@
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: OrganizationProvider
+  data:
+    # Phase 2: the two carriers, same in both sites (ASNs in 06-fabric.yml)
+    - name: ISP-A
+      description: Carrier A; peers with DC1-ISP1 and DC2-ISP1
+    - name: ISP-B
+      description: Carrier B; peers with DC1-ISP2 and DC2-ISP2
+    # Phase 4 PC2: the two clouds (handoff descriptions on the cloud routers start with these names)
+    - name: AWS
+      description: AWS Direct Connect, private VIFs to a Direct Connect Gateway; peers with the cloud routers
+    - name: Microsoft
+      description: Azure ExpressRoute private peering; peers with the cloud routers

@@ -1,0 +1,102 @@
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: OrganizationManufacturer
+  data:
+    - name: Cisco
+    - name: Fortinet
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimPlatform
+  data:
+    - name: Cisco NX-OS
+      manufacturer: Cisco
+    - name: Cisco IOS XR
+      manufacturer: Cisco
+    - name: Fortinet FortiOS
+      manufacturer: Fortinet
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimDeviceType
+  data:
+    - name: N9K-C9364D-GX2A
+      manufacturer: Cisco
+      height: 2
+      part_number: N9K-C9364D-GX2A
+      description: 64 x 400G QSFP-DD, 2RU, 51.2 Tbps
+    - name: N9K-C93180YC-FX3
+      manufacturer: Cisco
+      height: 1
+      part_number: N9K-C93180YC-FX3
+      esi_min_release: "10.6(1)F"
+      description: 48 x 1/10/25G SFP28, 6 x 40/100G QSFP28, 1RU; server leaf
+    - name: N9K-C9332D-GX2B
+      manufacturer: Cisco
+      height: 1
+      part_number: N9K-C9332D-GX2B
+      description: 32 x 400G QSFP-DD, 1RU; border and service leaves, BGWs, edge and DCI switches
+    - name: FG-3800G
+      manufacturer: Fortinet
+      height: 3
+      part_number: FG-3800G
+      description: FortiGate 3800G; 4 x 400G QSFP-DD, 4 x 200G QSFP56, 16 x 50G SFP56, HA and mgmt ports; Internet and Internal FW
+    - name: 8201-24H8FH
+      manufacturer: Cisco
+      height: 1
+      part_number: 8201-24H8FH
+      description: Cisco 8201, 8 x 400G QSFP56-DD + 24 x 100G QSFP28, 1RU, IOS XR; ISP and cloud routers
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimDeviceType
+  data:
+    # Phase 4 PC3 (row 37 B)
+    - name: FG-1800F
+      manufacturer: Fortinet
+      height: 2
+      part_number: FG-1800F
+      description: FortiGate 1800F; 4 x 100G QSFP28 (port37-40), 12 x 25G SFP28, ha1/ha2, mgmt1/mgmt2; SD-WAN and VPN-partner FW
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: OrganizationManufacturer
+  data:
+    # Phase 4 PC6 (row 63 B)
+    - name: Opengear
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimPlatform
+  data:
+    - name: Opengear Operations Manager
+      manufacturer: Opengear
+---
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: DcimDeviceType
+  data:
+    # Phase 4 PC6: OOB (P2-115, P2-117, row 63 B)
+    - name: N9K-C9348GC-FX3
+      manufacturer: Cisco
+      height: 1
+      part_number: N9K-C9348GC-FX3
+      description: 48 x 100M/1G RJ45, 4 x 1/10/25G SFP28, 2 x 40/100G QSFP28, 1RU; OOB access switch
+    - name: FG-120G
+      manufacturer: Fortinet
+      height: 1
+      part_number: FG-120G
+      description: FortiGate 120G; 16 x GE RJ45 (1-16), 8 x GE SFP (17-24), 4 x 10GE SFP+ (X1-X4), MGMT, HA; OOB FW
+    - name: OM2248-10G-L
+      manufacturer: Opengear
+      height: 1
+      part_number: OM2248-10G-L
+      description: Opengear OM2248-10G-L; 48 x RS-232 serial (RJ45), 2 x 10G SFP+, 1 x 1G RJ45, 4G LTE; console server

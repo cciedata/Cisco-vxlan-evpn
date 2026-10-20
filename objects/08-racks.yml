@@ -1,0 +1,1539 @@
+---
+# Racks per site: floor plan P2-120/P2-123 to P2-125, P2-132, power P2-131/P2-133 to P2-136/P2-188, descriptions P2-190.
+# DRAFT in claude-runner/diagrams-work: not loaded.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: LocationRack
+  data:
+    - name: DC1-A01
+      parent: DC1
+      row: "A"
+      row_position: 1
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L1 (vPC pair)"
+    - name: DC1-C01
+      parent: DC1
+      row: "C"
+      row_position: 1
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L11 (single-homed)"
+    - name: DC1-A02
+      parent: DC1
+      row: "A"
+      row_position: 2
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L2 (vPC pair)"
+    - name: DC1-C02
+      parent: DC1
+      row: "C"
+      row_position: 2
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L12 (single-homed)"
+    - name: DC1-A03
+      parent: DC1
+      row: "A"
+      row_position: 3
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L3 (ESI pair)"
+    - name: DC1-C03
+      parent: DC1
+      row: "C"
+      row_position: 3
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L13 (single-homed)"
+    - name: DC1-A04
+      parent: DC1
+      row: "A"
+      row_position: 4
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L4 (ESI pair)"
+    - name: DC1-C04
+      parent: DC1
+      row: "C"
+      row_position: 4
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L14 (single-homed)"
+    - name: DC1-A05
+      parent: DC1
+      row: "A"
+      row_position: 5
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L5 (ESI pair)"
+    - name: DC1-C05
+      parent: DC1
+      row: "C"
+      row_position: 5
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L15 (single-homed)"
+    - name: DC1-A06
+      parent: DC1
+      row: "A"
+      row_position: 6
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L6 (ESI pair)"
+    - name: DC1-C06
+      parent: DC1
+      row: "C"
+      row_position: 6
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L16 (single-homed)"
+    - name: DC1-A07
+      parent: DC1
+      row: "A"
+      row_position: 7
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L7 (ESI pair)"
+    - name: DC1-C07
+      parent: DC1
+      row: "C"
+      row_position: 7
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L17 (single-homed)"
+    - name: DC1-A08
+      parent: DC1
+      row: "A"
+      row_position: 8
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L8 (ESI pair)"
+    - name: DC1-C08
+      parent: DC1
+      row: "C"
+      row_position: 8
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L18 (single-homed)"
+    - name: DC1-A09
+      parent: DC1
+      row: "A"
+      row_position: 9
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L9 (ESI pair)"
+    - name: DC1-C09
+      parent: DC1
+      row: "C"
+      row_position: 9
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L19 (single-homed)"
+    - name: DC1-A10
+      parent: DC1
+      row: "A"
+      row_position: 10
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L10 (ESI pair)"
+    - name: DC1-C10
+      parent: DC1
+      row: "C"
+      row_position: 10
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L20 (single-homed)"
+    - name: DC1-B03
+      parent: DC1
+      row: "B"
+      row_position: 3
+      height: 42
+      purpose: oob
+      power_budget_kw: 3
+      description: "OOB rack A (unit 1 of every OOB pair)"
+    - name: DC1-B04
+      parent: DC1
+      row: "B"
+      row_position: 4
+      height: 42
+      purpose: network
+      power_budget_kw: 25
+      description: "Network rack A (member 1 of every pair)"
+    - name: DC1-B05
+      parent: DC1
+      row: "B"
+      row_position: 5
+      height: 42
+      purpose: patch
+      description: "Patch (MDA), carrier 1 lands here"
+    - name: DC1-B06
+      parent: DC1
+      row: "B"
+      row_position: 6
+      height: 42
+      purpose: patch
+      description: "Patch (MDA)"
+    - name: DC1-B07
+      parent: DC1
+      row: "B"
+      row_position: 7
+      height: 42
+      purpose: patch
+      description: "Patch (MDA), carrier 2 lands here"
+    - name: DC1-B08
+      parent: DC1
+      row: "B"
+      row_position: 8
+      height: 42
+      purpose: network
+      power_budget_kw: 25
+      description: "Network rack B (member 2 of every pair)"
+    - name: DC1-B09
+      parent: DC1
+      row: "B"
+      row_position: 9
+      height: 42
+      purpose: oob
+      power_budget_kw: 3
+      description: "OOB rack B (unit 2 of every OOB pair)"
+    - name: DC1-B10
+      parent: DC1
+      row: "B"
+      row_position: 10
+      height: 42
+      purpose: growth
+      power_budget_kw: 25
+      description: "Growth rack (empty)"
+    - name: DC1-D03
+      parent: DC1
+      row: "D"
+      row_position: 3
+      height: 42
+      purpose: san
+      power_budget_kw: 10
+      description: "SAN rack A1 (fabric A)"
+    - name: DC1-D04
+      parent: DC1
+      row: "D"
+      row_position: 4
+      height: 42
+      purpose: san
+      power_budget_kw: 10
+      description: "SAN rack A2 (fabric A)"
+    - name: DC1-D07
+      parent: DC1
+      row: "D"
+      row_position: 7
+      height: 42
+      purpose: san
+      power_budget_kw: 10
+      description: "SAN rack B1 (fabric B)"
+    - name: DC1-D08
+      parent: DC1
+      row: "D"
+      row_position: 8
+      height: 42
+      purpose: san
+      power_budget_kw: 10
+      description: "SAN rack B2 (fabric B)"
+    - name: DC1-D05
+      parent: DC1
+      row: "D"
+      row_position: 5
+      height: 42
+      purpose: patch
+      description: "SAN patch rack 1"
+    - name: DC1-D06
+      parent: DC1
+      row: "D"
+      row_position: 6
+      height: 42
+      purpose: patch
+      description: "SAN patch rack 2"
+    - name: DC2-A01
+      parent: DC2
+      row: "A"
+      row_position: 1
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L1 (vPC pair)"
+    - name: DC2-C01
+      parent: DC2
+      row: "C"
+      row_position: 1
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L11 (single-homed)"
+    - name: DC2-A02
+      parent: DC2
+      row: "A"
+      row_position: 2
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L2 (vPC pair)"
+    - name: DC2-C02
+      parent: DC2
+      row: "C"
+      row_position: 2
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L12 (single-homed)"
+    - name: DC2-A03
+      parent: DC2
+      row: "A"
+      row_position: 3
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L3 (ESI pair)"
+    - name: DC2-C03
+      parent: DC2
+      row: "C"
+      row_position: 3
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L13 (single-homed)"
+    - name: DC2-A04
+      parent: DC2
+      row: "A"
+      row_position: 4
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L4 (ESI pair)"
+    - name: DC2-C04
+      parent: DC2
+      row: "C"
+      row_position: 4
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L14 (single-homed)"
+    - name: DC2-A05
+      parent: DC2
+      row: "A"
+      row_position: 5
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L5 (ESI pair)"
+    - name: DC2-C05
+      parent: DC2
+      row: "C"
+      row_position: 5
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L15 (single-homed)"
+    - name: DC2-A06
+      parent: DC2
+      row: "A"
+      row_position: 6
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L6 (ESI pair)"
+    - name: DC2-C06
+      parent: DC2
+      row: "C"
+      row_position: 6
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L16 (single-homed)"
+    - name: DC2-A07
+      parent: DC2
+      row: "A"
+      row_position: 7
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L7 (ESI pair)"
+    - name: DC2-C07
+      parent: DC2
+      row: "C"
+      row_position: 7
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L17 (single-homed)"
+    - name: DC2-A08
+      parent: DC2
+      row: "A"
+      row_position: 8
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L8 (ESI pair)"
+    - name: DC2-C08
+      parent: DC2
+      row: "C"
+      row_position: 8
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L18 (single-homed)"
+    - name: DC2-A09
+      parent: DC2
+      row: "A"
+      row_position: 9
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L9 (ESI pair)"
+    - name: DC2-C09
+      parent: DC2
+      row: "C"
+      row_position: 9
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L19 (single-homed)"
+    - name: DC2-A10
+      parent: DC2
+      row: "A"
+      row_position: 10
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L10 (ESI pair)"
+    - name: DC2-C10
+      parent: DC2
+      row: "C"
+      row_position: 10
+      height: 42
+      purpose: server
+      power_budget_kw: 15
+      description: "Server rack, leaf L20 (single-homed)"
+    - name: DC2-B03
+      parent: DC2
+      row: "B"
+      row_position: 3
+      height: 42
+      purpose: oob
+      power_budget_kw: 3
+      description: "OOB rack A (unit 1 of every OOB pair)"
+    - name: DC2-B04
+      parent: DC2
+      row: "B"
+      row_position: 4
+      height: 42
+      purpose: network
+      power_budget_kw: 25
+      description: "Network rack A (member 1 of every pair)"
+    - name: DC2-B05
+      parent: DC2
+      row: "B"
+      row_position: 5
+      height: 42
+      purpose: patch
+      description: "Patch (MDA), carrier 1 lands here"
+    - name: DC2-B06
+      parent: DC2
+      row: "B"
+      row_position: 6
+      height: 42
+      purpose: patch
+      description: "Patch (MDA)"
+    - name: DC2-B07
+      parent: DC2
+      row: "B"
+      row_position: 7
+      height: 42
+      purpose: patch
+      description: "Patch (MDA), carrier 2 lands here"
+    - name: DC2-B08
+      parent: DC2
+      row: "B"
+      row_position: 8
+      height: 42
+      purpose: network
+      power_budget_kw: 25
+      description: "Network rack B (member 2 of every pair)"
+    - name: DC2-B09
+      parent: DC2
+      row: "B"
+      row_position: 9
+      height: 42
+      purpose: oob
+      power_budget_kw: 3
+      description: "OOB rack B (unit 2 of every OOB pair)"
+    - name: DC2-B10
+      parent: DC2
+      row: "B"
+      row_position: 10
+      height: 42
+      purpose: growth
+      power_budget_kw: 25
+      description: "Growth rack (empty)"
+    - name: DC2-D03
+      parent: DC2
+      row: "D"
+      row_position: 3
+      height: 42
+      purpose: san
+      power_budget_kw: 10
+      description: "SAN rack A1 (fabric A)"
+    - name: DC2-D04
+      parent: DC2
+      row: "D"
+      row_position: 4
+      height: 42
+      purpose: san
+      power_budget_kw: 10
+      description: "SAN rack A2 (fabric A)"
+    - name: DC2-D07
+      parent: DC2
+      row: "D"
+      row_position: 7
+      height: 42
+      purpose: san
+      power_budget_kw: 10
+      description: "SAN rack B1 (fabric B)"
+    - name: DC2-D08
+      parent: DC2
+      row: "D"
+      row_position: 8
+      height: 42
+      purpose: san
+      power_budget_kw: 10
+      description: "SAN rack B2 (fabric B)"
+    - name: DC2-D05
+      parent: DC2
+      row: "D"
+      row_position: 5
+      height: 42
+      purpose: patch
+      description: "SAN patch rack 1"
+    - name: DC2-D06
+      parent: DC2
+      row: "D"
+      row_position: 6
+      height: 42
+      purpose: patch
+      description: "SAN patch rack 2"
+---
+# Reserved rack space (P2-118, P2-155, P2-170): elevations P2-126, P2-144, P2-145, P2-146.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: LocationRackReservation
+  data:
+    - name: DC1-B04-U39
+      rack: DC1-B04
+      position: 39
+      height: 4
+      label: "Fiber panels (MPO)"
+    - name: DC1-B04-U37
+      rack: DC1-B04
+      position: 37
+      height: 2
+      label: "Copper panels"
+    - name: DC1-B04-U18
+      rack: DC1-B04
+      position: 18
+      height: 1
+      label: "Cloud router (Phase 4)"
+    - name: DC1-B04-U15
+      rack: DC1-B04
+      position: 15
+      height: 2
+      label: "Load balancer (reserved)"
+    - name: DC1-B04-U12
+      rack: DC1-B04
+      position: 12
+      height: 2
+      label: "VPN-partner FW (Phase 4)"
+    - name: DC1-B04-U9
+      rack: DC1-B04
+      position: 9
+      height: 2
+      label: "SD-WAN FW (Phase 4)"
+    - name: DC1-B08-U39
+      rack: DC1-B08
+      position: 39
+      height: 4
+      label: "Fiber panels (MPO)"
+    - name: DC1-B08-U37
+      rack: DC1-B08
+      position: 37
+      height: 2
+      label: "Copper panels"
+    - name: DC1-B08-U18
+      rack: DC1-B08
+      position: 18
+      height: 1
+      label: "Cloud router (Phase 4)"
+    - name: DC1-B08-U15
+      rack: DC1-B08
+      position: 15
+      height: 2
+      label: "Load balancer (reserved)"
+    - name: DC1-B08-U12
+      rack: DC1-B08
+      position: 12
+      height: 2
+      label: "VPN-partner FW (Phase 4)"
+    - name: DC1-B08-U9
+      rack: DC1-B08
+      position: 9
+      height: 2
+      label: "SD-WAN FW (Phase 4)"
+    - name: DC1-B03-U39
+      rack: DC1-B03
+      position: 39
+      height: 4
+      label: "Copper panels"
+    - name: DC1-B03-U37
+      rack: DC1-B03
+      position: 37
+      height: 2
+      label: "Fiber panels"
+    - name: DC1-B03-U35
+      rack: DC1-B03
+      position: 35
+      height: 1
+      label: "Console server 1"
+    - name: DC1-B03-U33
+      rack: DC1-B03
+      position: 33
+      height: 1
+      label: "OOB access 1"
+    - name: DC1-B03-U31
+      rack: DC1-B03
+      position: 31
+      height: 1
+      label: "OOB aggregation 1"
+    - name: DC1-B03-U29
+      rack: DC1-B03
+      position: 29
+      height: 1
+      label: "OOB FW unit 1"
+    - name: DC1-B09-U39
+      rack: DC1-B09
+      position: 39
+      height: 4
+      label: "Copper panels"
+    - name: DC1-B09-U37
+      rack: DC1-B09
+      position: 37
+      height: 2
+      label: "Fiber panels"
+    - name: DC1-B09-U35
+      rack: DC1-B09
+      position: 35
+      height: 1
+      label: "Console server 2"
+    - name: DC1-B09-U33
+      rack: DC1-B09
+      position: 33
+      height: 1
+      label: "OOB access 2"
+    - name: DC1-B09-U31
+      rack: DC1-B09
+      position: 31
+      height: 1
+      label: "OOB aggregation 2"
+    - name: DC1-B09-U29
+      rack: DC1-B09
+      position: 29
+      height: 1
+      label: "OOB FW unit 2"
+    - name: DC1-A01-U42
+      rack: DC1-A01
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-A01-U40
+      rack: DC1-A01
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-A01-U38
+      rack: DC1-A01
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-A01-U1
+      rack: DC1-A01
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-A02-U42
+      rack: DC1-A02
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-A02-U38
+      rack: DC1-A02
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-A02-U1
+      rack: DC1-A02
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-A03-U42
+      rack: DC1-A03
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-A03-U40
+      rack: DC1-A03
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-A03-U38
+      rack: DC1-A03
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-A03-U1
+      rack: DC1-A03
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-A04-U42
+      rack: DC1-A04
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-A04-U38
+      rack: DC1-A04
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-A04-U1
+      rack: DC1-A04
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-A05-U42
+      rack: DC1-A05
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-A05-U40
+      rack: DC1-A05
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-A05-U38
+      rack: DC1-A05
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-A05-U1
+      rack: DC1-A05
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-A06-U42
+      rack: DC1-A06
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-A06-U38
+      rack: DC1-A06
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-A06-U1
+      rack: DC1-A06
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-A07-U42
+      rack: DC1-A07
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-A07-U40
+      rack: DC1-A07
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-A07-U38
+      rack: DC1-A07
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-A07-U1
+      rack: DC1-A07
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-A08-U42
+      rack: DC1-A08
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-A08-U38
+      rack: DC1-A08
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-A08-U1
+      rack: DC1-A08
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-A09-U42
+      rack: DC1-A09
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-A09-U40
+      rack: DC1-A09
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-A09-U38
+      rack: DC1-A09
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-A09-U1
+      rack: DC1-A09
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-A10-U42
+      rack: DC1-A10
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-A10-U38
+      rack: DC1-A10
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-A10-U1
+      rack: DC1-A10
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-C01-U42
+      rack: DC1-C01
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-C01-U40
+      rack: DC1-C01
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-C01-U38
+      rack: DC1-C01
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-C01-U1
+      rack: DC1-C01
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-C02-U42
+      rack: DC1-C02
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-C02-U40
+      rack: DC1-C02
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-C02-U38
+      rack: DC1-C02
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-C02-U1
+      rack: DC1-C02
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-C03-U42
+      rack: DC1-C03
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-C03-U40
+      rack: DC1-C03
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-C03-U38
+      rack: DC1-C03
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-C03-U1
+      rack: DC1-C03
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-C04-U42
+      rack: DC1-C04
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-C04-U40
+      rack: DC1-C04
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-C04-U38
+      rack: DC1-C04
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-C04-U1
+      rack: DC1-C04
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-C05-U42
+      rack: DC1-C05
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-C05-U40
+      rack: DC1-C05
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-C05-U38
+      rack: DC1-C05
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-C05-U1
+      rack: DC1-C05
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-C06-U42
+      rack: DC1-C06
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-C06-U40
+      rack: DC1-C06
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-C06-U38
+      rack: DC1-C06
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-C06-U1
+      rack: DC1-C06
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-C07-U42
+      rack: DC1-C07
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-C07-U40
+      rack: DC1-C07
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-C07-U38
+      rack: DC1-C07
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-C07-U1
+      rack: DC1-C07
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-C08-U42
+      rack: DC1-C08
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-C08-U40
+      rack: DC1-C08
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-C08-U38
+      rack: DC1-C08
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-C08-U1
+      rack: DC1-C08
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-C09-U42
+      rack: DC1-C09
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-C09-U40
+      rack: DC1-C09
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-C09-U38
+      rack: DC1-C09
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-C09-U1
+      rack: DC1-C09
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC1-C10-U42
+      rack: DC1-C10
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC1-C10-U40
+      rack: DC1-C10
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC1-C10-U38
+      rack: DC1-C10
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC1-C10-U1
+      rack: DC1-C10
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-B04-U39
+      rack: DC2-B04
+      position: 39
+      height: 4
+      label: "Fiber panels (MPO)"
+    - name: DC2-B04-U37
+      rack: DC2-B04
+      position: 37
+      height: 2
+      label: "Copper panels"
+    - name: DC2-B04-U18
+      rack: DC2-B04
+      position: 18
+      height: 1
+      label: "Cloud router (Phase 4)"
+    - name: DC2-B04-U15
+      rack: DC2-B04
+      position: 15
+      height: 2
+      label: "Load balancer (reserved)"
+    - name: DC2-B04-U12
+      rack: DC2-B04
+      position: 12
+      height: 2
+      label: "VPN-partner FW (Phase 4)"
+    - name: DC2-B04-U9
+      rack: DC2-B04
+      position: 9
+      height: 2
+      label: "SD-WAN FW (Phase 4)"
+    - name: DC2-B08-U39
+      rack: DC2-B08
+      position: 39
+      height: 4
+      label: "Fiber panels (MPO)"
+    - name: DC2-B08-U37
+      rack: DC2-B08
+      position: 37
+      height: 2
+      label: "Copper panels"
+    - name: DC2-B08-U18
+      rack: DC2-B08
+      position: 18
+      height: 1
+      label: "Cloud router (Phase 4)"
+    - name: DC2-B08-U15
+      rack: DC2-B08
+      position: 15
+      height: 2
+      label: "Load balancer (reserved)"
+    - name: DC2-B08-U12
+      rack: DC2-B08
+      position: 12
+      height: 2
+      label: "VPN-partner FW (Phase 4)"
+    - name: DC2-B08-U9
+      rack: DC2-B08
+      position: 9
+      height: 2
+      label: "SD-WAN FW (Phase 4)"
+    - name: DC2-B03-U39
+      rack: DC2-B03
+      position: 39
+      height: 4
+      label: "Copper panels"
+    - name: DC2-B03-U37
+      rack: DC2-B03
+      position: 37
+      height: 2
+      label: "Fiber panels"
+    - name: DC2-B03-U35
+      rack: DC2-B03
+      position: 35
+      height: 1
+      label: "Console server 1"
+    - name: DC2-B03-U33
+      rack: DC2-B03
+      position: 33
+      height: 1
+      label: "OOB access 1"
+    - name: DC2-B03-U31
+      rack: DC2-B03
+      position: 31
+      height: 1
+      label: "OOB aggregation 1"
+    - name: DC2-B03-U29
+      rack: DC2-B03
+      position: 29
+      height: 1
+      label: "OOB FW unit 1"
+    - name: DC2-B09-U39
+      rack: DC2-B09
+      position: 39
+      height: 4
+      label: "Copper panels"
+    - name: DC2-B09-U37
+      rack: DC2-B09
+      position: 37
+      height: 2
+      label: "Fiber panels"
+    - name: DC2-B09-U35
+      rack: DC2-B09
+      position: 35
+      height: 1
+      label: "Console server 2"
+    - name: DC2-B09-U33
+      rack: DC2-B09
+      position: 33
+      height: 1
+      label: "OOB access 2"
+    - name: DC2-B09-U31
+      rack: DC2-B09
+      position: 31
+      height: 1
+      label: "OOB aggregation 2"
+    - name: DC2-B09-U29
+      rack: DC2-B09
+      position: 29
+      height: 1
+      label: "OOB FW unit 2"
+    - name: DC2-A01-U42
+      rack: DC2-A01
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-A01-U40
+      rack: DC2-A01
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-A01-U38
+      rack: DC2-A01
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-A01-U1
+      rack: DC2-A01
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-A02-U42
+      rack: DC2-A02
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-A02-U38
+      rack: DC2-A02
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-A02-U1
+      rack: DC2-A02
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-A03-U42
+      rack: DC2-A03
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-A03-U40
+      rack: DC2-A03
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-A03-U38
+      rack: DC2-A03
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-A03-U1
+      rack: DC2-A03
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-A04-U42
+      rack: DC2-A04
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-A04-U38
+      rack: DC2-A04
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-A04-U1
+      rack: DC2-A04
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-A05-U42
+      rack: DC2-A05
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-A05-U40
+      rack: DC2-A05
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-A05-U38
+      rack: DC2-A05
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-A05-U1
+      rack: DC2-A05
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-A06-U42
+      rack: DC2-A06
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-A06-U38
+      rack: DC2-A06
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-A06-U1
+      rack: DC2-A06
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-A07-U42
+      rack: DC2-A07
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-A07-U40
+      rack: DC2-A07
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-A07-U38
+      rack: DC2-A07
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-A07-U1
+      rack: DC2-A07
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-A08-U42
+      rack: DC2-A08
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-A08-U38
+      rack: DC2-A08
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-A08-U1
+      rack: DC2-A08
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-A09-U42
+      rack: DC2-A09
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-A09-U40
+      rack: DC2-A09
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-A09-U38
+      rack: DC2-A09
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-A09-U1
+      rack: DC2-A09
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-A10-U42
+      rack: DC2-A10
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-A10-U38
+      rack: DC2-A10
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-A10-U1
+      rack: DC2-A10
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-C01-U42
+      rack: DC2-C01
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-C01-U40
+      rack: DC2-C01
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-C01-U38
+      rack: DC2-C01
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-C01-U1
+      rack: DC2-C01
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-C02-U42
+      rack: DC2-C02
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-C02-U40
+      rack: DC2-C02
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-C02-U38
+      rack: DC2-C02
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-C02-U1
+      rack: DC2-C02
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-C03-U42
+      rack: DC2-C03
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-C03-U40
+      rack: DC2-C03
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-C03-U38
+      rack: DC2-C03
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-C03-U1
+      rack: DC2-C03
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-C04-U42
+      rack: DC2-C04
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-C04-U40
+      rack: DC2-C04
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-C04-U38
+      rack: DC2-C04
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-C04-U1
+      rack: DC2-C04
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-C05-U42
+      rack: DC2-C05
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-C05-U40
+      rack: DC2-C05
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-C05-U38
+      rack: DC2-C05
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-C05-U1
+      rack: DC2-C05
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-C06-U42
+      rack: DC2-C06
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-C06-U40
+      rack: DC2-C06
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-C06-U38
+      rack: DC2-C06
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-C06-U1
+      rack: DC2-C06
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-C07-U42
+      rack: DC2-C07
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-C07-U40
+      rack: DC2-C07
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-C07-U38
+      rack: DC2-C07
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-C07-U1
+      rack: DC2-C07
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-C08-U42
+      rack: DC2-C08
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-C08-U40
+      rack: DC2-C08
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-C08-U38
+      rack: DC2-C08
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-C08-U1
+      rack: DC2-C08
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-C09-U42
+      rack: DC2-C09
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-C09-U40
+      rack: DC2-C09
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-C09-U38
+      rack: DC2-C09
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-C09-U1
+      rack: DC2-C09
+      position: 1
+      height: 37
+      label: "Servers"
+    - name: DC2-C10-U42
+      rack: DC2-C10
+      position: 42
+      height: 1
+      label: "Patch panel"
+    - name: DC2-C10-U40
+      rack: DC2-C10
+      position: 40
+      height: 1
+      label: "BMC switch"
+    - name: DC2-C10-U38
+      rack: DC2-C10
+      position: 38
+      height: 2
+      label: "SAN edge A+B (reserved)"
+    - name: DC2-C10-U1
+      rack: DC2-C10
+      position: 1
+      height: 37
+      label: "Servers"

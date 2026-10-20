@@ -1,0 +1,22 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install pyyaml yamllint pytest
+      - name: YAML lint (schema, objects, .infrahub.yml)
+        run: yamllint -c .yamllint.yml .infrahub.yml schemas objects
+      - name: Python syntax
+        run: python -m compileall -q generators transforms checks scripts lab ztp
+      - name: Repository consistency (no Infrahub, no Docker)
+        run: python -m pytest -q tests/test_repo_consistency.py

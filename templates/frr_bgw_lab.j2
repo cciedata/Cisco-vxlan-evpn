@@ -1,0 +1,79 @@
+{# Option 5 (D5-24, D5-35): lab stand-in for a border gateway of the other site, control plane only, as one POSIX shell script
+   run in an FRR container. Same query as bgw_config.j2: loopbacks 0/1/2, the routed link to its DCI (eBGP IPv4, the loopbacks
+   advertised, as the BGW's "redistribute direct" toward the DCI), and eBGP l2vpn evpn multihop from loopback0 to every BGW of
+   the other sites (the Multi-Site overlay). No VXLAN data plane: the EVPN sessions come up, no VNI is configured.
+   Containerlab port names: Ethernet1/<n> -> eth<n>. #}
+{% set bgp_password = "cisco123" -%}
+{% set mtu = 9216 -%}
+{% set ebgp_multihop = 64 -%}
+{% set seq_step = 10 -%}
+{% macro lx(n) %}{% if n.startswith("Ethernet1/") %}eth{{ n.split("/")[1] }}{% else %}{{ n }}{% endif %}{% endmacro -%}
+{# Values from the graph #}
+{% set device = data.DcimDevice.edges[0].node -%}
+{% set name = device.name.value -%}
+{% set site_name = device.location.node.name.value -%}
+{% set asn = device.asn.node.asn.value -%}
+{% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
+{% set loops = interfaces | selectattr("name.value", "in", ["loopback0", "loopback1", "loopback2"]) | selectattr("ip_addresses", "defined") | list | sort(attribute="name.value") -%}
+{% set loops = loops | selectattr("ip_addresses.edges") | list -%}{# the Multi-Site VIP (loopback2) has an address on unit 1 only #}
+{% set lo0 = loops | selectattr("name.value", "equalto", "loopback0") | list | first -%}
+{% set router_id = lo0.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
+{% set dcis = data.Dcis.edges | map(attribute="node") | list -%}
+{% set dci_links = namespace(items=[]) -%}
+{% for i in interfaces | sort(attribute="name.value") %}{% set fname = (i.description.value or "").split(" ")[0] %}{% set fdev = dcis | selectattr("name.value", "equalto", fname) | list | first %}{% if fdev is defined and fdev and i.ip_addresses is defined and i.ip_addresses.edges %}{% set a = i.ip_addresses.edges[0].node.address.value %}{% set o = (a | ipaddress_interface("ip") | string).split(".") %}{% set far = o[:3] | join(".") ~ "." ~ ((o[3] | int) + (1 if (o[3] | int) % 2 == 0 else -1)) %}{% set dci_links.items = dci_links.items + [(i, a, far, fname, fdev.asn.node.asn.value)] %}{% endif %}{% endfor -%}
+{% set remote = namespace(items=[]) -%}
+{% for b in data.Bgws.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% if b.location.node.name.value != site_name %}{% for i in b.interfaces.edges | map(attribute="node") | list %}{% if i.name.value == "loopback0" and i.ip_addresses is defined and i.ip_addresses.edges %}{% set remote.items = remote.items + [(b.name.value, i.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") | string, b.asn.node.asn.value)] %}{% endif %}{% endfor %}{% endif %}{% endfor -%}
+#!/bin/sh
+# {{ name }}: lab stand-in for the border gateway (FRR in a Linux container), used as the other site's BGW: control plane only.
+# Rendered by Infrahub, do not edit.
+set -eu
+sysctl -qw net.ipv4.ip_forward=1
+ip route del default dev eth0 2>/dev/null || true
+{% for l in loops %}
+ip addr replace {{ l.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }}/32 dev lo
+{% endfor %}
+{% for i, a, far, fname, fasn in dci_links.items %}
+if [ -e /sys/class/net/{{ lx(i.name.value) }} ]; then ip link set {{ lx(i.name.value) }} mtu {{ mtu }}; ip addr replace {{ a }} dev {{ lx(i.name.value) }}; ip link set {{ lx(i.name.value) }} up; fi
+{% endfor %}
+pgrep -x bgpd >/dev/null || /usr/lib/frr/bgpd -d -A 127.0.0.1
+sleep 2
+cat > /etc/frr/frr.conf <<'FRREOF'
+hostname {{ name }}
+service integrated-vtysh-config
+!
+{% for l in loops %}
+ip prefix-list PL-LOOPBACKS seq {{ loop.index * seq_step }} permit {{ l.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }}/32
+{% endfor %}
+route-map RM-UNDERLAY-TO-DCI permit {{ seq_step }}
+ match ip address prefix-list PL-LOOPBACKS
+!
+router bgp {{ asn }}
+ bgp router-id {{ router_id }}
+ no bgp ebgp-requires-policy
+{% for i, a, far, fname, fasn in dci_links.items %}
+ neighbor {{ far }} remote-as {{ fasn }}
+ neighbor {{ far }} description {{ fname }}
+ neighbor {{ far }} password {{ bgp_password }}
+{% endfor %}
+{% for rname, rip, rasn in remote.items %}
+ neighbor {{ rip }} remote-as {{ rasn }}
+ neighbor {{ rip }} description {{ rname }}
+ neighbor {{ rip }} password {{ bgp_password }}
+ neighbor {{ rip }} update-source {{ router_id }}
+ neighbor {{ rip }} ebgp-multihop {{ ebgp_multihop }}
+{% endfor %}
+ address-family ipv4 unicast
+  redistribute connected route-map RM-UNDERLAY-TO-DCI
+{% for rname, rip, rasn in remote.items %}
+  no neighbor {{ rip }} activate
+{% endfor %}
+ exit-address-family
+ address-family l2vpn evpn
+{% for rname, rip, rasn in remote.items %}
+  neighbor {{ rip }} activate
+{% endfor %}
+ exit-address-family
+exit
+FRREOF
+vtysh -f /etc/frr/frr.conf
+echo "{{ name }} stand-in ready"
