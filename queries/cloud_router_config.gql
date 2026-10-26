@@ -1,4 +1,4 @@
-# Phase 4 PC2: cloud routers (Cisco 8201-24H8FH, IOS XR)
+# Cloud routers (model and OS: FabricDesign cloud_router_device_type / cloud_router_platform)
 query CloudRouterConfig($device: String!) {
   DcimDevice(name__value: $device) {
     count
@@ -31,7 +31,6 @@ query CloudRouterConfig($device: String!) {
               mtu { value }
               ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
               ... on InterfacePortChannel { members { edges { node { name { value } } } } }
-              ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
             }
           }
         }
@@ -49,6 +48,30 @@ query CloudRouterConfig($device: String!) {
         prefix { node { prefix { value } } }
         vrf { node { name { value } } }
         switch_pair { node { name { value } members { edges { node { name { value } asn { node { asn { value } } } } } } } }
+      }
+    }
+  }
+  # Design values (FabricDesign) read by cloud_router_config.j2, frr_cloud_router_lab.j2, frr_cloud_exchange_lab.j2
+  FabricDesign {
+    count
+    edges {
+      node {
+        attachment_bgp_bfd { value } attachment_leaf_hosts { value } aws_bgp_password { value } aws_peer_host { value }
+        azure_bgp_password { value } bfd_echo { value } bfd_interval_ms { value } bfd_min_rx_ms { value }
+        bfd_multiplier { value } cloud_accept_default_from_fabric { value } cloud_advertise_default { value }
+        cloud_advertise_partner_summaries { value } cloud_advertise_tenant_summary { value } cloud_aws_block { value }
+        cloud_aws_provider { value } cloud_azure_block { value } cloud_azure_provider { value } cloud_backup_site { value }
+        cloud_bfd_interval_ms { value } cloud_bfd_multiplier { value } cloud_bgp_bfd { value }
+        cloud_from_fabric_max_length { value } cloud_max_prefix { value } cloud_max_prefix_action { value }
+        cloud_max_prefix_threshold_pct { value } cloud_prefix_max_length { value } cloud_prepend_count { value }
+        cloud_prepend_default { value } cloud_prepend_max_length { value } cloud_router_bgp_graceful_restart { value }
+        cloud_router_pair_bgp_bfd { value } cloud_router_pair_next_hop_self { value } cloud_tenant_summary_mode { value }
+        dc1_attachment_bgp_password { value } dc1_cloud_pair_bgp_password { value } dc1_tenant_block { value }
+        dc2_attachment_bgp_password { value } dc2_cloud_pair_bgp_password { value } dc2_tenant_block { value }
+        er_provider_host { value } external_guardrail_max_length { value } external_guardrail_prefixes { value }
+        lab_aws_test_prefix { value } lab_azure_test_prefix { value } lacp_mode { value } mgmt_vrf { value }
+        mtu_cloud_exchange { value } oob_gateway_host { value } partner_vrf { value } route_policy_seq_step { value }
+    cloud_backup_advertise_other_dc { value }
       }
     }
   }

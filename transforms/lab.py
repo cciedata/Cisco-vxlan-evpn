@@ -1,4 +1,4 @@
-"""Phase 3 lab artifacts for one site, both built from query lab_site (P3-45, P3-48).
+"""Lab artifacts for one site, both built from query lab_site.
 
 LabTopology  -> containerlab topology (YAML): the lab path nodes, every link between them found in Infrahub, plus the
                 lab-only stand-ins (carriers, test hosts).
@@ -6,7 +6,7 @@ LabExpected  -> post-check expectations (JSON): every BGP session on the lab nod
                 VRF, and the end-to-end pings. Nothing is typed by hand: sessions come from the attachments, loopbacks,
                 links and carrier /30s, as in the configs.
 
-Lab-only values below are Phase 3 decisions (claude/phase3-decisions.md, P3-30 .. P3-75).
+The lab-only values below are set here, not in Infrahub.
 """
 import ipaddress
 import json
@@ -14,26 +14,40 @@ import re
 
 from infrahub_sdk.transforms import InfrahubTransform
 
-# ---------------------------------------------------------------- approved constants (Phase 3)
-LAB_NODES = ("L11", "S1", "S2", "SL1", "SL2", "BL1", "BL2", "EDGE1", "EDGE2", "INTFW1", "INETFW1", "ISP1", "ISP2")  # P3-30..P3-37
-NXOS_ROLES = {"leaf", "spine", "border_leaf", "service_leaf", "edge", "dmz"}
-FW_ROLES = {"internal_fw", "internet_fw"}
-VTEP_ROLES = {"leaf", "border_leaf", "service_leaf"}
-N9KV_IMAGE = "vrnetlab/cisco_n9kv:10.6.4.M-lite"        # P3-36 / P3-71: NX-OS 10.6(4)M lite, built with vrnetlab
-N9KV_ENV = {"QEMU_MEMORY": 8192, "QEMU_SMP": 3, "CLAB_MGMT_PASSTHROUGH": '"true"', "SCRAPLI_TIMEOUT": 3600}  # P3-36 (8 GB); P3-72 (3 vCPU); L-14: guest mgmt0 = container mgmt IP; 8 Oct: vrnetlab boot wait 3600 s
-XRD_IMAGE = "ios-xr/xrd-control-plane:25.2.1"            # P3-37 / P3-71: IOS XRd Control Plane 25.2.1
+# ---------------------------------------------------------------- lab constants
+LAB_NODES = ("L11", "L12", "S1", "S2", "SL1", "SL2", "BL1", "BL2", "EDGE1", "EDGE2", "INTFW1", "INETFW1", "ISP1", "ISP2")
+# Role sets, VTEP roles, host indexes, VRF ids: design values read from Infrahub at the start of every transform (configure()).
+N9KV_IMAGE = "vrnetlab/cisco_n9kv:10.6.4.M-lite"        # NX-OS 10.6(4)M lite, built with vrnetlab
+N9KV_ENV = {"QEMU_MEMORY": 8192, "QEMU_SMP": 3, "CLAB_MGMT_PASSTHROUGH": '"true"', "SCRAPLI_TIMEOUT": 3600}  # 8 GB, 3 vCPU; guest mgmt0 = container mgmt IP; vrnetlab boot wait 3600 s
+XRD_IMAGE = "ios-xr/xrd-control-plane:25.2.1"            # IOS XRd Control Plane 25.2.1
 ISP_LAB_STANDIN = "frr"                                  # I-04 (8 Oct): ISP routers in the lab: "frr" (stand-in, frr-lab-init) or "xrd"
-FRR_IMAGE = "quay.io/frrouting/frr:10.6.0"               # P3-73
-HOST_IMAGE = "alpine:3.22"                               # P3-42
-LAB_NAME = "vamd-{site}-p3"                              # P3-74
+FRR_IMAGE = "quay.io/frrouting/frr:10.6.0"
+HOST_IMAGE = "alpine:3.22"
+LAB_NAME = "vamd-{site}-p3"
 MGMT_NETWORK = "vamd-{site}-mgmt"
-LAB_MGMT_HOST = {"ISP-A": 240, "ISP-B": 241, "HOST-PROD": 245, "HOST-ISP-A": 246, "HOST-ISP-B": 247}  # P3-75: top of the mgmt /24
-CARRIER_HOST_NET = {"ISP-A": "198.18.1.0/24", "ISP-B": "198.18.2.0/24"}   # P3-69 (corrects P3-41)
-HOST_ADDR, HOST_GW = 10, 1                               # P3-40: host .10, gateway .1
-FW_VRF_ID = {"TRANSIT": 1, "PROD": 10, "DEV": 11, "DC2-PROD": 12, "DC2-DEV": 13, "CITRIX": 15, "PARTNER": 16}  # FortiOS (PC3)
-INETFW_TABLE_VRF = 1
-FW_HOST, EDGE_FW_HOST = 3, 10
-XRD_PORT_FROM = "FourHundredGigE0/0/0/"                  # P3-70: FH0/0/0/<2k> -> Gi0/0/0/<k>
+LAB_MGMT_HOST = {"ISP-A": 240, "ISP-B": 241, "HOST-PROD": 245, "HOST-ISP-A": 246, "HOST-ISP-B": 247,
+                 "HOST-PROD2": 238, "HOST-PROD3": 239}  # top of the mgmt /24; extra hosts grow downward
+CARRIER_HOST_NET = {"ISP-A": "198.18.1.0/24", "ISP-B": "198.18.2.0/24"}
+HOST_ADDR, HOST_GW = 10, 1                               # host .10, carrier-side gateway .1 (the segment gateway is FabricDesign)
+
+
+def prod_hosts(access):
+    """One test host per access port - its own node name, mgmt address and in-segment address.
+
+    Two access ports can share a segment (L11 and L12 both carry VLAN 1010), which is the point: hosts in one
+    subnet on different leaves prove EVPN bridging between leaves. They cannot share an address, so the
+    n-th host of a segment takes HOST_ADDR + n.
+    """
+    seen, out = {}, []
+    for idx, (dev, ifname, seg) in enumerate(access):
+        prefix = seg["prefix"]["node"]["prefix"]["value"]
+        n = seen.get(prefix, 0)
+        seen[prefix] = n + 1
+        key = "HOST-PROD" if idx == 0 else f"HOST-PROD{idx + 1}"
+        out.append({"key": key, "dev": dev, "ifname": ifname, "seg": seg,
+                    "prefix": prefix, "addr_host": HOST_ADDR + n})
+    return out
+XRD_PORT_FROM = "FourHundredGigE0/0/0/"                  # FH0/0/0/<2k> -> Gi0/0/0/<k>
 
 
 def v(node, *path):
@@ -42,8 +56,67 @@ def v(node, *path):
     return node
 
 
+# ---------------------------------------------------------------- design values (FabricDesign)
+PLATFORM_ROLES = ("spine", "leaf", "border_leaf", "service_leaf", "bgw", "dci", "edge", "dmz",
+                  "internal_fw", "internet_fw", "sdwan_fw", "vpn_fw", "isp_router", "cloud_router")   # roles with a <role>_platform field
+NXOS, FORTIOS, IOSXR = "Cisco NX-OS", "Fortinet FortiOS", "Cisco IOS XR"                          # DcimPlatform names (identifiers)
+LAB_SITE_FIELDS = ("vtep_roles", "segment_gateway_host", "attachment_device_host", "edge_vlan_hosts", "p2p_link_prefix_length",
+                   "attachment_leaf_hosts", "transit_vrf")
+LAB_SITE_FULL_FIELDS = ("segment_gateway_host", "p2p_link_prefix_length")
+# lab_expected: BFD flags per session type, carrier-side host, ISP edge sub-interface parts; lab_topology_full: FW HA priority
+LAB_EXPECTED_FIELDS = ("overlay_bgp_bfd", "attachment_bgp_bfd", "carrier_side_host", "isp_bundle_id", "edge_vlan")
+LAB_FULL_STANDBY_FIELDS = ("fw_ha_priority",)
+DESIGN: dict = {}            # filled by configure() at the start of every transform(): field values plus the derived role sets
+
+
+def design_node(data: dict) -> dict:
+    fd = data.get("FabricDesign") or {}
+    edges = fd.get("edges") or []
+    if fd.get("count") != 1 or len(edges) != 1:
+        raise ValueError(f"FabricDesign: expected exactly 1 object, found {fd.get('count', len(edges))}; fix it in Infrahub "
+                         "(and check that the query asks for FabricDesign)")
+    return edges[0]["node"]
+
+
+def need(design: dict, field: str):
+    value = (design.get(field) or {}).get("value")
+    if value is None:
+        raise ValueError(f"FabricDesign.{field} is empty; fix it in Infrahub")
+    return value
+
+
+def configure(data: dict, fields) -> None:
+    """Read the FabricDesign fields this transform uses; derive the role sets from the role -> platform fields."""
+    d = design_node(data)
+    DESIGN.clear()
+    DESIGN.update({f: need(d, f) for f in fields})
+    platform = {r: need(d, f"{r}_platform") for r in PLATFORM_ROLES}
+    DESIGN["nxos_roles"] = {r for r, p in platform.items() if p == NXOS}
+    DESIGN["fw_roles"] = {r for r, p in platform.items() if p == FORTIOS}
+    DESIGN["xr_roles"] = {r for r, p in platform.items() if p == IOSXR}
+
+
 def natural(s):
     return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", str(s))]
+
+
+def isp_edge_subif(lab, isp: str) -> str:
+    """The ISP router's edge-VLAN sub-interface Bundle-Ether<isp_bundle_id>.<edge_vlan> (generators/fabric_site.py naming)."""
+    name = f"Bundle-Ether{DESIGN['isp_bundle_id']}.{DESIGN['edge_vlan']}"
+    if name not in lab.devices[isp]["ifs"]:
+        raise ValueError(f"{isp}: no edge sub-interface {name} (FabricDesign isp_bundle_id, edge_vlan)")
+    return name
+
+
+def fw_standby(role: str, name: str) -> bool:
+    """A/P FortiGate pair: the unit with the lower FabricDesign.fw_ha_priority runs as standby (unit = trailing number)."""
+    if role not in DESIGN["fw_roles"]:
+        return False
+    prio = {int(k): p for k, p in DESIGN["fw_ha_priority"].items()}
+    m = re.search(r"(\d+)$", name)
+    if not m or int(m.group(1)) not in prio:
+        raise ValueError(f"{name}: no FabricDesign.fw_ha_priority entry for its unit number")
+    return prio[int(m.group(1))] < max(prio.values())
 
 
 class LabData:
@@ -56,7 +129,8 @@ class LabData:
         s = sites[0]["node"]
         self.site = s["name"]["value"]
         self.fabric_asn = v(s, "fabric_asn", "node", "asn", "value")
-        self.owned = [e["node"]["prefix"]["value"] for e in s["owned_prefixes"]["edges"]]
+        self.owned = [(e["node"]["prefix"]["value"], v(e["node"], "role", "value")) for e in s["owned_prefixes"]["edges"]]
+        self.vrf_id = {ve["node"]["name"]["value"]: v(ve["node"], "fortios_vrf_id", "value") for ve in s["vrfs"]["edges"]}
         self.summaries = []          # (vrf, prefix) for this site, same rule as the service leaf and the firewalls
         for ve in sorted(s["vrfs"]["edges"], key=lambda e: e["node"]["name"]["value"]):
             vrf = ve["node"]
@@ -123,19 +197,24 @@ class LabData:
                     out.append((name, ifname, i["segment"]))
         return out
 
-    def public(self, plen):
-        """The site's public block of one length: an owned prefix outside 10.0.0.0/8, /27 or shorter (the rule in
-        internet_fw_config.j2). Not ipaddress.is_private: it counts the documentation ranges (198.51.100.0/24) as private."""
-        for p in self.owned:
-            n = ipaddress.ip_network(p)
-            if not p.startswith("10.") and n.prefixlen <= 27 and n.prefixlen == plen:
-                return str(n)
+    def public(self, role):
+        """The site's owned prefix with this IpamPrefix role (public_block, public_nat_pool, public_services)."""
+        for p, r in self.owned:
+            if r == role:
+                return str(ipaddress.ip_network(p))
         return None
+
+    def fw_vrf(self, vrf):
+        """FortiOS VRF id of a VRF (FabricVRF.fortios_vrf_id)."""
+        vid = self.vrf_id.get(vrf)
+        if vid is None:
+            raise ValueError(f"FabricVRF {vrf}: fortios_vrf_id is empty or the VRF is not in the site; fix it in Infrahub")
+        return vid
 
 
 def endpoint(lab: LabData, device: str, ifname: str) -> str:
     role = lab.role(device)
-    if role in NXOS_ROLES:
+    if role in DESIGN["nxos_roles"]:
         m = re.fullmatch(r"Ethernet1/(\d+)", ifname)
         if not m:
             raise ValueError(f"{device} {ifname}: no containerlab name rule")
@@ -144,8 +223,8 @@ def endpoint(lab: LabData, device: str, ifname: str) -> str:
         if not ifname.startswith(XRD_PORT_FROM):
             raise ValueError(f"{device} {ifname}: no XRd name rule")
         return f"{device}:Gi0-0-0-{int(ifname.rsplit('/', 1)[1]) // 2}"
-    if role in FW_ROLES:
-        return f"{device}:{ifname}"          # FortiOS port names are the Linux interface names (P3-62)
+    if role in DESIGN["fw_roles"]:
+        return f"{device}:{ifname}"          # FortiOS port names are the Linux interface names
     raise ValueError(f"{device}: role {role} has no endpoint rule")
 
 
@@ -161,7 +240,7 @@ def build_links(lab: LabData) -> list[tuple[str, str]]:
                 continue
             for a in i["addrs"]:
                 net = ipaddress.ip_interface(a).network
-                if net.prefixlen == 31:
+                if net.prefixlen == DESIGN["p2p_link_prefix_length"]:
                     by_net.setdefault(net, []).append((name, ifname))
     for net, ends in by_net.items():
         if len(ends) == 2 and ends[0][0] != ends[1][0]:
@@ -188,6 +267,7 @@ class LabTopology(InfrahubTransform):
     query = "lab_site"
 
     async def transform(self, data: dict) -> str:
+        configure(data, LAB_SITE_FIELDS)
         lab = LabData(data)
         site = lab.site
         mgmt_net = None
@@ -208,7 +288,7 @@ class LabTopology(InfrahubTransform):
             if ip in used:
                 raise ValueError(f"lab management address {ip} for {key} is already {used[ip]}'s")
 
-        out = [f"# {site} Phase 3 lab topology for containerlab. Rendered by Infrahub (lab_topology), do not edit.",
+        out = [f"# {site} lab topology for containerlab. Rendered by Infrahub (lab_topology), do not edit.",
                "# Startup configs: configs/<node>.cfg (NX-OS startup-config" + (", IOS XR iosxr-lab-config" if ISP_LAB_STANDIN == "xrd" else "") + " artifacts);",
                "# stand-in scripts: configs/<node>.sh (frr-lab-init artifacts" + ("" if ISP_LAB_STANDIN == "xrd" else ", ISP routers included") + "; carriers from the ISP routers' carrier-lab-init).",
                f"name: {LAB_NAME.format(site=site.lower())}",
@@ -225,12 +305,12 @@ class LabTopology(InfrahubTransform):
         for name in sorted(lab.lab, key=natural):
             role = lab.role(name)
             mip = lab.mgmt(name).ip
-            if role in NXOS_ROLES:
+            if role in DESIGN["nxos_roles"]:
                 node(name, ["kind: cisco_n9kv", f"image: {N9KV_IMAGE}", f"mgmt-ipv4: {mip}", f"startup-config: configs/{name}.cfg",
                             "env:"] + [f"  {k}: {val}" for k, val in N9KV_ENV.items()])
             elif role == "isp_router" and ISP_LAB_STANDIN == "xrd":
                 node(name, ["kind: cisco_xrd", f"image: {XRD_IMAGE}", f"mgmt-ipv4: {mip}", f"startup-config: configs/{name}.cfg"])
-            elif role in FW_ROLES or role == "isp_router":
+            elif role in DESIGN["fw_roles"] or role == "isp_router":
                 node(name, ["kind: linux", f"image: {FRR_IMAGE}", f"mgmt-ipv4: {mip}", "binds:",
                             f"  - configs/{name}.sh:/lab/init.sh:ro", "exec:", "  - sh /lab/init.sh"])
             else:
@@ -245,20 +325,21 @@ class LabTopology(InfrahubTransform):
                                              f"  - ip addr add {hnet[HOST_ADDR]}/{hnet.prefixlen} dev eth1",
                                              "  - ip link set eth1 up",
                                              f"  - ip route replace default via {hnet[HOST_GW]} dev eth1"])
-        for dev, ifname, seg in lab.access_ports():
-            pnet = ipaddress.ip_network(seg["prefix"]["node"]["prefix"]["value"])
-            node(f"{site}-HOST-PROD", ["kind: linux", f"image: {HOST_IMAGE}", f"mgmt-ipv4: {mgmt_net[LAB_MGMT_HOST['HOST-PROD']]}",
-                                       "exec:", f"  - ip addr add {pnet[HOST_ADDR]}/{pnet.prefixlen} dev eth1",
-                                       "  - ip link set eth1 up",
-                                       f"  - ip route replace default via {pnet[HOST_GW]} dev eth1"])
+        for h in prod_hosts(lab.access_ports()):
+            pnet = ipaddress.ip_network(h["prefix"])
+            node(f"{site}-{h['key']}", ["kind: linux", f"image: {HOST_IMAGE}", f"mgmt-ipv4: {mgmt_net[LAB_MGMT_HOST[h['key']]]}",
+                                        "exec:", f"  - ip addr add {pnet[h['addr_host']]}/{pnet.prefixlen} dev eth1",
+                                        "  - ip link set eth1 up",
+                                        f"  - ip route replace default via {pnet[DESIGN['segment_gateway_host']]} dev eth1"])
         out.append("  links:")
         for (a, ai), (b, bi) in build_links(lab):
             out.append(f"    - endpoints: [{yq(endpoint(lab, a, ai))}, {yq(endpoint(lab, b, bi))}]")
         for isp, port, provider, _ in lab.carriers():
             out.append(f"    - endpoints: [{yq(endpoint(lab, isp, port))}, {yq(f'{site}-{provider}:isp')}]")
             out.append(f"    - endpoints: [{yq(f'{site}-{provider}:host')}, {yq(f'{site}-HOST-{provider}:eth1')}]")
-        for dev, ifname, seg in lab.access_ports():
-            out.append(f"    - endpoints: [{yq(endpoint(lab, dev, ifname))}, {yq(f'{site}-HOST-PROD:eth1')}]")
+        for h in prod_hosts(lab.access_ports()):
+            hn = f"{site}-{h['key']}:eth1"
+            out.append(f"    - endpoints: [{yq(endpoint(lab, h['dev'], h['ifname']))}, {yq(hn)}]")
         return "\n".join(out) + "\n"
 
 
@@ -266,21 +347,24 @@ class LabExpected(InfrahubTransform):
     query = "lab_site"
 
     async def transform(self, data: dict) -> str:
+        configure(data, LAB_SITE_FIELDS + LAB_EXPECTED_FIELDS)
         lab = LabData(data)
         site, fasn = lab.site, lab.fabric_asn
+        transit = DESIGN["transit_vrf"]
+        fw_host, leaf_hosts = DESIGN["attachment_device_host"], DESIGN["attachment_leaf_hosts"]
         lab_set = set(lab.lab)
         sessions = []
 
-        def sess(node, vrf, peer, remote_as, desc, bfd=True, afi="ipv4 unicast"):
+        def sess(node, vrf, peer, remote_as, desc, bfd, afi="ipv4 unicast"):
             sessions.append({"node": node, "vrf": vrf, "peer": peer, "remote_as": remote_as, "description": desc,
                              "afi": afi, "bfd": bfd, "state": "Established"})
 
         spines = sorted((n for n in lab.lab if lab.role(n) == "spine"), key=natural)
         for n in sorted(lab.lab, key=natural):
-            if lab.role(n) in VTEP_ROLES:
+            if lab.role(n) in DESIGN["vtep_roles"]:
                 for s in spines:
-                    sess(n, "default", lab.ip(s, "loopback0"), fasn, s, afi="l2vpn evpn")
-                    sess(s, "default", lab.ip(n, "loopback0"), fasn, n, afi="l2vpn evpn")
+                    sess(n, "default", lab.ip(s, "loopback0"), fasn, s, DESIGN["overlay_bgp_bfd"], afi="l2vpn evpn")
+                    sess(s, "default", lab.ip(n, "loopback0"), fasn, n, DESIGN["overlay_bgp_bfd"], afi="l2vpn evpn")
         for a in sorted(lab.attachments, key=lambda a: a["vlan_id"]["value"]):
             leaves = sorted((e["node"]["name"]["value"] for e in a["switch_pair"]["node"]["members"]["edges"]), key=natural)
             fws = sorted((e["node"] for e in a["devices"]["edges"]), key=lambda d: natural(d["name"]["value"]))
@@ -289,29 +373,31 @@ class LabExpected(InfrahubTransform):
                 continue
             net = ipaddress.ip_network(a["prefix"]["node"]["prefix"]["value"])
             vrf = a["vrf"]["node"]["name"]["value"]
-            fw_vrf = f"vrf{INETFW_TABLE_VRF if lab.role(fw['name']['value']) == 'internet_fw' else FW_VRF_ID[vrf]}"
-            for k, leaf in enumerate(leaves, start=1):
-                sess(leaf, vrf, str(net[FW_HOST]), fw["asn"]["node"]["asn"]["value"], a["name"]["value"])
-                sess(fw["name"]["value"], fw_vrf, str(net[k]), fasn, leaf)
+            fw_vrf = f"vrf{lab.fw_vrf(transit) if lab.role(fw['name']['value']) == 'internet_fw' else lab.fw_vrf(vrf)}"
+            for k, leaf in enumerate(leaves):
+                sess(leaf, vrf, str(net[fw_host]), fw["asn"]["node"]["asn"]["value"], a["name"]["value"], DESIGN["attachment_bgp_bfd"])
+                sess(fw["name"]["value"], fw_vrf, str(net[leaf_hosts[k]]), fasn, leaf, DESIGN["attachment_bgp_bfd"])
         inetfw = next(n for n in lab.lab if lab.role(n) == "internet_fw")
         isps = sorted((n for n in lab.lab if lab.role(n) == "isp_router"), key=natural)
-        edge_if = next(i for i in lab.devices[isps[0]]["ifs"] if i.startswith("Bundle-Ether") and "." in i)
+        edge_if = isp_edge_subif(lab, isps[0])
         edge_net = ipaddress.ip_interface(lab.addr(isps[0], edge_if)).network
-        inetfw_ip = str(edge_net[EDGE_FW_HOST])
+        inetfw_ip = str(edge_net[DESIGN["edge_vlan_hosts"]["INETFW"]])
+        inetfw_vrf = f"vrf{lab.fw_vrf(transit)}"
+        # edge, ISP cross-link and carrier sessions: the lab templates always render BFD on them (bfd=True)
         for r in isps:
-            sess(inetfw, f"vrf{INETFW_TABLE_VRF}", lab.ip(r, edge_if), lab.devices[r]["asn"], r)
-            sess(r, "default", inetfw_ip, lab.devices[inetfw]["asn"], inetfw[:-1])
+            sess(inetfw, inetfw_vrf, lab.ip(r, edge_if), lab.devices[r]["asn"], r, True)
+            sess(r, "default", inetfw_ip, lab.devices[inetfw]["asn"], inetfw[:-1], True)
         xl = {r: next(i for i, d in lab.devices[r]["ifs"].items() if d["role"] == "core") for r in isps}
-        sess(isps[0], "default", lab.ip(isps[1], xl[isps[1]]), lab.devices[isps[1]]["asn"], isps[1])
-        sess(isps[1], "default", lab.ip(isps[0], xl[isps[0]]), lab.devices[isps[0]]["asn"], isps[0])
+        sess(isps[0], "default", lab.ip(isps[1], xl[isps[1]]), lab.devices[isps[1]]["asn"], isps[1], True)
+        sess(isps[1], "default", lab.ip(isps[0], xl[isps[0]]), lab.devices[isps[0]]["asn"], isps[0], True)
         for isp, port, provider, ours in lab.carriers():
             net = ipaddress.ip_interface(ours).network
             carrier = f"{site}-{provider}"
-            sess(isp, "default", str(net[1]), lab.provider_asn[provider], provider)
-            sess(carrier, "default", str(ipaddress.ip_interface(ours).ip), lab.devices[isp]["asn"], isp)
+            sess(isp, "default", str(net[DESIGN["carrier_side_host"]]), lab.provider_asn[provider], provider, True)
+            sess(carrier, "default", str(ipaddress.ip_interface(ours).ip), lab.devices[isp]["asn"], isp, True)
 
-        tenant_summ = sorted({p for vrf, p in lab.summaries if vrf != "TRANSIT"})
-        p24 = lab.public(24)
+        tenant_summ = sorted({p for vrf, p in lab.summaries if vrf != transit})
+        p24 = lab.public("public_block")
         if p24 is None:
             raise ValueError(f"{site}: no public /24 among the site's owned prefixes")
         routes = []
@@ -325,25 +411,25 @@ class LabExpected(InfrahubTransform):
         for n in sorted(lab.lab, key=natural):
             role = lab.role(n)
             if role == "service_leaf":
-                route(n, "TRANSIT", "0.0.0.0/0", "default from the border leaves (EVPN), sent on to the Internal FW")
+                route(n, transit, "0.0.0.0/0", "default from the border leaves (EVPN), sent on to the Internal FW")
                 for vrf, p in lab.summaries:
-                    if vrf != "TRANSIT":
+                    if vrf != transit:
                         route(n, vrf, "0.0.0.0/0", f"default from the Internal FW in {vrf}")
-                        route(n, "TRANSIT", p, f"{vrf} summary leaked by the Internal FW into TRANSIT")
+                        route(n, transit, p, f"{vrf} summary leaked by the Internal FW into TRANSIT")
             elif role == "border_leaf":
-                route(n, "TRANSIT", "0.0.0.0/0", "default from the Internet FW")
+                route(n, transit, "0.0.0.0/0", "default from the Internet FW")
                 for p in tenant_summ:
-                    route(n, "TRANSIT", p, "tenant summary from the service leaves (EVPN), sent on to the Internet FW")
+                    route(n, transit, p, "tenant summary from the service leaves (EVPN), sent on to the Internet FW")
             elif role == "internal_fw":
-                route(n, "vrf1", "0.0.0.0/0", "default from the service leaves in TRANSIT")
+                route(n, f"vrf{lab.fw_vrf(transit)}", "0.0.0.0/0", "default from the service leaves in TRANSIT")
                 for vrf, p in lab.summaries:
-                    if vrf != "TRANSIT":
-                        route(n, f"vrf{FW_VRF_ID[vrf]}", "0.0.0.0/0", "default leaked from TRANSIT")
-                        route(n, "vrf1", p, f"{vrf} summary leaked from vrf{FW_VRF_ID[vrf]}")
+                    if vrf != transit:
+                        route(n, f"vrf{lab.fw_vrf(vrf)}", "0.0.0.0/0", "default leaked from TRANSIT")
+                        route(n, f"vrf{lab.fw_vrf(transit)}", p, f"{vrf} summary leaked from vrf{lab.fw_vrf(vrf)}")
             elif role == "internet_fw":
-                route(n, f"vrf{INETFW_TABLE_VRF}", "0.0.0.0/0", "conditional default from the ISP routers")
+                route(n, inetfw_vrf, "0.0.0.0/0", "conditional default from the ISP routers")
                 for p in tenant_summ:
-                    route(n, f"vrf{INETFW_TABLE_VRF}", p, "tenant summary from the border leaves")
+                    route(n, inetfw_vrf, p, "tenant summary from the border leaves")
             elif role == "isp_router":
                 route(n, "default", "0.0.0.0/0", "default from the carriers (rib-has-route condition)")
                 route(n, "default", p24, "own public /24 (static Null0, network)")
@@ -359,49 +445,60 @@ class LabExpected(InfrahubTransform):
                 seen.add(key); uniq.append(r)
         routes = uniq
         pings = []
-        for dev, ifname, seg in access:
-            pnet = ipaddress.ip_network(seg["prefix"]["node"]["prefix"]["value"])
-            pings.append({"from": f"{site}-HOST-PROD", "to": str(pnet[HOST_GW]), "why": "anycast gateway on the server leaf"})
+        hosts = prod_hosts(access)
+        for h in hosts:
+            pnet = ipaddress.ip_network(h["prefix"])
+            name = f"{site}-{h['key']}"
+            pings.append({"from": name, "to": str(pnet[DESIGN["segment_gateway_host"]]), "why": "anycast gateway on the server leaf"})
             for prov, hn in sorted(CARRIER_HOST_NET.items()):
                 hnet = ipaddress.ip_network(hn)
-                pings.append({"from": f"{site}-HOST-PROD", "to": str(hnet[HOST_ADDR]),
-                              "why": f"end to end via SL, Internal FW, TRANSIT, BL, Internet FW (NAT to {lab.public(25)}), {prov}"})
+                pings.append({"from": name, "to": str(hnet[HOST_ADDR]),
+                              "why": f"end to end via SL, Internal FW, TRANSIT, BL, Internet FW (NAT to {lab.public('public_nat_pool')}), {prov}"})
+        # the reason the extra hosts exist
+        for i, a in enumerate(hosts):
+            for b in hosts[i + 1:]:
+                anet, bnet = ipaddress.ip_network(a["prefix"]), ipaddress.ip_network(b["prefix"])
+                same = a["prefix"] == b["prefix"]
+                why = ("host to host in one subnet on different leaves: EVPN bridging between leaves" if same
+                       else "host to host across subnets through the anycast gateways: EVPN routing")
+                if same and a["dev"] == b["dev"]:
+                    continue
+                pings.append({"from": f"{site}-{a['key']}", "to": str(bnet[b["addr_host"]]), "why": why})
         doc = {"site": site, "source": "Infrahub lab_expected transform; do not edit",
                "lab_nodes": sorted(lab.lab, key=natural),
+               "node_asn": {n: lab.devices[n]["asn"] for n in sorted(lab.lab, key=natural) if lab.devices[n]["asn"] is not None},  # own AS (DcimDevice.asn)
                "bgp_sessions": sessions, "routes": routes, "pings": pings}
         return json.dumps(doc, indent=2) + "\n"
 
 
-# ================================================================ Option 5 (claude/option5-decisions.md): the entire site
+# ================================================================ Option 5: the entire site
 # LabTopologyFull -> containerlab topology of every production device of the site (OOB excluded), the other site's DCI and BGW
 # switches as FRR stand-ins (Multi-Site, control plane), and the lab-only outside nodes: carriers, internet hosts, the PROD
 # host, one SD-WAN branch, the VPN partner, one cloud exchange per cloud router. Lab-only nodes carry the artifact that builds
-# them as containerlab labels (vamd.artifact, vamd.target), read by labctl (D5-41).
-FULL_LAB_NAME = "vamd-{site}-full"                                  # D5-05
+# them as containerlab labels (vamd.artifact, vamd.target), read by labctl.
+FULL_LAB_NAME = "vamd-{site}-full"
 FULL_MGMT_NETWORK = "vamd-{site}-full-mgmt"
-FULL_NXOS = NXOS_ROLES | {"bgw", "dci"}                              # D5-01
-FULL_FW = FW_ROLES | {"sdwan_fw", "vpn_fw"}
-FULL_FRR = FULL_FW | {"isp_router", "cloud_router"}                 # D5-04
-HA_PAIR_ROLES = FULL_FW                                             # D5-10: FortiGate A/P pairs; unit 2 runs with its data ports down
-REMOTE_ROLES = ("bgw", "dci")                                       # D5-35: the other site's Multi-Site path
-FULL_MGMT_HOST = {"BRANCH1": 242, "PARTNER": 243, "CX1": 248, "CX2": 249}   # D5-40
-REMOTE_MGMT_FIRST = 250                                             # D5-40: the other site's stand-ins, .250 up
-CARRIER_WAN = {"ISP-A": "partner", "ISP-B": "branch"}               # D5-31: which carrier's 'wan' port serves which node
-XR_HU_PORT = re.compile(r"HundredGigE0/0/0/(\d+)")                  # D5-22: HundredGigE0/0/0/<n> -> Hu0-0-0-<n>
+# every NX-OS role, FortiOS and IOS XR roles as FRR stand-ins, FortiGate A/P pairs (unit 2 runs with its data
+# ports down): role sets from the role -> platform fields, see configure()
+REMOTE_ROLES = ("bgw", "dci")                                       # the other site's Multi-Site path
+FULL_MGMT_HOST = {"BRANCH1": 242, "PARTNER": 243, "CX1": 248, "CX2": 249}
+REMOTE_MGMT_FIRST = 250                                             # the other site's stand-ins, .250 up
+CARRIER_WAN = {"ISP-A": "partner", "ISP-B": "branch"}               # which carrier's 'wan' port serves which node
+XR_HU_PORT = re.compile(r"HundredGigE0/0/0/(\d+)")                  # HundredGigE0/0/0/<n> -> Hu0-0-0-<n>
 
 
 def full_endpoint(role: str, device: str, ifname: str) -> str:
-    if role in FULL_NXOS:
+    if role in DESIGN["nxos_roles"]:
         m = re.fullmatch(r"Ethernet1/(\d+)", ifname)
         if m:
             return f"{device}:eth{m.group(1)}"
-    elif role in ("isp_router", "cloud_router"):
+    elif role in DESIGN["xr_roles"]:
         if ifname.startswith(XRD_PORT_FROM):
             return f"{device}:Gi0-0-0-{int(ifname.rsplit('/', 1)[1]) // 2}"
         m = XR_HU_PORT.fullmatch(ifname)
         if m:
             return f"{device}:Hu0-0-0-{m.group(1)}"
-    elif role in FULL_FW:
+    elif role in DESIGN["fw_roles"]:
         return f"{device}:{ifname}"
     raise ValueError(f"{device} {ifname}: no containerlab name rule for role {role}")
 
@@ -423,9 +520,11 @@ class LabTopologyFull(InfrahubTransform):
     query = "lab_site_full"
 
     async def transform(self, data: dict) -> str:
+        configure(data, LAB_SITE_FULL_FIELDS + LAB_FULL_STANDBY_FIELDS)
+        full_roles_all = DESIGN["nxos_roles"] | DESIGN["fw_roles"] | DESIGN["xr_roles"]
         site = data["LocationSite"]["edges"][0]["node"]["name"]["value"]
         allsite = {e["node"]["name"]["value"]: parse_device(e["node"]) for e in data["DcimDevice"]["edges"]}
-        local = {n: d for n, d in allsite.items() if d["role"] in FULL_ROLES_ALL}
+        local = {n: d for n, d in allsite.items() if d["role"] in full_roles_all}
         remote = {}
         for alias in ("RemoteBgws", "RemoteDcis"):
             for e in data[alias]["edges"]:
@@ -470,7 +569,7 @@ class LabTopologyFull(InfrahubTransform):
                     continue
                 for a in i["addrs"]:
                     net = ipaddress.ip_interface(a).network
-                    if net.prefixlen == 31:
+                    if net.prefixlen == DESIGN["p2p_link_prefix_length"]:
                         by_net.setdefault(net, []).append((n, ifname))
         for net, ends in by_net.items():
             if len(ends) == 2 and ends[0][0] != ends[1][0]:
@@ -520,19 +619,19 @@ class LabTopologyFull(InfrahubTransform):
                         f"  vamd.target: {target}", "binds:", f"  - configs/{name}.sh:/lab/init.sh:ro", "exec:", "  - sh /lab/init.sh"]
                  + [f"  - {yq(x)}" for x in extra_exec])
 
-        def host(name, ip, net, gw_host=HOST_GW):
+        def host(name, ip, net, gw_host=HOST_GW, addr_host=HOST_ADDR):
             pnet = ipaddress.ip_network(net)
             node(name, ["kind: linux", f"image: {HOST_IMAGE}", f"mgmt-ipv4: {ip}", "exec:",
-                        f"  - ip addr add {pnet[HOST_ADDR]}/{pnet.prefixlen} dev eth1", "  - ip link set eth1 up",
+                        f"  - ip addr add {pnet[addr_host]}/{pnet.prefixlen} dev eth1", "  - ip link set eth1 up",
                         f"  - ip route replace default via {pnet[gw_host]} dev eth1"])
 
         for n in sorted(local, key=natural):
             role = local[n]["role"]
-            if role in FULL_NXOS:
+            if role in DESIGN["nxos_roles"]:
                 node(n, ["kind: cisco_n9kv", f"image: {N9KV_IMAGE}", f"mgmt-ipv4: {mgmt[n]}", f"startup-config: configs/{n}.cfg",
                          "env:"] + [f"  {k}: {val}" for k, val in N9KV_ENV.items()])
             else:
-                standby = role in HA_PAIR_ROLES and n.endswith("2")
+                standby = fw_standby(role, n)
                 down = [f"ip link set {p} down" for p in sorted(cabled.get(n, ()), key=natural)] if standby else []
                 frr(n, mgmt[n], "frr-lab-init", n, down)
         for n in sorted(remote, key=natural):
@@ -556,21 +655,22 @@ class LabTopologyFull(InfrahubTransform):
                 frr(cname, lab_ip(LAB_MGMT_HOST[provider]), "carrier-lab-init", isp)
                 host(f"{site}-HOST-{provider}", lab_ip(LAB_MGMT_HOST["HOST-" + provider]), CARRIER_HOST_NET[provider])
                 extra_links += [(full_endpoint("isp_router", isp, ifname), f"{cname}:isp"), (f"{cname}:host", f"{site}-HOST-{provider}:eth1")]
-        # the PROD test host (the site's first access port, D5-36)
+        # the PROD test hosts, one per access port (every access port gets its own host)
         access = sorted(((n, ifname, i["segment"]) for n in local for ifname, i in local[n]["ifs"].items()
                          if i["role"] == "access" and i["segment"]), key=lambda t: (natural(t[0]), natural(t[1])))
-        if access:
-            dev, ifname, seg = access[0]
-            host(f"{site}-HOST-PROD", lab_ip(LAB_MGMT_HOST["HOST-PROD"]), seg["prefix"]["node"]["prefix"]["value"])
-            extra_links.append((full_endpoint(local[dev]["role"], dev, ifname), f"{site}-HOST-PROD:eth1"))
-        # SD-WAN branch behind its carrier (D5-32)
+        for h in prod_hosts(access):
+            host(f"{site}-{h['key']}", lab_ip(LAB_MGMT_HOST[h["key"]]), h["prefix"],
+                 gw_host=DESIGN["segment_gateway_host"], addr_host=h["addr_host"])
+            extra_links.append((full_endpoint(local[h["dev"]]["role"], h["dev"], h["ifname"]),
+                                f"{site}-{h['key']}:eth1"))
+        # SD-WAN branch behind its carrier
         sdwan = sorted((n for n in local if local[n]["role"] == "sdwan_fw"), key=natural)
         wan_of = {use: prov for prov, use in CARRIER_WAN.items()}
         if sdwan and wan_of["branch"] in carriers:
             bname = f"{site}-BRANCH1"
             frr(bname, lab_ip(FULL_MGMT_HOST["BRANCH1"]), "branch-lab-init", sdwan[0])
             extra_links.append((f"{carriers[wan_of['branch']]}:wan", f"{bname}:wan"))
-        # VPN partner behind its carrier (D5-33): the site's first partner with a translated prefix
+        # VPN partner behind its carrier: the site's first partner with a translated prefix
         vpn = sorted((n for n in local if local[n]["role"] == "vpn_fw"), key=natural)
         partners = sorted(e["node"]["name"]["value"] for e in data["Partners"]["edges"]
                           if any(v(t["node"], "site", "node", "name", "value") == site for t in e["node"]["translated_prefixes"]["edges"]))
@@ -578,7 +678,7 @@ class LabTopologyFull(InfrahubTransform):
             pname = f"{site}-{partners[0]}"
             frr(pname, lab_ip(FULL_MGMT_HOST["PARTNER"]), "partner-lab-init", vpn[0])
             extra_links.append((f"{carriers[wan_of['partner']]}:wan", f"{pname}:wan"))
-        # one cloud exchange per cloud router, on its cloud-exchange port (D5-34)
+        # one cloud exchange per cloud router, on its cloud-exchange port
         for n in sorted((n for n in local if local[n]["role"] == "cloud_router"), key=natural):
             port = next(ifn for ifn, i in sorted(local[n]["ifs"].items()) if i["type"] == "InterfacePhysical" and i["role"] == "cloud_handoff")
             cx = f"{site}-CX{n[-1]}"
@@ -592,5 +692,3 @@ class LabTopologyFull(InfrahubTransform):
             out.append(f"    - endpoints: [{yq(a)}, {yq(b)}]")
         return "\n".join(out) + "\n"
 
-
-FULL_ROLES_ALL = FULL_NXOS | FULL_FRR

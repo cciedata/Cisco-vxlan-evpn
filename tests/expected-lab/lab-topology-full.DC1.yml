@@ -593,6 +593,22 @@ topology:
         - ip addr add 10.16.10.10/24 dev eth1
         - ip link set eth1 up
         - ip route replace default via 10.16.10.1 dev eth1
+    DC1-HOST-PROD2:
+      kind: linux
+      image: alpine:3.22
+      mgmt-ipv4: 10.250.0.238
+      exec:
+        - ip addr add 10.16.10.11/24 dev eth1
+        - ip link set eth1 up
+        - ip route replace default via 10.16.10.1 dev eth1
+    DC1-HOST-PROD3:
+      kind: linux
+      image: alpine:3.22
+      mgmt-ipv4: 10.250.0.239
+      exec:
+        - ip addr add 10.16.11.10/24 dev eth1
+        - ip link set eth1 up
+        - ip route replace default via 10.16.11.1 dev eth1
     DC1-BRANCH1:
       kind: linux
       image: quay.io/frrouting/frr:10.6.0
@@ -816,6 +832,8 @@ topology:
     - endpoints: ["DC1-ISP2:Gi0-0-0-3", "DC1-ISP-B:isp"]
     - endpoints: ["DC1-ISP-B:host", "DC1-HOST-ISP-B:eth1"]
     - endpoints: ["DC1-L11:eth1", "DC1-HOST-PROD:eth1"]
+    - endpoints: ["DC1-L12:eth1", "DC1-HOST-PROD2:eth1"]
+    - endpoints: ["DC1-L12:eth2", "DC1-HOST-PROD3:eth1"]
     - endpoints: ["DC1-ISP-B:wan", "DC1-BRANCH1:wan"]
     - endpoints: ["DC1-ISP-A:wan", "DC1-PARTNER01:wan"]
     - endpoints: ["DC1-CLOUD1:Hu0-0-0-16", "DC1-CX1:cr"]

@@ -1,0 +1,30 @@
+# lab.conf: settings for the GCP lab host. Copy this file to lab.conf (same folder) and fill in the values marked
+# YOUR-...; the other values are what the lab was run with. gcp-up.sh, gcp-down.sh, upload-images.sh and vm-ssh.sh read it.
+# lab.conf is yours: keep it out of Git.
+P=YOUR-PROJECT-ID                         # GCP project with billing enabled
+REGION=us-east4
+ZONE=us-east4-a
+VM=evpn-lab-01                            # VM name
+MACHINE=n2-standard-64                    # 64 vCPU, 256 GB: DC1 and DC2 lab paths together
+IMAGE_FAMILY=ubuntu-2404-lts-amd64
+IMAGE_PROJECT=ubuntu-os-cloud
+DISK_TYPE=pd-balanced
+DISK_GB=200
+DISK_AUTO_DELETE=yes                      # the boot disk goes with the VM when it is deleted
+DELETION_PROTECTION=no
+SECURE_BOOT=no
+EXTERNAL_IP=ephemeral
+MAINT_ONDEMAND=MIGRATE                    # spot VMs cannot live-migrate: GCP forces TERMINATE for them
+TERMINATION_ACTION=STOP                   # what the run cap and a spot preemption do: stop, keep the disk
+MAX_RUN=8h                                # the VM stops itself after this long
+IDLE_LIMIT_SEC=1800                       # and after 30 minutes with no SSH session
+SA_NAME=evpn-lab-sa                       # service account of the VM: reads the image bucket, nothing else
+SA_ROLE=roles/storage.objectViewer        # granted on the bucket only
+SA_SCOPE=https://www.googleapis.com/auth/devstorage.read_only
+BUCKET=YOUR-BUCKET-NAME                   # bucket for the lab images, in REGION (see docs/LAB-GCP.md)
+IMAGE_OBJECT=nexus9300v64-lite.10.6.4.M.qcow2   # your N9Kv image file in the bucket (optional, checked only)
+IMAGE_SIZE=YOUR-QCOW2-SIZE-IN-BYTES
+FW_RULE=lab-ssh-home                      # SSH allowed from your current public IP only
+BUDGET_NAME=lab-budget
+BUDGET_AMOUNT=50                          # USD; alerts only, it does not stop spending
+BUDGET_THRESHOLDS="0.5 0.9"

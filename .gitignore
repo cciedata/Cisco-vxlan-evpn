@@ -231,12 +231,10 @@ Temporary Items
 .apdisk
 # Local-only files (kept out of Git)
 infrahubctl.toml
-.claude/
-CLAUDE.md
 lab/build/
 .venv-lab/
 
-# Phase 3b: ZTP server event log
+# ZTP server event log
 ztp/ztp-events.jsonl
 
 # Standalone build: local secrets and settings, the uv environments, rendered configs (filled with secrets at deploy

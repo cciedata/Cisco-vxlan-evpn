@@ -1,6 +1,7 @@
 ---
-# Racks per site: floor plan P2-120/P2-123 to P2-125, P2-132, power P2-131/P2-133 to P2-136/P2-188, descriptions P2-190.
-# DRAFT in claude-runner/diagrams-work: not loaded.
+# Racks per site: floor plan, power and descriptions.
+# Loaded with the other object files; read by generator site_physical, the site_diagrams / site_cable_schedule transforms and
+# checks/design_copy_check.
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
@@ -541,7 +542,7 @@ spec:
       purpose: patch
       description: "SAN patch rack 2"
 ---
-# Reserved rack space (P2-118, P2-155, P2-170): elevations P2-126, P2-144, P2-145, P2-146.
+# Reserved rack space and elevations.
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
@@ -561,7 +562,7 @@ spec:
       rack: DC1-B04
       position: 18
       height: 1
-      label: "Cloud router (Phase 4)"
+      label: "Cloud router"
     - name: DC1-B04-U15
       rack: DC1-B04
       position: 15
@@ -571,12 +572,12 @@ spec:
       rack: DC1-B04
       position: 12
       height: 2
-      label: "VPN-partner FW (Phase 4)"
+      label: "VPN-partner FW"
     - name: DC1-B04-U9
       rack: DC1-B04
       position: 9
       height: 2
-      label: "SD-WAN FW (Phase 4)"
+      label: "SD-WAN FW"
     - name: DC1-B08-U39
       rack: DC1-B08
       position: 39
@@ -591,7 +592,7 @@ spec:
       rack: DC1-B08
       position: 18
       height: 1
-      label: "Cloud router (Phase 4)"
+      label: "Cloud router"
     - name: DC1-B08-U15
       rack: DC1-B08
       position: 15
@@ -601,12 +602,12 @@ spec:
       rack: DC1-B08
       position: 12
       height: 2
-      label: "VPN-partner FW (Phase 4)"
+      label: "VPN-partner FW"
     - name: DC1-B08-U9
       rack: DC1-B08
       position: 9
       height: 2
-      label: "SD-WAN FW (Phase 4)"
+      label: "SD-WAN FW"
     - name: DC1-B03-U39
       rack: DC1-B03
       position: 39
@@ -1056,7 +1057,7 @@ spec:
       rack: DC2-B04
       position: 18
       height: 1
-      label: "Cloud router (Phase 4)"
+      label: "Cloud router"
     - name: DC2-B04-U15
       rack: DC2-B04
       position: 15
@@ -1066,12 +1067,12 @@ spec:
       rack: DC2-B04
       position: 12
       height: 2
-      label: "VPN-partner FW (Phase 4)"
+      label: "VPN-partner FW"
     - name: DC2-B04-U9
       rack: DC2-B04
       position: 9
       height: 2
-      label: "SD-WAN FW (Phase 4)"
+      label: "SD-WAN FW"
     - name: DC2-B08-U39
       rack: DC2-B08
       position: 39
@@ -1086,7 +1087,7 @@ spec:
       rack: DC2-B08
       position: 18
       height: 1
-      label: "Cloud router (Phase 4)"
+      label: "Cloud router"
     - name: DC2-B08-U15
       rack: DC2-B08
       position: 15
@@ -1096,12 +1097,12 @@ spec:
       rack: DC2-B08
       position: 12
       height: 2
-      label: "VPN-partner FW (Phase 4)"
+      label: "VPN-partner FW"
     - name: DC2-B08-U9
       rack: DC2-B08
       position: 9
       height: 2
-      label: "SD-WAN FW (Phase 4)"
+      label: "SD-WAN FW"
     - name: DC2-B03-U39
       rack: DC2-B03
       position: 39

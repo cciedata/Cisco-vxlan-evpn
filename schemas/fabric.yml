@@ -60,7 +60,7 @@ nodes:
         kind: Attribute
         cardinality: one
         optional: true
-      # Phase 2 (decided): carrier ASNs link to their provider
+      # Carrier ASNs link to their provider
       - name: provider
         peer: OrganizationProvider
         identifier: provider__autonomous_system
@@ -104,6 +104,42 @@ nodes:
       - name: description
         kind: Text
         optional: true
+      # Per-VRF design values that were lists/dicts in code; optional, no default
+      - name: fortios_vrf_id
+        label: FortiOS VRF ID
+        description: FortiOS VRF id.
+        kind: Number
+        optional: true
+      - name: internal_fw_slot
+        label: Internal FW slot
+        description: Internal FW attachment slot of the VRF (slot 4 retired; empty on VRFs not attached to the Internal FW).
+        kind: Number
+        optional: true
+      - name: internal_fw_attached
+        label: Internal FW attached
+        description: VRF gets an Internal FW attachment (false = old TENANT_EXCLUDED).
+        kind: Boolean
+        optional: true
+      - name: on_server_leaves
+        label: On server leaves
+        description: VRF is instantiated on server leaves.
+        kind: Boolean
+        optional: true
+      - name: border_static_summary
+        label: Border static summary
+        description: VRF summary is a static route on the border leaves.
+        kind: Boolean
+        optional: true
+      - name: sdwan_excluded
+        label: SD-WAN excluded
+        description: VRF is never exchanged with SD-WAN branches.
+        kind: Boolean
+        optional: true
+      - name: fw_prepend
+        label: FW prepend
+        description: VRF is AS-path prepended by the non-home Internal FW.
+        kind: Boolean
+        optional: true
     relationships:
       - name: sites
         peer: LocationSite
@@ -118,7 +154,7 @@ nodes:
         kind: Generic
         cardinality: many
         optional: true
-      # Phase 2 PC2 (decided): the VRF's summary blocks (owner site on the prefix); the service leaf sends them to the Internal FW
+      # The VRF's summary blocks (owner site on the prefix); the service leaf sends them to the Internal FW
       - name: summaries
         label: Summary Prefixes
         peer: IpamPrefix
@@ -204,7 +240,7 @@ nodes:
         kind: Attribute
         cardinality: one
         optional: true
-      # Phase 2 PC2: reverse sides, so a device's config query reaches them through its pair
+      # Reverse sides, so a device's config query reaches them through its pair
       - name: attachments
         peer: FabricAttachment
         identifier: attachment__switch_pair
@@ -226,7 +262,7 @@ nodes:
     inherit_from:
       - FabricSwitchPair
 
-  # Phase 1 (decided): port-channel kind; the vPC peer-link is its first user,
+  # Port-channel kind; the vPC peer-link is its first user,
   # host port-channels reuse it later. A physical port belongs to at most one.
   - name: PortChannel
     namespace: Interface
@@ -237,7 +273,7 @@ nodes:
       - DcimInterface
       - InterfaceLayer2
       - InterfaceLayer3
-      - InterfaceHasSubInterface    # Phase 2 (decided): FW/router VLAN sub-interfaces on bundles
+      - InterfaceHasSubInterface    # FW/router VLAN sub-interfaces on bundles
     relationships:
       - name: members
         label: Members
@@ -247,7 +283,7 @@ nodes:
         cardinality: many
         optional: true
 
-  # Phase 2 (decided): one attachment per (attached device pair, VRF) on a vPC leaf pair.
+  # One attachment per (attached device pair, VRF) on a vPC leaf pair.
   # The /29 is fixed by slot: .1 leaf A, .2 leaf B, .3 the attached pair (A/P units share it).
   # BGP sessions are derived from it; the peer ASN comes from the attached devices.
   - name: Attachment
@@ -267,7 +303,7 @@ nodes:
         unique: true
         optional: false
       - name: slot
-        description: Fixed slot in the owning block (TRANSIT /24 or Internal FW /25).
+        description: Fixed slot in the owning block of the attachment.
         kind: Number
         optional: false
         parameters:
@@ -320,7 +356,7 @@ nodes:
         cardinality: one
         optional: false
 
-  # Phase 2 PC2 (decided): an L2-only VLAN on a vPC pair (no VRF, no VNI): edge VLAN 3200, DMZ VLANs 1400-1415.
+  # An L2-only VLAN on a vPC pair (no VRF, no VNI): edge VLAN 3200, DMZ VLANs 1400-1415.
   - name: L2Vlan
     namespace: Fabric
     label: L2-only VLAN
@@ -367,7 +403,7 @@ nodes:
         cardinality: one
         optional: true
 
-  # Phase 4 PC3 (row 40 B, P4A-322): an SD-WAN branch, sample data (2 branches). The hub configs use BGP dynamic
+  # An SD-WAN branch, sample data (2 branches). The hub configs use BGP dynamic
   # neighbors and do not list branches; the data feeds the branch lab stand-in later.
   - name: Branch
     namespace: Fabric
@@ -386,13 +422,13 @@ nodes:
         optional: false
       - name: branch_id
         label: Branch Number
-        description: Index of the branch LAN /24 inside 10.64.0.0/12 (row 41 B).
+        description: Index of the branch LAN /24 inside FabricDesign.sdwan_branch_summary.
         kind: Number
         unique: true
         optional: false
         parameters:
           min_value: 1
-          max_value: 4095
+          max_value: 3839
       - name: description
         kind: Text
         optional: true
@@ -406,7 +442,7 @@ nodes:
         optional: false
       - name: hubs
         label: Hub Sites
-        description: Sites whose SD-WAN hub this branch dials (dual-homed, row 44 C).
+        description: Sites whose SD-WAN hub this branch dials (dual-homed).
         peer: LocationSite
         identifier: branch__hub
         kind: Attribute
@@ -414,12 +450,13 @@ nodes:
         optional: false
         min_count: 1
 
-  # Phase 4 PC4 (row 49 B, P4A-420): a VPN partner. Its own address space stays out of our IPAM and routing (it may
+  # A VPN partner. Its own address space stays out of our IPAM and routing (it may
   # overlap ours): peer IP and protected networks are attributes; the translated /28s (one per site) are our prefixes.
   - name: Partner
     namespace: Fabric
     label: VPN Partner
-    description: An external partner on a route-based IKEv2 tunnel from the VPN-partner FWs, source-NATed to its own /28 per site.
+    description: An external partner on a route-based IKEv2 tunnel from the VPN-partner FWs, source-NATed to its own translated prefix per
+      site.
     human_friendly_id:
       - name__value
     display_label: "{{ name__value }}"
@@ -447,7 +484,7 @@ nodes:
     relationships:
       - name: translated_prefixes
         label: Translated /28s
-        description: One /28 per site from that site's PARTNER block (10.16.160.0/21 DC1, 10.20.160.0/21 DC2); owner site on the prefix.
+        description: One prefix per site from its PARTNER block in the IP plan, length partner_nat_prefix_length
         peer: IpamPrefix
         identifier: partner__translated_prefix
         kind: Attribute
@@ -486,6 +523,110 @@ extensions:
           description: Lowest release that supports ESI multihoming on this hardware.
           kind: Text
           optional: true
+        # Model DEFAULT port maps; per-role overrides live in FabricDesign. Optional, no default.
+        - name: access_port_count
+          label: Access port count
+          description: Access / serial ports (BMC range Ethernet1/1-48 derives from it).
+          kind: Number
+          optional: true
+        - name: carrier_port
+          label: Carrier port
+          description: Carrier hand-off port.
+          kind: Text
+          optional: true
+        - name: cloud_exchange_port
+          label: Cloud exchange port
+          description: Cloud exchange port.
+          kind: Text
+          optional: true
+        - name: console_port
+          label: Console port
+          description: Console port name (every model except the console server).
+          kind: Text
+          optional: true
+        - name: crosslink_port
+          label: Cross-link port
+          description: Router-to-router cross-link port.
+          kind: Text
+          optional: true
+        - name: dci_circuit_port
+          label: DCI circuit port
+          description: First DCI circuit (MACsec) port.
+          kind: Text
+          optional: true
+        - name: downlink_ports_per_leaf
+          label: Downlink ports per leaf
+          description: Spine ports per server leaf (leaf n -> Ethernet1/2n-1, 2n).
+          kind: Number
+          optional: true
+        - name: fabric_facing_ports
+          label: Fabric-facing ports
+          description: Ports toward switch 1/2 (EDGE or BL).
+          kind: List
+          optional: true
+        - name: fixed_leaf_downlink_ports
+          label: Fixed leaf downlink ports
+          description: Spine port per fixed leaf.
+          kind: JSON
+          optional: true
+        - name: front_panel_port_count
+          label: Front-panel port count
+          description: Front-panel ports.
+          kind: Number
+          optional: true
+        - name: fw_attach_ports
+          label: FW attach ports
+          description: FW ports toward switch 1/2 per side.
+          kind: JSON
+          optional: true
+        - name: ha_ports
+          label: HA ports
+          description: HA heartbeat ports.
+          kind: List
+          optional: true
+        - name: port_name_format
+          label: Port name format
+          description: Front-panel port name format.
+          kind: Text
+          optional: true
+        - name: uplink_ports
+          label: Uplink ports
+          description: Uplink ports (to spines / to OOB agg).
+          kind: JSON
+          optional: true
+        - name: uplink_speed_100g
+          label: 100G uplinks
+          description: Model has 100G (not 400G) uplinks/peer-link.
+          kind: Boolean
+          optional: true
+        - name: vpc_keepalive_port
+          label: vPC keepalive port
+          description: vPC keepalive port.
+          kind: Text
+          optional: true
+        - name: vpc_peer_link_ports
+          label: vPC peer-link ports
+          description: Default vPC peer-link members.
+          kind: List
+          optional: true
+        - name: vrf_leak_link_ports
+          label: VRF leak link ports
+          description: Inter-VRF leak link ports (tenant side, TRANSIT side).
+          kind: List
+          optional: true
+        - name: wan_port
+          label: WAN port
+          description: WAN port toward the OOB carrier.
+          kind: Text
+          optional: true
+    # Target OS release per platform; optional, no default
+    - kind: DcimPlatform
+      attributes:
+        - name: os_version
+          label: OS Version
+          description: Target OS release for devices on this platform.
+          kind: Text
+          optional: true
     - kind: InterfacePhysical
       relationships:
         - name: port_channel
@@ -495,7 +636,7 @@ extensions:
           kind: Attribute
           cardinality: one
           optional: true
-        # Phase 3 (P3-60, auto-approved): a server-facing access port carries one segment (its access VLAN)
+        # A server-facing access port carries one segment (its access VLAN)
         - name: access_segment
           label: Access Segment
           description: Segment (VLAN) carried untagged on this access port.
@@ -503,6 +644,15 @@ extensions:
           identifier: interface__access_segment
           kind: Attribute
           cardinality: one
+          optional: true
+        # A host port may be a trunk: native = access_segment, plus any number of tagged segments
+        - name: tagged_segments
+          label: Tagged Segments
+          description: Segments (VLANs) carried tagged on this host port when l2_mode is trunk; access_segment is the native VLAN.
+          peer: FabricSegment
+          identifier: interface__tagged_segments
+          kind: Attribute
+          cardinality: many
           optional: true
     - kind: LocationSite
       attributes:
@@ -565,7 +715,7 @@ extensions:
           kind: Attribute
           cardinality: one
           optional: true
-    # Phase 2 (decided): carrier ASNs link to their provider
+    # Carrier ASNs link to their provider
     - kind: OrganizationProvider
       relationships:
         - name: asns

@@ -1,20 +1,67 @@
-{# Phase 4 PC1: anycast border gateway (EVPN Multi-Site, non-vPC BGW pair). Underlay OSPF + iBGP EVPN to the spines like
-   the leaves; Multi-Site VIP on loopback2 (row 15 C); eBGP IPv4 underlay to the local DCI switch over the upstream /31;
+{# Anycast border gateway (EVPN Multi-Site, non-vPC BGW pair). Underlay OSPF + iBGP EVPN to the spines like
+   the leaves; Multi-Site VIP on loopback2; eBGP IPv4 underlay to the local DCI switch over the upstream /31;
    eBGP EVPN multihop to every BGW of the other site; only multisite VRFs and stretched segments (sites > 1) are on the BGW.
-   Sources: Cisco NX-OS VXLAN Configuration Guide 10.6(x) "Configure VXLAN EVPN Multi-Site" (claude/phase4-research.md). #}
-{# Approved constants: Phase 1 / PC2 values plus Open-Phase4 rows 14-25 and Auto-approved-P4 #}
+   Sources: Cisco NX-OS VXLAN Configuration Guide 10.6(x) "Configure VXLAN EVPN Multi-Site". #}
+{# Constants: the same values as the server and border leaves, plus the Multi-Site values #}
+{# Design values: read from the FabricDesign object in Infrahub; a missing value stops the render #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.underlay_ospf_area.value is none %}{{ missing_FabricDesign_underlay_ospf_area() }}{% endif -%}
+{%- if fd.inter_site_bgw_bgp_password.value is none %}{{ missing_FabricDesign_inter_site_bgw_bgp_password() }}{% endif -%}
+{%- if fd.bfd_interval_ms.value is none %}{{ missing_FabricDesign_bfd_interval_ms() }}{% endif -%}
+{%- if fd.bfd_multiplier.value is none %}{{ missing_FabricDesign_bfd_multiplier() }}{% endif -%}
+{%- if fd.bfd_min_rx_ms.value is none %}{{ missing_FabricDesign_bfd_min_rx_ms() }}{% endif -%}
+{%- if fd.overlay_bfd_interval_ms.value is none %}{{ missing_FabricDesign_overlay_bfd_interval_ms() }}{% endif -%}
+{%- if fd.overlay_bfd_multiplier.value is none %}{{ missing_FabricDesign_overlay_bfd_multiplier() }}{% endif -%}
+{%- if fd.mtu_svi.value is none %}{{ missing_FabricDesign_mtu_svi() }}{% endif -%}
+{%- if fd.inter_site_delay_restore_s.value is none %}{{ missing_FabricDesign_inter_site_delay_restore_s() }}{% endif -%}
+{%- if fd.inter_site_storm_control_percent.value is none %}{{ missing_FabricDesign_inter_site_storm_control_percent() }}{% endif -%}
+{%- if fd.inter_site_storm_control_types.value is none %}{{ missing_FabricDesign_inter_site_storm_control_types() }}{% endif -%}
+{%- if fd.inter_site_ebgp_multihop_ttl.value is none %}{{ missing_FabricDesign_inter_site_ebgp_multihop_ttl() }}{% endif -%}
+{%- if fd.route_policy_seq_step.value is none %}{{ missing_FabricDesign_route_policy_seq_step() }}{% endif -%}
+{%- if fd.inter_site_vip_third_octet.value is none %}{{ missing_FabricDesign_inter_site_vip_third_octet() }}{% endif -%}
+{%- if fd.inter_site_vip_host.value is none %}{{ missing_FabricDesign_inter_site_vip_host() }}{% endif -%}
+{%- if fd.local_admin_username.value is none %}{{ missing_FabricDesign_local_admin_username() }}{% endif -%}
+{%- if fd.local_admin_role.value is none %}{{ missing_FabricDesign_local_admin_role() }}{% endif -%}
+{%- if fd.dns_lookup.value is none %}{{ missing_FabricDesign_dns_lookup() }}{% endif -%}
+{%- if fd.inter_site_split_horizon.value is none %}{{ missing_FabricDesign_inter_site_split_horizon() }}{% endif -%}
+{%- if fd.oob_gateway_host.value is none %}{{ missing_FabricDesign_oob_gateway_host() }}{% endif -%}
+{%- if fd.evpn_rd_rt_mode.value is none %}{{ missing_FabricDesign_evpn_rd_rt_mode() }}{% endif -%}
+{%- if fd.underlay_ospf_network_type.value is none %}{{ missing_FabricDesign_underlay_ospf_network_type() }}{% endif -%}
+{%- if fd.bfd_echo.value is none %}{{ missing_FabricDesign_bfd_echo() }}{% endif -%}
+{%- if fd.evpn_bum_replication.value is none %}{{ missing_FabricDesign_evpn_bum_replication() }}{% endif -%}
+{%- if fd.inter_site_bum_replication.value is none %}{{ missing_FabricDesign_inter_site_bum_replication() }}{% endif -%}
+{%- if fd.bgw_underlay_advertise_method.value is none %}{{ missing_FabricDesign_bgw_underlay_advertise_method() }}{% endif -%}
+{%- if fd.overlay_bgp_bfd.value is none %}{{ missing_FabricDesign_overlay_bgp_bfd() }}{% endif -%}
+{%- if fd.inter_site_rt_asn_rewrite.value is none %}{{ missing_FabricDesign_inter_site_rt_asn_rewrite() }}{% endif -%}
+{%- if fd.evpn_maximum_paths.value is none %}{{ missing_FabricDesign_evpn_maximum_paths() }}{% endif -%}
+{%- if fd.nxos_scp_server.value is none %}{{ missing_FabricDesign_nxos_scp_server() }}{% endif -%}
+{%- if fd.overlay_send_community_standard.value is none %}{{ missing_FabricDesign_overlay_send_community_standard() }}{% endif -%}
+{%- if fd.ip_redirects.value is none %}{{ missing_FabricDesign_ip_redirects() }}{% endif -%}
+{%- if fd.inter_site_bgw_peering.value is none %}{{ missing_FabricDesign_inter_site_bgw_peering() }}{% endif -%}
+{%- if fd.inter_site_bgp_bfd.value is none %}{{ missing_FabricDesign_inter_site_bgp_bfd() }}{% endif -%}
+{%- if fd.dci_ebgp_bfd.value is none %}{{ missing_FabricDesign_dci_ebgp_bfd() }}{% endif -%}
+{%- if fd.inter_site_bgw_peering.value != "full_mesh" %}{{ unsupported_FabricDesign_inter_site_bgw_peering() }}{% endif -%}
+{%- if fd.inter_site_bgp_bfd.value %}{{ unsupported_FabricDesign_inter_site_bgp_bfd_true() }}{% endif -%}   {#- the rendering of inter-site BFD is not decided yet -#}
+{%- set site_key = data.DcimDevice.edges[0].node.location.node.name.value | lower -%}
+{%- if fd[site_key ~ "_overlay_bgp_password"] is not defined or fd[site_key ~ "_overlay_bgp_password"].value is none %}{{ fd["missing_FabricDesign_" ~ site_key ~ "_overlay_bgp_password"]() }}{% endif -%}
+{%- if fd[site_key ~ "_bgw_dci_bgp_password"] is not defined or fd[site_key ~ "_bgw_dci_bgp_password"].value is none %}{{ fd["missing_FabricDesign_" ~ site_key ~ "_bgw_dci_bgp_password"]() }}{% endif -%}
+{%- if fd[site_key ~ "_multisite_site_id"] is not defined or fd[site_key ~ "_multisite_site_id"].value is none %}{{ fd["missing_FabricDesign_" ~ site_key ~ "_multisite_site_id"]() }}{% endif -%}
+{%- if fd[site_key ~ "_infra_block"] is not defined or fd[site_key ~ "_infra_block"].value is none %}{{ fd["missing_FabricDesign_" ~ site_key ~ "_infra_block"]() }}{% endif -%}
 {% set ospf_process = "UNDERLAY" -%}
-{% set ospf_area = "0.0.0.0" -%}
+{% set ospf_area = fd.underlay_ospf_area.value -%}
 {% set rr_template = "SPINE-RR" -%}
-{% set bgp_password = "cisco123" -%}
-{% set bfd_timers = "interval 999 min_rx 999 multiplier 3" -%}   {#- row 25 B; NX-OS 10.6 single-hop 50-999 -#}
-{% set svi_mtu = 9216 -%}
-{% set ms_delay_restore = 300 -%}        {#- P4A-01 (Cisco examples) -#}
-{% set storm_level = 1 -%}               {#- row 24 B: 1% broadcast, multicast, unknown unicast -#}
-{% set ms_ttl = 64 -%}                   {#- row 21: 64 -#}
-{% set vip_if = "loopback2" -%}          {#- row 15 C -#}
+{% set bgp_password = fd[site_key ~ "_overlay_bgp_password"].value -%}
+{% set bgw_dci_bgp_password = fd[site_key ~ "_bgw_dci_bgp_password"].value -%}
+{% set inter_site_bgp_password = fd.inter_site_bgw_bgp_password.value -%}
+{% set bfd_timers = "interval " ~ fd.bfd_interval_ms.value ~ " min_rx " ~ fd.bfd_min_rx_ms.value ~ " multiplier " ~ fd.bfd_multiplier.value -%}   {#- NX-OS 10.6 single-hop 50-999 -#}
+{% set overlay_bfd_timers = "interval " ~ fd.overlay_bfd_interval_ms.value ~ " min_rx " ~ fd.overlay_bfd_interval_ms.value ~ " multiplier " ~ fd.overlay_bfd_multiplier.value -%}
+{% set svi_mtu = fd.mtu_svi.value -%}
+{% set ms_delay_restore = fd.inter_site_delay_restore_s.value -%}        {#- as in Cisco's examples -#}
+{% set storm_level = fd.inter_site_storm_control_percent.value -%}   {#- traffic types: inter_site_storm_control_types -#}
+{% set ms_ttl = fd.inter_site_ebgp_multihop_ttl.value -%}   {#- eBGP multihop TTL toward the other site's BGWs -#}
 {% set underlay_rm = "RM-UNDERLAY-TO-DCI" -%}
-{% set seq_step = 10 -%}
+{% set seq_step = fd.route_policy_seq_step.value -%}
 {% macro peer31(a) %}{% set p = (a | ipaddress_interface("ip") | string).split(".") %}{% set n = p[3] | int %}{{ p[:3] | join(".") }}.{{ n + 1 if n % 2 == 0 else n - 1 }}{% endmacro -%}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
@@ -26,7 +73,6 @@
 {% set virtual = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
 {% set lo0 = virtual | selectattr("name.value", "equalto", "loopback0") | list | first -%}
 {% set lo1 = virtual | selectattr("name.value", "equalto", "loopback1") | list | first -%}
-{% set lo2 = virtual | selectattr("name.value", "equalto", vip_if) | list | first -%}
 {% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
 {% set core_all = physical | selectattr("role.value", "equalto", "core") | list -%}
 {% set core_names = core_all | map(attribute="name.value") | list | sort_interface_list -%}
@@ -40,8 +86,15 @@
 {% for s in site.segments.edges | map(attribute="node") | list %}{% if s.vrf.node.name.value in ms_vrf_names and (s.sites.edges | length) > 1 %}{% set seg_ns.items = seg_ns.items + [s] %}{% endif %}{% endfor -%}
 {% set segs = seg_ns.items | sort(attribute="vlan_id.value") -%}
 {% set bgws = data.Bgws.edges | map(attribute="node") | list -%}
-{% set vip_ns = namespace(v=none) -%}
-{% for b in bgws %}{% if b.location.node.name.value == site_name %}{% for i in b.interfaces.edges | map(attribute="node") | list %}{% if i.name.value == vip_if and i.ip_addresses and i.ip_addresses.edges %}{% set vip_ns.v = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endfor %}{% endif %}{% endfor -%}
+{# Multi-Site VIP: the interface of this site's BGWs that holds <infra>.<third octet>.<host>/32 (on BGW1 only);
+   both BGWs use the interface of that name #}
+{% set infra_octets = fd[site_key ~ "_infra_block"].value.split("/")[0].split(".") -%}
+{% set vip_addr = infra_octets[0] ~ "." ~ infra_octets[1] ~ "." ~ fd.inter_site_vip_third_octet.value ~ "." ~ fd.inter_site_vip_host.value ~ "/32" -%}
+{% set vip_ns = namespace(v=none, name=none) -%}
+{% for b in bgws %}{% if b.location.node.name.value == site_name %}{% for i in b.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses and i.ip_addresses.edges %}{% for a in i.ip_addresses.edges %}{% if a.node.address.value == vip_addr %}{% set vip_ns.v = a.node.address.value %}{% set vip_ns.name = i.name.value %}{% endif %}{% endfor %}{% endif %}{% endfor %}{% endif %}{% endfor -%}
+{% if vip_ns.name is none %}{{ missing_inter_site_vip_interface() }}{% endif -%}
+{% set vip_if = vip_ns.name -%}
+{% set lo2 = virtual | selectattr("name.value", "equalto", vip_if) | list | first -%}
 {% set remote_bgws = bgws | rejectattr("location.node.name.value", "equalto", site_name) | list -%}
 {% set remote_names = remote_bgws | map(attribute="name.value") | list | sort_interface_list -%}
 {% set dcis = data.Dcis.edges | map(attribute="node") | list -%}
@@ -49,25 +102,32 @@
 {% set lo0_addr = lo0.ip_addresses.edges[0].node.address.value -%}
 {% set router_id = lo0_addr | ipaddress_interface("ip") -%}
 {% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
-{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+{% set mgmt_gw = ((mgmt_addr | ipaddress_interface("network")).network_address + fd.oob_gateway_host.value) | string -%}
 hostname {{ device.name.value }}
-username vamdadmin password 5 __VAMDADMIN_HASH__ role network-admin
+username {{ fd.local_admin_username.value }} password 5 __CISCOADMIN_HASH__ role {{ fd.local_admin_role.value }}
+{% if not fd.dns_lookup.value %}
 no ip domain-lookup
+{% endif %}
 feature ospf
 feature bgp
+{% if fd.overlay_bgp_bfd.value or fd.dci_ebgp_bfd.value or fd.inter_site_bgp_bfd.value %}
 feature bfd
+{% endif %}
 feature interface-vlan
 feature vn-segment-vlan-based
 feature nv overlay
+{% if fd.nxos_scp_server.value %}
+feature scp-server
+{% endif %}
 nv overlay evpn
 
-evpn multisite border-gateway {{ asn }}
+evpn multisite border-gateway {{ fd[site_key ~ "_multisite_site_id"].value }}
   delay-restore time {{ ms_delay_restore }}
-  split-horizon per-site
+  split-horizon {{ fd.inter_site_split_horizon.value }}
 
-evpn storm-control broadcast level {{ storm_level }}
-evpn storm-control multicast level {{ storm_level }}
-evpn storm-control unicast level {{ storm_level }}
+{% for t in fd.inter_site_storm_control_types.value %}
+evpn storm-control {{ t }} level {{ storm_level }}
+{% endfor %}
 
 route-map {{ underlay_rm }} permit {{ seq_step }}
   match interface {{ lo0.name.value }} {{ lo1.name.value }} {{ lo2.name.value }}
@@ -78,10 +138,10 @@ vrf context management
 
 vrf context {{ vrf.name.value }}
   vni {{ vrf.l3_vni.value }}
-  rd auto
+  rd {{ fd.evpn_rd_rt_mode.value }}
   address-family ipv4 unicast
-    route-target both auto
-    route-target both auto evpn
+    route-target both {{ fd.evpn_rd_rt_mode.value }}
+    route-target both {{ fd.evpn_rd_rt_mode.value }} evpn
 {% endfor %}
 {% for vrf in vrfs %}
 
@@ -121,7 +181,9 @@ interface Vlan{{ vrf.l3_vni_vlan.value }}
   no shutdown
   mtu {{ svi_mtu }}
   vrf member {{ vrf.name.value }}
+{% if not fd.ip_redirects.value %}
   no ip redirects
+{% endif %}
   ip forward
 {% endfor %}
 {% for name in core_names %}{% set intf = core_all | selectattr("name.value", "equalto", name) | list | first %}
@@ -131,7 +193,7 @@ interface {{ intf.name.value }}
   no switchport
   mtu {{ intf.mtu.value }}
   ip address {{ intf.ip_addresses.edges[0].node.address.value }}
-  ip ospf network point-to-point
+  ip ospf network {{ fd.underlay_ospf_network_type.value }}
   ip router ospf {{ ospf_process }} area {{ ospf_area }}
   evpn multisite fabric-tracking
   no shutdown
@@ -143,9 +205,15 @@ interface {{ intf.name.value }}
   no switchport
   mtu {{ intf.mtu.value }}
   ip address {{ intf.ip_addresses.edges[0].node.address.value }}
+{% if not fd.ip_redirects.value %}
   no ip redirects
+{% endif %}
+{% if fd.dci_ebgp_bfd.value %}
+{% if not fd.bfd_echo.value %}
   no bfd echo
+{% endif %}
   bfd {{ bfd_timers }}
+{% endif %}
   evpn multisite dci-tracking
   no shutdown
 {% endfor %}
@@ -155,10 +223,10 @@ interface nve1
   host-reachability protocol bgp
   source-interface {{ lo1.name.value }}
   multisite border-gateway interface {{ lo2.name.value }}
-  global ingress-replication protocol bgp
+  global {{ fd.evpn_bum_replication.value }}
 {% for seg in segs %}
   member vni {{ seg.l2_vni.value }}
-    multisite ingress-replication
+    multisite {{ fd.inter_site_bum_replication.value }}
 {% endfor %}
 {% for vrf in vrfs %}
   member vni {{ vrf.l3_vni.value }} associate-vrf
@@ -170,15 +238,21 @@ router ospf {{ ospf_process }}
 router bgp {{ asn }}
   router-id {{ router_id }}
   address-family ipv4 unicast
-    redistribute direct route-map {{ underlay_rm }}
+    {{ fd.bgw_underlay_advertise_method.value }} route-map {{ underlay_rm }}
+  address-family l2vpn evpn
+    maximum-paths ibgp {{ fd.evpn_maximum_paths.value }}
   template peer {{ rr_template }}
     remote-as {{ asn }}
     update-source loopback0
     password {{ bgp_password }}
+{% if fd.overlay_bgp_bfd.value %}
     bfd multihop
-    bfd multihop {{ bfd_timers }}
+    bfd multihop {{ overlay_bfd_timers }}
+{% endif %}
     address-family l2vpn evpn
+{% if fd.overlay_send_community_standard.value %}
       send-community
+{% endif %}
       send-community extended
 {% for name in spine_names %}{% set spine = spines_all | selectattr("name.value", "equalto", name) | list | first %}
   neighbor {{ spine.interfaces.edges[0].node.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }}
@@ -190,11 +264,13 @@ router bgp {{ asn }}
   neighbor {{ peer31(intf.ip_addresses.edges[0].node.address.value) }}
     remote-as {{ far_dev.asn.node.asn.value }}
     description {{ far }}
-    password {{ bgp_password }}
+    password {{ bgw_dci_bgp_password }}
+{% if fd.dci_ebgp_bfd.value %}
     bfd
+{% endif %}
     address-family ipv4 unicast
 {% endfor %}
-{% for name in remote_names %}{% set rb = remote_bgws | selectattr("name.value", "equalto", name) | list | first %}
+{% for name in remote_names %}{#- inter_site_bgw_peering full_mesh: every BGW of the other sites -#}{% set rb = remote_bgws | selectattr("name.value", "equalto", name) | list | first %}
 {% set rb_lo0 = rb.interfaces.edges | map(attribute="node") | list | selectattr("name.value", "equalto", "loopback0") | list | first %}
   neighbor {{ rb_lo0.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }}
     remote-as {{ rb.asn.node.asn.value }}
@@ -202,11 +278,15 @@ router bgp {{ asn }}
     update-source loopback0
     ebgp-multihop {{ ms_ttl }}
     peer-type fabric-external
-    password {{ bgp_password }}
+    password {{ inter_site_bgp_password }}
     address-family l2vpn evpn
+{% if fd.overlay_send_community_standard.value %}
       send-community
+{% endif %}
       send-community extended
+{% if fd.inter_site_rt_asn_rewrite.value %}
       rewrite-evpn-rt-asn
+{% endif %}
 {% endfor %}
 {% for vrf in vrfs %}
   vrf {{ vrf.name.value }}
@@ -217,7 +297,7 @@ router bgp {{ asn }}
 evpn
 {% for seg in segs %}
   vni {{ seg.l2_vni.value }} l2
-    rd auto
-    route-target import auto
-    route-target export auto
+    rd {{ fd.evpn_rd_rt_mode.value }}
+    route-target import {{ fd.evpn_rd_rt_mode.value }}
+    route-target export {{ fd.evpn_rd_rt_mode.value }}
 {% endfor %}

@@ -5,15 +5,14 @@ query SiteDiagrams($site: String!) {
       name { value }
       role { value }
       position { value }
-      rack_face { value }
-      device_type { node { name { value } height { value } } }
+      device_type { node { name { value } height { value } uplink_speed_100g { value } vpc_keepalive_port { value } } }
       rack { node { name { value } } }
       asn { node { asn { value } } }
       interfaces { edges { node {
         id
         __typename
         name { value }
-        ... on InterfacePhysical { role { value } connector { node { id } } }
+        ... on InterfacePhysical { role { value } }
         ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
       } } }
     } }
@@ -23,7 +22,6 @@ query SiteDiagrams($site: String!) {
       id
       name { value }
       cable_type { value }
-      length_m { value }
       connected_endpoints { edges { node { id } } }
     } }
   }
@@ -46,5 +44,12 @@ query SiteDiagrams($site: String!) {
       switch_pair { node { ... on FabricSwitchPair { name { value } members { edges { node { name { value } } } } } } }
       devices { edges { node { name { value } asn { node { asn { value } } } } } }
     } }
+  }
+  # Design values (FabricDesign) read by transforms/site_diagrams.py
+  FabricDesign {
+    count
+    edges { node { vtep_roles { value } transit_vrf { value } attachment_leaf_hosts { value } attachment_device_host { value }
+      attachment_prefix_length { value } oob_cable_type_console { value } p2p_link_prefix_length { value } underlay_ospf_area { value }
+      pdu_rack_face { value } } }
   }
 }

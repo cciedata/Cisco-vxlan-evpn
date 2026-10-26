@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""Phase 3 lab driver: build a containerlab directory from Infrahub artifacts, then deploy, carve, destroy.
+"""Lab driver: build a containerlab directory from Infrahub artifacts, then deploy, carve, destroy.
 
   labctl.py fetch    <site>   pull the site's lab artifacts from Infrahub into lab/build/<site>/ (topology, configs, expectations)
   labctl.py validate <site>   offline checks on the build directory: files, links, mgmt addresses, images, host memory
-  labctl.py deploy   <site>   containerlab deploy (refuses when validate fails, unless --force)
+  labctl.py deploy   <site>   containerlab deploy (refuses when validate fails, unless --force); N9Kv boot in groups with a
+                              boot watchdog that redeploys the site once when an N9Kv hangs in the vrnetlab bootstrap
   labctl.py push     <site>   8 Oct: after a minimal-boot deploy, push every N9Kv's full config (NX-API, refused blocks over SSH), save
-  labctl.py carve    <site>   L-12: waits (max 60 min) until every N9Kv is healthy, then ARP-suppression TCAM carve + reset + config re-push on every NX-OS node whose config uses suppress-arp
+  labctl.py carve    <site>   waits (max 60 min) until every N9Kv is healthy, then ARP-suppression TCAM carve + reset + config re-push on every NX-OS node whose config uses suppress-arp
   labctl.py destroy  <site>   containerlab destroy --cleanup
   labctl.py status   <site>   containerlab inspect
 
   <site> may be DC1-full / DC2-full (option 5): the entire site from the lab-topology-full artifact, in lab/build/<site>-full/.
 
-Every value here is a Phase 3 decision (claude/phase3-decisions.md P3-xx, decisions.xlsx Auto-approved-Lab L-xx / P3D-xx).
+Every value here is a lab setting chosen for this lab.
 Nothing is typed by hand per device: node list, kinds, files and links come from the lab-topology artifact.
 """
 import argparse
+import calendar
 import hashlib
 import json
 import os
@@ -29,7 +31,7 @@ import warnings
 import httpx
 import yaml
 
-import vamd_secrets  # Phase 3b: delivery-time secrets (lab/vamd_secrets.py)
+import vamd_secrets  # delivery-time secrets (lab/vamd_secrets.py)
 
 warnings.filterwarnings("ignore")
 
@@ -37,24 +39,33 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD = os.path.join(REPO, "lab", "build")
 
 # ---------------------------------------------------------------- approved constants
-INFRAHUB = os.environ.get("INFRAHUB_ADDRESS", "http://localhost:8000")              # P3D-03: the fast-track instance
-INFRAHUB_USER = os.environ.get("INFRAHUB_USERNAME", "admin")                        # P3D-03: compose demo login (public)
-INFRAHUB_PASS = os.environ.get("INFRAHUB_PASSWORD", "infrahub")
-NXOS_USER, NXOS_PASS = "admin", "admin"                                             # P3D-07: vrnetlab N9Kv default login (lab only)
-LAB_NXOS_LINES = ["feature nxapi", "feature scp-server"]                            # P3-47: NX-API is lab-only, added at deploy;
-                                                                                   # FU-16 (7 Oct): SCP for the Day-2 push (lab/day2)
-CARVE = ["hardware access-list tcam region racl 512",                              # L-12 (lR19): racl first, else
+INFRAHUB = os.environ.get("INFRAHUB_ADDRESS", "http://localhost:8000")              # the local Infrahub instance
+INFRAHUB_TOKEN = os.environ.get("INFRAHUB_API_TOKEN", "")                           # as infrahubctl: the token comes first
+INFRAHUB_USER = os.environ.get("INFRAHUB_USERNAME", "")                             # username/password only when no token is set
+INFRAHUB_PASS = os.environ.get("INFRAHUB_PASSWORD", "")
+NXOS_USER, NXOS_PASS = "admin", "admin"                                             # vrnetlab N9Kv default login (lab only)
+LAB_NXOS_LINES = ["feature nxapi"]                                                 # NX-API is lab-only, added at deploy.
+                                                                                   # feature scp-server is rendered by the production
+                                                                                   # templates (FabricDesign.nxos_scp_server)
+CARVE = ["hardware access-list tcam region racl 512",                              # racl first, else
          "hardware access-list tcam region arp-ether 256 double-wide"]              # "exceeded the available Ingress TCAM slices"
 HEALTHY_WAIT_S = 3600                                                                  # 8 Oct: carve waits up to 60 min for every N9Kv
 HEALTHY_POLL_S = 30
 BOOT_TOP = ("hostname ", "username ", "feature nxapi", "feature scp-server", "feature ssh")   # 8 Oct: minimal vrnetlab boot config
 BOOT_BLOCKS = ("interface mgmt0", "vrf context management")
-CARVE_TRIGGER = "suppress-arp"                                                      # P3D-05: carve nodes = configs that use it
-QEMU_MONITOR_PORT = 4000                                                            # vrnetlab QEMU monitor inside the container (lR19)
-SKIP_BLOCKS = ("interface mgmt0", "vrf context management")                         # lR05c method: mgmt is set by containerlab
-NODE_MEM_MB = {"cisco_n9kv": None, "cisco_xrd": 2048, "linux": 256}                 # P3D-06: n9kv from QEMU_MEMORY; XRd/linux estimates
-HOST_RESERVE_MB = 2048                                                              # P3D-06: kept free for the host
+CARVE_TRIGGER = "suppress-arp"                                                      # carve nodes = configs that use it
+QEMU_MONITOR_PORT = 4000                                                            # vrnetlab QEMU monitor inside the container
+SKIP_BLOCKS = ("interface mgmt0", "vrf context management")                         # mgmt is set by containerlab
+NODE_MEM_MB = {"cisco_n9kv": None, "cisco_xrd": 2048, "linux": 256}                 # n9kv from QEMU_MEMORY; XRd/linux estimates
+HOST_RESERVE_MB = 2048                                                              # kept free for the host
 ARTIFACT_EXT = {"lab-topology": "yml", "lab-topology-full": "yml", "lab-expected": "json"}
+# Staged N9Kv boot + boot watchdog (one lab run: 20 N9Kv booted at once, DC1-S2 hung in the vrnetlab bootstrap
+# at 'feature telnet'; vrnetlab only catches EOFError, so the node never became healthy; a site redeploy recovered it)
+BOOT_GROUP_SIZE = 5           # N9Kv per boot group, in topology order; 0 = all at once (deploy --group-size)
+#                               group k+1 is created once every N9Kv of group k is healthy (containerlab stages)
+BOOT_STUCK_S = 600            # an N9Kv that is not healthy and whose vrnetlab log has not moved for 10 min is hung
+BOOT_RETRIES = 1              # on a hang, destroy and redeploy the site this many times, then stop
+BOOT_POLL_S = 30
 
 
 def die(msg, code=1):
@@ -71,10 +82,18 @@ class Infrahub:
     def __init__(self, branch):
         self.branch = branch
         self.http = httpx.Client(base_url=INFRAHUB, timeout=120)
-        r = self.http.post("/api/auth/login", json={"username": INFRAHUB_USER, "password": INFRAHUB_PASS})
-        if r.status_code != 200:
-            die(f"Infrahub login failed: {r.status_code} {r.text[:200]}")
-        self.http.headers["Authorization"] = "Bearer " + r.json()["access_token"]
+        # The repo's compose generates the admin password into .env, so the old demo admin/infrahub default gave
+        # "401 Incorrect password" with nothing in the docs saying otherwise (repo-fixes-pending #6). A token is the
+        # documented way to reach Infrahub, so it comes first; username/password still work when both are set.
+        if INFRAHUB_TOKEN:
+            self.http.headers["X-INFRAHUB-KEY"] = INFRAHUB_TOKEN
+        elif INFRAHUB_USER and INFRAHUB_PASS:
+            r = self.http.post("/api/auth/login", json={"username": INFRAHUB_USER, "password": INFRAHUB_PASS})
+            if r.status_code != 200:
+                die(f"Infrahub login failed: {r.status_code} {r.text[:200]}")
+            self.http.headers["Authorization"] = "Bearer " + r.json()["access_token"]
+        else:
+            die("set INFRAHUB_API_TOKEN (as for infrahubctl), or INFRAHUB_USERNAME and INFRAHUB_PASSWORD")
         self._index = None
 
     def gql(self, query):
@@ -155,7 +174,7 @@ def cmd_fetch(args):
             if not same:
                 diffs.append(f"{name}.{target}")
         text = body.rstrip("\n") + "\n"
-        if name == "startup-config":                                              # Phase 3b: fill __VAMDADMIN_HASH__
+        if name == "startup-config":                                              # fill __CISCOADMIN_HASH__
             text, warns = vamd_secrets.fill(text)
             for w in warns:
                 print(f"WARNING {target}: {w}", file=sys.stderr)
@@ -169,7 +188,7 @@ def cmd_fetch(args):
                          "storage_id": meta["storage_id"], "checksum": meta["checksum"], "sha256_16": sha(text),
                          "lab_lines_added": list(extra_lines)})
 
-    full = site.endswith("-full")                                                # option 5 (D5-41): the entire site
+    full = site.endswith("-full")                                                # option 5: the entire site
     base_site = site[:-len("-full")] if full else site
     save("lab-topology-full" if full else "lab-topology", base_site, "topology.yml")
     if not full:
@@ -312,12 +331,102 @@ def clab(*argv):
 
 
 def with_memory(topo, mb):
-    """Copy of the topology with every N9Kv QEMU_MEMORY set to mb (laptop runs, P3D-12); the artifact itself is untouched."""
+    """Copy of the topology with every N9Kv QEMU_MEMORY set to mb (laptop runs); the artifact itself is untouched."""
     t = json.loads(json.dumps(topo))
     for spec in t["topology"]["nodes"].values():
         if spec["kind"] == "cisco_n9kv":
             spec.setdefault("env", {})["QEMU_MEMORY"] = mb
     return t
+
+
+def staged_topology(topo, size, only=None):
+    """Copy of the topology in which N9Kv group k+1 is created only when every N9Kv of group k is healthy.
+
+    Groups of `size` N9Kv in topology order (the artifact's order), limited to `only` (deploy --node-filter) when given;
+    other nodes are not staged. Returns (topology, groups).
+    """
+    t = json.loads(json.dumps(topo))
+    n9k = [n for n, spec in t["topology"]["nodes"].items() if spec["kind"] == "cisco_n9kv" and (not only or n in only)]
+    if size <= 0 or size >= len(n9k):
+        return t, [n9k] if n9k else []
+    groups = [n9k[i:i + size] for i in range(0, len(n9k), size)]
+    for prev, cur in zip(groups, groups[1:]):
+        for node in cur:
+            stages = t["topology"]["nodes"][node].setdefault("stages", {})
+            stages.setdefault("create", {})["wait-for"] = [{"node": p, "stage": "healthy"} for p in prev]
+    return t, groups
+
+
+def last_log_time(container):
+    """Epoch seconds of the container's last log line (docker logs -t), None when the container does not exist yet."""
+    r = subprocess.run(["docker", "logs", "-t", "--tail", "1", container], capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    line = (r.stdout.strip() or r.stderr.strip()).splitlines()
+    if not line:
+        return started_time(container)
+    try:
+        return calendar.timegm(time.strptime(line[-1][:19], "%Y-%m-%dT%H:%M:%S"))
+    except ValueError:
+        return None
+
+
+def started_time(container):
+    r = subprocess.run(["docker", "inspect", "-f", "{{.State.StartedAt}}", container], capture_output=True, text=True)
+    try:
+        return calendar.timegm(time.strptime(r.stdout.strip()[:19], "%Y-%m-%dT%H:%M:%S"))
+    except ValueError:
+        return None
+
+
+def hung_nodes(nodes, lab, now, health=None, log_time=last_log_time, start_time=started_time, stuck=BOOT_STUCK_S):
+    """N9Kv that exist, are not healthy, have run longer than `stuck` and whose log has not moved for `stuck` seconds."""
+    health = health or docker_health
+    out = []
+    for node in nodes:
+        c = f"clab-{lab}-{node}"
+        h = health(c)
+        if h in ("healthy", "missing"):
+            continue
+        last, began = log_time(c), start_time(c)
+        if last is None or began is None:
+            continue
+        if now - began > stuck and now - last > stuck:
+            out.append(f"{node}({h}, log quiet {int(now - last)} s)")
+    return out
+
+
+def deploy_watched(path, lab, nodes, extra):
+    """containerlab deploy, then watch every N9Kv until all are healthy; a hung node -> destroy + redeploy."""
+    for attempt in range(BOOT_RETRIES + 1):
+        print("+ containerlab deploy -t " + path + " --reconfigure " + " ".join(extra), flush=True)
+        proc = subprocess.Popen(["containerlab", "deploy", "-t", path, "--reconfigure", *extra])
+        start, hung = time.time(), []
+        while True:
+            time.sleep(BOOT_POLL_S)
+            rc = proc.poll()
+            if rc not in (None, 0):
+                print(f"deploy: containerlab exited {rc}", flush=True)
+                return rc
+            waiting = [n for n in nodes if docker_health(f"clab-{lab}-{n}") != "healthy"]
+            if rc == 0 and not waiting:
+                print(f"deploy: all {len(nodes)} N9Kv healthy after {int(time.time() - start)} s", flush=True)
+                return 0
+            hung = hung_nodes(nodes, lab, time.time())
+            if hung:
+                break
+            print(f"{time.strftime('%T')} boot: {len(nodes) - len(waiting)} of {len(nodes)} N9Kv healthy"
+                  f"{'' if rc is None else ' (containerlab done)'}", flush=True)
+        print(f"watchdog: hung in the vrnetlab bootstrap: {' '.join(hung)} (attempt {attempt + 1} of {BOOT_RETRIES + 1})", flush=True)
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=120)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        clab("destroy", "-t", path, "--cleanup")       # 25 Oct: a single-node restart breaks containerlab links; redeploy the site
+    print(f"deploy: FAIL: N9Kv still hung after {BOOT_RETRIES} redeploy(s)", flush=True)
+    return 7
 
 
 def cmd_deploy(args):
@@ -337,7 +446,19 @@ def cmd_deploy(args):
             yaml.safe_dump(with_memory(topo, args.memory), f, sort_keys=False)
         print(f"deploying {os.path.basename(path)} (N9Kv memory {args.memory} MB)")
     extra = ["--node-filter", args.node_filter] if args.node_filter else []
-    sys.exit(clab("deploy", "-t", path, "--reconfigure", *extra))
+    if args.no_watchdog:
+        sys.exit(clab("deploy", "-t", path, "--reconfigure", *extra))
+    only = set(args.node_filter.split(",")) if args.node_filter else None
+    staged, groups = staged_topology(yaml.safe_load(open(path)), args.group_size, only)    # the file being deployed
+    if len(groups) > 1:
+        path = os.path.join(os.path.dirname(path), "topology.staged.yml")
+        with open(path, "w") as f:
+            f.write(f"# deployed topology with the N9Kv booted in groups of {args.group_size}: "
+                    + " | ".join(",".join(g) for g in groups) + "\n")
+            yaml.safe_dump(staged, f, sort_keys=False)
+        print(f"deploying {os.path.basename(path)}: {len(groups)} N9Kv boot groups: " + " | ".join(" ".join(g) for g in groups))
+    nodes = [n for g in groups for n in g]
+    sys.exit(deploy_watched(path, topo["name"], nodes, extra))
 
 
 def cmd_destroy(args):
@@ -350,7 +471,7 @@ def cmd_status(args):
     sys.exit(clab("inspect", "-t", path))
 
 
-# ---------------------------------------------------------------- NX-API (lR05c / lR19 method)
+# ---------------------------------------------------------------- NX-API
 class NXAPI:
     def __init__(self, ip):
         self.url = f"https://{ip}/ins"
@@ -418,7 +539,7 @@ def push_config(api, cfg_text):
 
 
 def qemu_reset(container):
-    """vrnetlab QEMU monitor 'system_reset' (lR19: NX-OS 'reload' over NX-API waits for a prompt)."""
+    """vrnetlab QEMU monitor 'system_reset' (NX-OS 'reload' over NX-API waits for a prompt)."""
     code = ("import socket,time; s=socket.create_connection(('127.0.0.1',%d)); time.sleep(1); "
             "s.sendall(b'system_reset\\n'); time.sleep(1); print('reset sent')" % QEMU_MONITOR_PORT)
     return subprocess.run(["timeout", "15", "docker", "exec", container, "/.venv/bin/python", "-c", code]).returncode
@@ -567,6 +688,8 @@ def main():
         if name == "deploy":
             s.add_argument("--force", action="store_true")
             s.add_argument("--full-boot", action="store_true", help="boot N9Kv with the full config (vrnetlab console push; old way)")
+            s.add_argument("--group-size", type=int, default=BOOT_GROUP_SIZE, help="N9Kv per boot group; 0 = all at once")
+            s.add_argument("--no-watchdog", action="store_true", help="plain containerlab deploy: no boot groups, no hang watchdog")
         if name in ("carve", "push"):
             s.add_argument("--nodes", help="comma-separated subset")
     a = p.parse_args()

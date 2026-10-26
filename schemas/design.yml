@@ -1,0 +1,2367 @@
+---
+# yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
+# ONE global FabricDesign object holds every design value that used to be a literal in generators, templates,
+# transforms and lab code. Per-site values are dc1_/dc2_ fields.
+# Every attribute is optional with no default_value: a missing value is caught by the code, never filled in here.
+# Fields that hold decimals (*_m lengths) are kind Text and the code converts them with float(): kind Any did not keep
+# 0.8 when tested.
+version: "1.0"
+nodes:
+  - name: Design
+    namespace: Fabric
+    label: Fabric Design
+    description: Global design values (one object, name global); per-site values as dc1_/dc2_ fields.
+    icon: mdi:tune-variant
+    include_in_menu: true
+    human_friendly_id:
+      - name__value
+    display_label: "{{ name__value }}"
+    attributes:
+      - name: name
+        description: Object name (global); the code reads the single FabricDesign object.
+        kind: Text
+        unique: true
+        optional: false
+      # ---- group A
+      - name: internal_fw_ha_group_base
+        description: "FW HA group id base for role internal_fw"
+        kind: Number
+        optional: true
+      - name: internet_fw_ha_group_base
+        description: "FW HA group id base for role internet_fw"
+        kind: Number
+        optional: true
+      - name: oob_fw_ha_group_base
+        description: "FW HA group id base for role oob_fw"
+        kind: Number
+        optional: true
+      - name: sdwan_fw_ha_group_base
+        description: "FW HA group id base for role sdwan_fw"
+        kind: Number
+        optional: true
+      - name: vpn_fw_ha_group_base
+        description: "FW HA group id base for role vpn_fw"
+        kind: Number
+        optional: true
+      - name: asn_offset_cloud_router
+        description: "Cloud router ASN = fabric ASN + offset"
+        kind: Number
+        optional: true
+      - name: asn_offset_dci
+        description: "DCI switch ASN = fabric ASN + offset"
+        kind: Number
+        optional: true
+      - name: asn_offset_internal_fw
+        description: "Internal FW ASN = fabric ASN + offset"
+        kind: Number
+        optional: true
+      - name: asn_offset_internet_fw
+        description: "Internet FW ASN = fabric ASN + offset"
+        kind: Number
+        optional: true
+      - name: asn_offset_sdwan_fw
+        description: "SD-WAN hub FW ASN = fabric ASN + offset"
+        kind: Number
+        optional: true
+      - name: asn_offset_vpn_fw
+        description: "VPN-partner FW ASN = fabric ASN + offset"
+        kind: Number
+        optional: true
+      - name: cloud_attachment_slots
+        description: "Cloud router TRANSIT attachments: router -> leaf pair, slot"
+        kind: JSON
+        optional: true
+      - name: cloud_bundle_id
+        description: "Cloud router bundle number toward the border leaves"
+        kind: Number
+        optional: true
+      - name: dc1_cloud_aws_vlan_1
+        description: "AWS VIF VLAN (DC1, router 1)"
+        kind: Number
+        optional: true
+      - name: dc1_cloud_aws_vlan_2
+        description: "AWS VIF VLAN (DC1, router 2)"
+        kind: Number
+        optional: true
+      - name: dc2_cloud_aws_vlan_1
+        description: "AWS VIF VLAN (DC2, router 1)"
+        kind: Number
+        optional: true
+      - name: dc2_cloud_aws_vlan_2
+        description: "AWS VIF VLAN (DC2, router 2)"
+        kind: Number
+        optional: true
+      - name: dc1_cloud_er_vlan
+        description: "ExpressRoute VLAN (both legs) (DC1)"
+        kind: Number
+        optional: true
+      - name: dc2_cloud_er_vlan
+        description: "ExpressRoute VLAN (both legs) (DC2)"
+        kind: Number
+        optional: true
+      - name: dc1_fw_ha_group_offset
+        description: "FW HA group id site offset: group = <role>_ha_group_base + offset (DC1)"
+        kind: Number
+        optional: true
+      - name: dc2_fw_ha_group_offset
+        description: "FW HA group id site offset: group = <role>_ha_group_base + offset (DC2)"
+        kind: Number
+        optional: true
+      - name: dc1_oob_vpc_domain
+        description: "vPC domain id of the OOB aggregation pair (DC1)"
+        kind: Number
+        optional: true
+      - name: dc2_oob_vpc_domain
+        description: "vPC domain id of the OOB aggregation pair (DC2)"
+        kind: Number
+        optional: true
+      - name: dc1_vpc_domain_base
+        description: "vPC domain id base; domain = base + slot (DC1)"
+        kind: Number
+        optional: true
+      - name: dc2_vpc_domain_base
+        description: "vPC domain id base; domain = base + slot (DC2)"
+        kind: Number
+        optional: true
+      - name: dci_pair_port_channel
+        description: "DCI1<->DCI2 pair link port-channel number"
+        kind: Number
+        optional: true
+      - name: dmz_vlan_count
+        description: "Number of DMZ VLANs (1400..1415)"
+        kind: Number
+        optional: true
+      - name: dmz_vlan_names
+        description: "Named DMZ VLANs; others SRV-xx (format stays in code)"
+        kind: JSON
+        optional: true
+      - name: edge_vlan
+        description: "Edge (outside) VLAN id"
+        kind: Number
+        optional: true
+      - name: fw_wan_vrf_id
+        description: "FortiOS VRF id of the WAN side on SD-WAN/VPN FWs (no FabricVRF object)"
+        kind: Number
+        optional: true
+      - name: isp_bundle_id
+        description: "ISP router bundle number toward the edge pair (Bundle-Ether{n} format stays)"
+        kind: Number
+        optional: true
+      - name: isp_router_asn
+        description: "ASN shared by all four ISP routers"
+        kind: Number
+        optional: true
+      - name: oob_access_uplink_port_channel
+        description: "OOB access switch uplink port-channel number"
+        kind: Number
+        optional: true
+      - name: oob_fw_port_channel_base
+        description: "OOB agg Po/vPC toward OOB FW unit u = base + u"
+        kind: Number
+        optional: true
+      - name: oob_static_route_id_base
+        description: "First static route id on the OOB FW"
+        kind: Number
+        optional: true
+      - name: oob_vlans
+        description: "OOB VLAN ids, zones and carving inside the site OOB /20 (VLAN descriptions stay in code, DIS"
+        kind: JSON
+        optional: true
+      - name: route_policy_seq_step
+        description: "Sequence step for route-map / prefix-list / policy entries (all platforms)"
+        kind: Number
+        optional: true
+      - name: sdwan_overlay_asn
+        description: "SD-WAN overlay ASN (hub local-as, branches)"
+        kind: Number
+        optional: true
+      - name: transit_attachment_slots
+        description: "TRANSIT attachments: attached pair -> leaf pair, slot"
+        kind: JSON
+        optional: true
+      - name: vlan_base_dmz
+        description: "First DMZ VLAN id"
+        kind: Number
+        optional: true
+      - name: vlan_base_tenant_attachment
+        description: "Internal FW tenant attachment VLAN = base + slot"
+        kind: Number
+        optional: true
+      - name: vlan_base_transit
+        description: "TRANSIT attachment VLAN = base + slot"
+        kind: Number
+        optional: true
+      - name: vlan_base_vpn
+        description: "VPN-partner FW attachment VLAN = base + slot"
+        kind: Number
+        optional: true
+      - name: vpc_backup_vlan
+        description: "vPC backup underlay SVI VLAN (Vlan{id} format stays in code)"
+        kind: Number
+        optional: true
+      - name: vpc_domain_slot_span
+        description: "Max slot offset per site (guard base+1..base+99); 1..1000 platform limit stays in code"
+        kind: Number
+        optional: true
+      - name: vpc_first_extra_server_slot
+        description: "First vPC slot for further server-leaf pairs"
+        kind: Number
+        optional: true
+      - name: vpc_first_server_slot
+        description: "vPC slot of the first server-leaf pair"
+        kind: Number
+        optional: true
+      - name: vpc_fixed_slots
+        description: "vPC slot per fixed pair (pair prefix -> slot)"
+        kind: JSON
+        optional: true
+      - name: vpc_peer_link_port_channel
+        description: "Peer-link port-channel number on every vPC pair (fabric and OOB)"
+        kind: Number
+        optional: true
+      - name: vpn_attachment_slots
+        description: "VPN-partner FW attachment: pair -> leaf pair, VRF, slot"
+        kind: JSON
+        optional: true
+      - name: vpn_static_route_id_base
+        description: "First static route id for VPN partner routes"
+        kind: Number
+        optional: true
+      # ---- group B
+      - name: access_port_bpdu_guard
+        description: "BPDU guard on host access ports"
+        kind: Boolean
+        optional: true
+      - name: access_port_stp_edge
+        description: "Host access ports are STP edge ports"
+        kind: Boolean
+        optional: true
+      - name: anycast_gateway_mac
+        description: "Distributed anycast gateway MAC"
+        kind: Text
+        optional: true
+      - name: arp_suppression
+        description: "EVPN ARP suppression"
+        kind: Boolean
+        optional: true
+      - name: attachment_bgp_bfd
+        description: "BFD on leaf <-> attached-device eBGP sessions"
+        kind: Boolean
+        optional: true
+      - name: attachment_port_bpdu_guard
+        description: "BPDU guard on attached-device trunks"
+        kind: Boolean
+        optional: true
+      - name: attachment_port_l2_mode
+        description: "L2 mode of switch ports toward attached devices"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "trunk"
+            label: "trunk"
+      - name: attachment_port_stp_edge
+        description: "Attached-device trunks are STP edge trunks"
+        kind: Boolean
+        optional: true
+      - name: aws_bgp_password
+        description: "Secret. Session: cloud router <-> AWS VIF eBGP"
+        kind: Password
+        optional: true
+      - name: azure_bgp_password
+        description: "Secret. Session: cloud router <-> Azure ExpressRoute eBGP"
+        kind: Password
+        optional: true
+      - name: bfd_echo
+        description: "BFD echo mode (off on NX-OS and cloud routers)"
+        kind: Boolean
+        optional: true
+      - name: bfd_interval_ms
+        description: "BFD tx/rx interval: fabric, FW-leaf, ISP, cloud router-BL, carrier sessions"
+        kind: Number
+        optional: true
+      - name: bfd_multiplier
+        description: "BFD multiplier for the same sessions as bfd_interval_ms"
+        kind: Number
+        optional: true
+      - name: bgw_underlay_advertise_method
+        description: "How BGW loopbacks enter the DCI underlay BGP"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "redistribute direct"
+            label: "redistribute direct"
+      - name: carrier_names
+        description: "Carrier peered by ISP router n"
+        kind: JSON
+        optional: true
+      - name: cloud_accept_default_from_fabric
+        description: "Cloud routers accept 0/0 from the BLs"
+        kind: Boolean
+        optional: true
+      - name: cloud_advertise_default
+        description: "Cloud routers advertise 0/0 to the clouds"
+        kind: Boolean
+        optional: true
+      - name: cloud_backup_site
+        description: "Site whose cloud routers prepend (backup)"
+        kind: Text
+        optional: true
+      - name: cloud_bfd_interval_ms
+        description: "BFD interval toward AWS / Azure"
+        kind: Number
+        optional: true
+      - name: cloud_bfd_multiplier
+        description: "BFD multiplier toward AWS / Azure"
+        kind: Number
+        optional: true
+      - name: cloud_max_prefix
+        description: "Max prefixes from each cloud"
+        kind: Number
+        optional: true
+      - name: cloud_max_prefix_action
+        description: "Cloud max-prefix action"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "warning-only"
+            label: "warning-only"
+      - name: cloud_max_prefix_threshold_pct
+        description: "Cloud max-prefix warning threshold"
+        kind: Number
+        optional: true
+      - name: cloud_prepend_count
+        description: "AS-path prepend count at the backup site"
+        kind: Number
+        optional: true
+      - name: cloud_prepend_default
+        description: "Backup site prepend also covers 0/0"
+        kind: Boolean
+        optional: true
+      - name: cloud_router_bgp_graceful_restart
+        description: "BGP graceful restart on cloud routers (off)"
+        kind: Boolean
+        optional: true
+      - name: dc1_attachment_bgp_password
+        description: "Secret. Session: leaf <-> attached device eBGP (internal/internet/SD-WAN/VPN FW, cloud routers) + cloud route"
+        kind: Password
+        optional: true
+      - name: dc2_attachment_bgp_password
+        description: "Secret. Session: leaf <-> attached device eBGP (internal/internet/SD-WAN/VPN FW, cloud routers) + cloud route"
+        kind: Password
+        optional: true
+      - name: dc1_bgw_dci_bgp_password
+        description: "Secret. Session: BGW <-> DCI underlay eBGP inside a site (DC1)"
+        kind: Password
+        optional: true
+      - name: dc2_bgw_dci_bgp_password
+        description: "Secret. Session: BGW <-> DCI underlay eBGP inside a site (DC2)"
+        kind: Password
+        optional: true
+      - name: dc1_dci_pair_bgp_password
+        description: "Secret. Session: DCI1 <-> DCI2 iBGP inside a site (DC1)"
+        kind: Password
+        optional: true
+      - name: dc2_dci_pair_bgp_password
+        description: "Secret. Session: DCI1 <-> DCI2 iBGP inside a site (DC2)"
+        kind: Password
+        optional: true
+      - name: dc1_internet_edge_bgp_password
+        description: "Secret. Session: Internet FW <-> own ISP routers (DC1)"
+        kind: Password
+        optional: true
+      - name: dc2_internet_edge_bgp_password
+        description: "Secret. Session: Internet FW <-> own ISP routers (DC2)"
+        kind: Password
+        optional: true
+      - name: dc1_oob_remote_access_psk
+        description: "Secret. Session: OOB FW remote-access dial-up IKEv2 (DC1)"
+        kind: Password
+        optional: true
+      - name: dc2_oob_remote_access_psk
+        description: "Secret. Session: OOB FW remote-access dial-up IKEv2 (DC2)"
+        kind: Password
+        optional: true
+      - name: dc1_overlay_bgp_password
+        description: "Secret. Session: overlay iBGP spine <-> VTEPs/BGWs inside a site (DC1)"
+        kind: Password
+        optional: true
+      - name: dc2_overlay_bgp_password
+        description: "Secret. Session: overlay iBGP spine <-> VTEPs/BGWs inside a site (DC2)"
+        kind: Password
+        optional: true
+      - name: dci_circuit_bgp_password
+        description: "Secret. Session: DCI circuit eBGP DC1 <-> DC2"
+        kind: Password
+        optional: true
+      - name: dci_macsec_cipher_suite
+        description: "DCI MACsec cipher suite"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "GCM-AES-XPN-256"
+            label: "GCM-AES-XPN-256"
+      - name: dci_macsec_key
+        description: "Secret. Session: DCI MACsec DC1 <-> DC2. Not the shared password: a 64-hex placeholder"
+        kind: Password
+        optional: true
+      - name: dci_macsec_key_algorithm
+        description: "DCI MACsec key cryptographic algorithm"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "AES_256_CMAC"
+            label: "AES_256_CMAC"
+      - name: dci_macsec_key_id
+        description: "DCI MACsec key id"
+        kind: Text
+        optional: true
+      - name: dci_pair_next_hop_self
+        description: "next-hop-self on the DCI1<->DCI2 iBGP session"
+        kind: Boolean
+        optional: true
+      - name: distributed_anycast_gateway
+        description: "Segment SVIs use the distributed anycast gateway"
+        kind: Boolean
+        optional: true
+      - name: dns_lookup
+        description: "DNS domain lookup on switches (off)"
+        kind: Boolean
+        optional: true
+      - name: edge_vrrp_group_id
+        description: "Edge VLAN VRRP group (VRID)"
+        kind: Number
+        optional: true
+      - name: edge_vrrp_preempt_delay_s
+        description: "Edge VRRP preempt delay"
+        kind: Number
+        optional: true
+      - name: edge_vrrp_priority
+        description: "Edge VRRP priority per ISP router"
+        kind: JSON
+        optional: true
+      - name: edge_vrrp_track_decrement
+        description: "Edge VRRP track decrement"
+        kind: Number
+        optional: true
+      - name: edge_vrrp_version
+        description: "Edge VRRP version"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "3"
+            label: "3"
+      - name: esp_keylife_s
+        description: "ESP SA lifetime"
+        kind: Number
+        optional: true
+      - name: esp_proposal
+        description: "ESP phase-2 proposal"
+        kind: Text
+        optional: true
+      - name: evpn_bum_replication
+        description: "BUM replication inside a site"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "ingress-replication protocol bgp"
+            label: "ingress-replication protocol bgp"
+      - name: evpn_maximum_paths
+        description: "BGP maximum-paths on VTEPs"
+        kind: Number
+        optional: true
+      - name: evpn_rd_rt_mode
+        description: "RD / route-target derivation"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "auto"
+            label: "auto"
+      - name: fw_allow_subnet_overlap
+        description: "Allow overlapping subnets across VRFs on the FW"
+        kind: Boolean
+        optional: true
+      - name: fw_aspath_action
+        description: "AS-path action toward leaves (only the FW AS in the path)"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "replace"
+            label: "replace"
+      - name: fw_bgp_graceful_restart
+        description: "BGP graceful restart on fabric FWs"
+        kind: Boolean
+        optional: true
+      - name: fw_ha_priority
+        description: "FW HA priority per unit"
+        kind: JSON
+        optional: true
+      - name: fw_mgmt_allowed_access
+        description: "Services allowed on the FW management interface"
+        kind: List
+        optional: true
+      - name: fw_prepend_count
+        description: "AS-path prepend count on the FW"
+        kind: Number
+        optional: true
+      - name: fw_prepend_home_site
+        description: "Site whose FW does NOT prepend (home of the prepended VRFs)"
+        kind: Text
+        optional: true
+      - name: fw_zone_intrazone_allow
+        description: "Allow traffic within a FW zone (deny)"
+        kind: Boolean
+        optional: true
+      - name: ha_heartbeat_priority
+        description: "Priority (weight) of each FW heartbeat port"
+        kind: Number
+        optional: true
+      - name: ha_mode
+        description: "FW HA mode (active-passive)"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "a-p"
+            label: "a-p"
+      - name: ha_monitor_aggregates
+        description: "FW HA monitors every peering aggregate of the unit (today: all of them on every FW role; the OOB WAN port is"
+        kind: Boolean
+        optional: true
+      - name: ha_preempt
+        description: "FW HA preemption (override)"
+        kind: Boolean
+        optional: true
+      - name: ha_reserved_mgmt_interface
+        description: "FW HA reserved management interface"
+        kind: Boolean
+        optional: true
+      - name: ha_session_pickup
+        description: "FW HA session pickup"
+        kind: Boolean
+        optional: true
+      - name: ike_dh_group
+        description: "IKE DH group (phase 1 and PFS)"
+        kind: Number
+        optional: true
+      - name: ike_dpd_mode
+        description: "Dead peer detection mode"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "on-idle"
+            label: "on-idle"
+      - name: ike_dpd_retry_interval_s
+        description: "DPD retry interval"
+        kind: Number
+        optional: true
+      - name: ike_keylife_s
+        description: "IKE SA lifetime"
+        kind: Number
+        optional: true
+      - name: ike_peer_type
+        description: "Accepted IKE peer id type"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "any"
+            label: "any"
+      - name: ike_proposal
+        description: "IKE phase-1 proposal"
+        kind: Text
+        optional: true
+      - name: ike_version
+        description: "IKE version for all FW tunnels"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "2"
+            label: "2"
+      - name: inter_site_bgw_bgp_password
+        description: "Secret. Session: Multi-Site BGW eBGP DC1 <-> DC2"
+        kind: Password
+        optional: true
+      - name: inter_site_bum_replication
+        description: "BUM replication between sites"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "ingress-replication"
+            label: "ingress-replication"
+      - name: inter_site_delay_restore_s
+        description: "Inter-site gateway delay restore"
+        kind: Number
+        optional: true
+      - name: inter_site_ebgp_multihop_ttl
+        description: "eBGP multihop TTL between inter-site gateways"
+        kind: Number
+        optional: true
+      - name: inter_site_rt_asn_rewrite
+        description: "Rewrite route-target ASN between sites (RT auto + different site ASNs)"
+        kind: Boolean
+        optional: true
+      - name: inter_site_split_horizon
+        description: "Inter-site split-horizon mode"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "per-site"
+            label: "per-site"
+      - name: inter_site_storm_control_percent
+        description: "Inter-site BUM storm control level (all three traffic types)"
+        kind: Number
+        optional: true
+      - name: ipsec_add_route
+        description: "Auto-add routes for dial-up peers"
+        kind: Boolean
+        optional: true
+      - name: ipsec_auto_negotiate
+        description: "Phase-2 auto-negotiate"
+        kind: Boolean
+        optional: true
+      - name: ipsec_per_peer_interface
+        description: "Create an interface per dial-up peer (net-device)"
+        kind: Boolean
+        optional: true
+      - name: ipsec_phase2_selector
+        description: "Phase-2 selectors of route-based tunnels (SD-WAN, OOB)"
+        kind: IPNetwork
+        optional: true
+      - name: isp_bgp_graceful_restart
+        description: "BGP graceful restart on ISP routers"
+        kind: Boolean
+        optional: true
+      - name: isp_carrier_bgp_password
+        description: "Secret. Session: ISP router <-> carrier eBGP"
+        kind: Password
+        optional: true
+      - name: isp_max_prefix
+        description: "Max prefixes from carriers"
+        kind: Number
+        optional: true
+      - name: isp_max_prefix_action
+        description: "Carrier max-prefix action"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "warning-only"
+            label: "warning-only"
+      - name: isp_max_prefix_threshold_pct
+        description: "Carrier max-prefix warning threshold"
+        kind: Number
+        optional: true
+      - name: lacp_mode
+        description: "LACP mode on every bundle (all platforms)"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "active"
+            label: "active"
+      - name: local_admin_username
+        description: "Local admin account (hash stays on __CISCOADMIN_HASH__ fill-at-delivery)"
+        kind: Text
+        optional: true
+      - name: mgmt_vrf
+        description: "IOS XR management VRF name (NX-OS management VRF is platform-fixed, stays)"
+        kind: Text
+        optional: true
+      - name: mlag_arp_sync
+        description: "ARP table sync between MLAG peers"
+        kind: Boolean
+        optional: true
+      - name: mlag_layer3_peer_router
+        description: "Routing adjacency over the MLAG peer-link"
+        kind: Boolean
+        optional: true
+      - name: mlag_peer_gateway
+        description: "MLAG peer routes for the partner MAC (peer-gateway)"
+        kind: Boolean
+        optional: true
+      - name: mlag_peer_switch
+        description: "MLAG pair acts as one STP root (peer-switch)"
+        kind: Boolean
+        optional: true
+      - name: mlag_vtep_advertise_primary_ip
+        description: "MLAG VTEP advertises its own primary IP (PIP)"
+        kind: Boolean
+        optional: true
+      - name: mlag_vtep_virtual_router_mac
+        description: "MLAG VTEP pair advertises a shared router MAC"
+        kind: Boolean
+        optional: true
+      - name: mtu_cloud_exchange
+        description: "MTU of the cloud-exchange physical port"
+        kind: Number
+        optional: true
+      - name: mtu_cloud_handoff
+        description: "IP MTU of AWS and ExpressRoute sub-interfaces"
+        kind: Number
+        optional: true
+      - name: mtu_external
+        description: "MTU of every FW, ISP router, carrier and DCI circuit link"
+        kind: Number
+        optional: true
+      - name: mtu_fabric
+        description: "MTU of fabric (spine-leaf, BGW-DCI) links"
+        kind: Number
+        optional: true
+      - name: mtu_fw_subinterface
+        description: "MTU of FW sub-interfaces (attachment VLANs)"
+        kind: Number
+        optional: true
+      - name: mtu_svi
+        description: "MTU of tenant / attachment SVIs on NX-OS VTEPs"
+        kind: Number
+        optional: true
+      - name: mtu_vpc
+        description: "MTU of vPC keepalive links and the backup SVI; the peer-link carries none"
+        kind: Number
+        optional: true
+      - name: oob_blackhole_distance
+        description: "Distance of OOB blackhole routes"
+        kind: Number
+        optional: true
+      - name: oob_inter_site_ipsec_psk
+        description: "Secret. Session: OOB IPsec DC1 <-> DC2 over the OOB carriers"
+        kind: Password
+        optional: true
+      - name: oob_policy_log_traffic
+        description: "Traffic logging on OOB policies"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "all"
+            label: "all"
+      - name: oob_policy_matrix
+        description: "OOB access matrix (team -> zones; zone <-> same zone of other DC)"
+        kind: JSON
+        optional: true
+      - name: oob_policy_schedule
+        description: "Schedule on OOB policies"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "always"
+            label: "always"
+      - name: oob_policy_service
+        description: "Service on OOB policies (skeleton)"
+        kind: Text
+        optional: true
+      - name: oob_ra_assign_ip_from
+        description: "RA client address source"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "range"
+            label: "range"
+      - name: oob_ra_eap
+        description: "EAP (MFA) on OOB remote access"
+        kind: Boolean
+        optional: true
+      - name: oob_ra_eap_identity
+        description: "EAP identity mode"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "send-request"
+            label: "send-request"
+      - name: oob_zone_allowed_access
+        description: "Services allowed on OOB zone sub-interfaces"
+        kind: List
+        optional: true
+      - name: overlay_bgp_bfd
+        description: "Multihop BFD on overlay iBGP sessions"
+        kind: Boolean
+        optional: true
+      - name: partner_vrf
+        description: "Name of the partner VRF"
+        kind: Text
+        optional: true
+      - name: rr_retain_all_route_targets
+        description: "Route reflectors retain all route targets"
+        kind: Boolean
+        optional: true
+      - name: sdwan_aggregate_summary_only
+        description: "Branch aggregate is summary-only"
+        kind: Boolean
+        optional: true
+      - name: sdwan_branch_bgp_password
+        description: "Secret. Session: SD-WAN hub <-> branch eBGP"
+        kind: Password
+        optional: true
+      - name: sdwan_branch_ipsec_psk
+        description: "Secret. Session: SD-WAN hub <-> branch IKEv2 (ADVPN)"
+        kind: Password
+        optional: true
+      - name: sdwan_branch_next_hop_self
+        description: "next-hop-self toward branches"
+        kind: Boolean
+        optional: true
+      - name: sdwan_branch_next_hop_self_rr
+        description: "next-hop-self for reflected routes toward branches"
+        kind: Boolean
+        optional: true
+      - name: sdwan_local_as_no_prepend
+        description: "local-as no-prepend toward branches"
+        kind: Boolean
+        optional: true
+      - name: sdwan_local_as_replace_as
+        description: "local-as replace-as toward branches"
+        kind: Boolean
+        optional: true
+      - name: sdwan_reflect_branches
+        description: "Hub reflects branch routes to branches"
+        kind: Boolean
+        optional: true
+      - name: sdwan_shortcut_discovery
+        description: "Dynamic spoke-to-spoke shortcuts (ADVPN sender/forwarder)"
+        kind: Boolean
+        optional: true
+      - name: status_address
+        description: "Status of generated management and pool-allocated loopback / anycast addresses"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "active"
+            label: "active"
+      - name: status_device
+        description: "Status given to every generated device"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "provisioning"
+            label: "provisioning"
+      - name: status_interface
+        description: "Status given to every generated interface"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "provisioning"
+            label: "provisioning"
+      - name: status_link
+        description: "Status of generated link prefixes and addresses"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "active"
+            label: "active"
+      - name: status_pdu
+        description: "Status of generated PDUs and their interfaces"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "provisioning"
+            label: "provisioning"
+      - name: transit_vrf
+        description: "Name of the transit VRF"
+        kind: Text
+        optional: true
+      - name: underlay_ospf_area
+        description: "Underlay OSPF area"
+        kind: Text
+        optional: true
+      - name: underlay_ospf_network_type
+        description: "OSPF network type on routed fabric links"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "point-to-point"
+            label: "point-to-point"
+      - name: vpc_auto_recovery_reload_delay_s
+        description: "vPC auto-recovery reload delay"
+        kind: Number
+        optional: true
+      - name: vpc_delay_restore_s
+        description: "vPC delay restore"
+        kind: Number
+        optional: true
+      - name: vpc_keepalive_hold_timeout_s
+        description: "vPC peer-keepalive hold-timeout"
+        kind: Number
+        optional: true
+      - name: vpc_keepalive_interval_ms
+        description: "vPC peer-keepalive interval"
+        kind: Number
+        optional: true
+      - name: vpc_keepalive_timeout_s
+        description: "vPC peer-keepalive timeout"
+        kind: Number
+        optional: true
+      - name: vpc_keepalive_vrf
+        description: "VRF of the vPC peer-keepalive link"
+        kind: Text
+        optional: true
+      - name: vpc_peer_link_stp_port_type
+        description: "STP port type of the peer-link"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "network"
+            label: "network"
+      - name: vpc_role_priority
+        description: "vPC role priority of member 1, member 2"
+        kind: List
+        optional: true
+      - name: vpc_stp_priority
+        description: "STP priority on vPC pairs"
+        kind: Number
+        optional: true
+      - name: vpn_partner_ipsec_psk
+        description: "Secret. Session: VPN FW <-> every partner (one PSK)"
+        kind: Password
+        optional: true
+      - name: vpn_partner_local_selector
+        description: "Local phase-2 selector on VPN partner tunnels"
+        kind: IPNetwork
+        optional: true
+      - name: vpn_partner_snat_type
+        description: "SNAT pool type for partners"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "overload"
+            label: "overload"
+      # ---- group C
+      - name: attachment_device_host
+        description: "Host index of the attached device (FW / cloud router) in every attachment"
+        kind: Number
+        optional: true
+      - name: attachment_leaf_hosts
+        description: "Host index of leaf member 1, 2 in every attachment"
+        kind: List
+        optional: true
+      - name: attachment_prefix_length
+        description: "Attachment prefix length (slot x 8)"
+        kind: Number
+        optional: true
+      - name: aws_customer_host
+        description: "Our host index on the VIF /30"
+        kind: Number
+        optional: true
+      - name: aws_peer_host
+        description: "AWS host index on the VIF /30"
+        kind: Number
+        optional: true
+      - name: bgw_dci_link_hosts
+        description: "BGWn<->DCIn /31 host in <infra>.12"
+        kind: JSON
+        optional: true
+      - name: carrier_block
+        description: "Carrier hand-off block (copy of IP plan)"
+        kind: IPNetwork
+        optional: true
+      - name: carrier_link_prefix_length
+        description: "Carrier hand-off prefix length"
+        kind: Number
+        optional: true
+      - name: carrier_side_host
+        description: "Carrier host index on the carrier /30"
+        kind: Number
+        optional: true
+      - name: cloud_aws_block
+        description: "AWS address block (copy of IP plan)"
+        kind: IPNetwork
+        optional: true
+      - name: cloud_azure_block
+        description: "Azure address block (copy of IP plan)"
+        kind: IPNetwork
+        optional: true
+      - name: cloud_block_third_octet
+        description: "Cloud block <infra>.13.0"
+        kind: Number
+        optional: true
+      - name: cloud_crosslink_host
+        description: "Cloud router cross-link <infra>.13.16/31"
+        kind: Number
+        optional: true
+      - name: cloud_from_fabric_max_length
+        description: "Longest fabric prefix the cloud routers accept from the BLs"
+        kind: Number
+        optional: true
+      - name: cloud_loopback0_hosts
+        description: "Cloud router loopback0 host per router"
+        kind: JSON
+        optional: true
+      - name: cloud_prefix_max_length
+        description: "Longest cloud prefix accepted (cloud routers, BLs, SD-WAN hub)"
+        kind: Number
+        optional: true
+      - name: dc1_carrier_index_base
+        description: "Index of the site first carrier /30 (DC1)"
+        kind: Number
+        optional: true
+      - name: dc2_carrier_index_base
+        description: "Index of the site first carrier /30 (DC2)"
+        kind: Number
+        optional: true
+      - name: dc1_cloud_aws_net_1
+        description: "AWS VIF /30 placeholder (copy of IP plan) (DC1, router 1)"
+        kind: IPNetwork
+        optional: true
+      - name: dc1_cloud_aws_net_2
+        description: "AWS VIF /30 placeholder (copy of IP plan) (DC1, router 2)"
+        kind: IPNetwork
+        optional: true
+      - name: dc2_cloud_aws_net_1
+        description: "AWS VIF /30 placeholder (copy of IP plan) (DC2, router 1)"
+        kind: IPNetwork
+        optional: true
+      - name: dc2_cloud_aws_net_2
+        description: "AWS VIF /30 placeholder (copy of IP plan) (DC2, router 2)"
+        kind: IPNetwork
+        optional: true
+      - name: dc1_cloud_er_net_1
+        description: "ExpressRoute /30 (copy of IP plan) (DC1, router 1)"
+        kind: IPNetwork
+        optional: true
+      - name: dc1_cloud_er_net_2
+        description: "ExpressRoute /30 (copy of IP plan) (DC1, router 2)"
+        kind: IPNetwork
+        optional: true
+      - name: dc2_cloud_er_net_1
+        description: "ExpressRoute /30 (copy of IP plan) (DC2, router 1)"
+        kind: IPNetwork
+        optional: true
+      - name: dc2_cloud_er_net_2
+        description: "ExpressRoute /30 (copy of IP plan) (DC2, router 2)"
+        kind: IPNetwork
+        optional: true
+      - name: dc1_dci_circuit_host
+        description: "Host index on each DCI circuit /31 (DC1)"
+        kind: Number
+        optional: true
+      - name: dc2_dci_circuit_host
+        description: "Host index on each DCI circuit /31 (DC2)"
+        kind: Number
+        optional: true
+      - name: dc1_infra_block
+        description: "Site infrastructure /16 (code holds the first two octets) (DC1)"
+        kind: IPNetwork
+        optional: true
+      - name: dc2_infra_block
+        description: "Site infrastructure /16 (code holds the first two octets) (DC2)"
+        kind: IPNetwork
+        optional: true
+      - name: dc1_oob_block_base
+        description: "Third-octet base of the site OOB /20 (DC1)"
+        kind: Number
+        optional: true
+      - name: dc2_oob_block_base
+        description: "Third-octet base of the site OOB /20 (DC2)"
+        kind: Number
+        optional: true
+      - name: dc1_oob_wan_prefix
+        description: "OOB carrier hand-off /30 (placeholder) (DC1)"
+        kind: IPNetwork
+        optional: true
+      - name: dc2_oob_wan_prefix
+        description: "OOB carrier hand-off /30 (placeholder) (DC2)"
+        kind: IPNetwork
+        optional: true
+      - name: dc1_sdwan_fw_wan_endpoint
+        description: "SD-WAN FW public WAN /28 (DC1)"
+        kind: IPNetwork
+        optional: true
+      - name: dc2_sdwan_fw_wan_endpoint
+        description: "SD-WAN FW public WAN /28 (DC2)"
+        kind: IPNetwork
+        optional: true
+      - name: dc1_sdwan_overlay
+        description: "SD-WAN overlay per hub (DC1)"
+        kind: IPNetwork
+        optional: true
+      - name: dc2_sdwan_overlay
+        description: "SD-WAN overlay per hub (DC2)"
+        kind: IPNetwork
+        optional: true
+      - name: dc1_tenant_block
+        description: "Site tenant /16 = site summary (DC1)"
+        kind: IPNetwork
+        optional: true
+      - name: dc2_tenant_block
+        description: "Site tenant /16 = site summary (DC2)"
+        kind: IPNetwork
+        optional: true
+      - name: dc1_vpn_fw_wan_endpoint
+        description: "VPN-partner FW public WAN /28 (DC1)"
+        kind: IPNetwork
+        optional: true
+      - name: dc2_vpn_fw_wan_endpoint
+        description: "VPN-partner FW public WAN /28 (DC2)"
+        kind: IPNetwork
+        optional: true
+      - name: dci_block_third_octet
+        description: "DCI block <infra>.12.0"
+        kind: Number
+        optional: true
+      - name: dci_circuits
+        description: "DCI circuits (copy of IP plan)"
+        kind: JSON
+        optional: true
+      - name: dci_loopback0_hosts
+        description: "DCI loopback0 host per switch"
+        kind: JSON
+        optional: true
+      - name: dci_pair_link_host
+        description: "DCI pair link <infra>.12.16/31"
+        kind: Number
+        optional: true
+      - name: dmz_gateway_host
+        description: "Internet FW host index in every DMZ /24"
+        kind: Number
+        optional: true
+      - name: dmz_third_octet_base
+        description: "DMZ VLAN 1400 -> <tenant>.128.0/24"
+        kind: Number
+        optional: true
+      - name: edge_vlan_block_third_octet
+        description: "Edge VLAN /24 = <infra>.14.0"
+        kind: Number
+        optional: true
+      - name: edge_vlan_hosts
+        description: "Host index per device on the edge VLAN /24"
+        kind: JSON
+        optional: true
+      - name: edge_vlan_prefix_length
+        description: "Edge VLAN prefix length"
+        kind: Number
+        optional: true
+      - name: er_customer_host
+        description: "Our host index on the ExpressRoute /30"
+        kind: Number
+        optional: true
+      - name: er_provider_host
+        description: "Microsoft host index on the ExpressRoute /30"
+        kind: Number
+        optional: true
+      - name: external_guardrail_max_length
+        description: "Guardrail match up to this length"
+        kind: Number
+        optional: true
+      - name: external_guardrail_prefixes
+        description: "Prefixes never accepted from external peers"
+        kind: List
+        optional: true
+      - name: fw_leak_fourth_octet_base
+        description: "VRF-leak /30s start at <infra>.8.128"
+        kind: Number
+        optional: true
+      - name: fw_wan_endpoint_host
+        description: "FW WAN loopback = host n of the role public /28"
+        kind: Number
+        optional: true
+      - name: inter_site_vip_host
+        description: "Inter-site VIP = <infra>.2.129/32"
+        kind: Number
+        optional: true
+      - name: inter_site_vip_third_octet
+        description: "Inter-site VIP block <infra>.2.0"
+        kind: Number
+        optional: true
+      - name: internal_fw_block_third_octet
+        description: "Internal FW block <infra>.8.0/24 (.0/25 attachments, .128/25 leak /30s)"
+        kind: Number
+        optional: true
+      - name: isp_block_third_octet
+        description: "ISP block <infra>.15.0 (cross-link /31, loopbacks /28)"
+        kind: Number
+        optional: true
+      - name: isp_crosslink_hosts
+        description: "ISP cross-link /31 host per router"
+        kind: JSON
+        optional: true
+      - name: isp_loopback0_hosts
+        description: "ISP router loopback0 host per router"
+        kind: JSON
+        optional: true
+      - name: oob_gateway_host
+        description: "OOB FW = host n of every OOB zone (mgmt default gateway on all devices)"
+        kind: Number
+        optional: true
+      - name: oob_keepalive_third_octet
+        description: "OOB agg keepalive <oob>.3.0/31"
+        kind: Number
+        optional: true
+      - name: oob_ra_pool_end_host
+        description: "RA client pool last host"
+        kind: Number
+        optional: true
+      - name: oob_ra_pool_prefix_length
+        description: "Remote-access pool length"
+        kind: Number
+        optional: true
+      - name: oob_ra_pool_start_host
+        description: "RA client pool first host"
+        kind: Number
+        optional: true
+      - name: oob_ra_pool_third_octet
+        description: "Remote-access pool <oob>.2.0"
+        kind: Number
+        optional: true
+      - name: oob_ra_remote_ip_host
+        description: "RA tunnel remote-ip host"
+        kind: Number
+        optional: true
+      - name: oob_ra_tunnel_host
+        description: "RA tunnel address host index (unit 1)"
+        kind: Number
+        optional: true
+      - name: oob_supernet
+        description: "OOB supernet (copy of IP plan)"
+        kind: IPNetwork
+        optional: true
+      - name: oob_wan_carrier_host
+        description: "OOB carrier host on the OOB WAN /30"
+        kind: Number
+        optional: true
+      - name: oob_wan_our_host
+        description: "OOB FW host on the OOB WAN /30"
+        kind: Number
+        optional: true
+      - name: our_side_host
+        description: "Our router host index on the carrier /30"
+        kind: Number
+        optional: true
+      - name: p2p_link_prefix_length
+        description: "Routed point-to-point link length"
+        kind: Number
+        optional: true
+      - name: partner_nat_prefix_length
+        description: "Partner NAT prefix length"
+        kind: Number
+        optional: true
+      - name: sdwan_branch_lan_max_length
+        description: "Longest branch LAN prefix accepted"
+        kind: Number
+        optional: true
+      - name: sdwan_branch_summary
+        description: "Summary of all SD-WAN branch LANs (copy of IP plan)"
+        kind: IPNetwork
+        optional: true
+      - name: sdwan_hub_host
+        description: "Hub tunnel address = host n of the site overlay"
+        kind: Number
+        optional: true
+      - name: sdwan_overlay_pool_end_offset
+        description: "Mode-cfg pool end offset (from the end of the overlay)"
+        kind: Number
+        optional: true
+      - name: sdwan_overlay_pool_start_offset
+        description: "Mode-cfg pool start offset in the overlay"
+        kind: Number
+        optional: true
+      - name: sdwan_overlay_remote_ip_offset
+        description: "Hub remote-ip offset in the overlay"
+        kind: Number
+        optional: true
+      - name: segment_gateway_host
+        description: "Anycast gateway = host n of each segment"
+        kind: Number
+        optional: true
+      - name: transit_block_third_octet
+        description: "TRANSIT attachments <infra>.16.0/24"
+        kind: Number
+        optional: true
+      - name: vpn_block_third_octet
+        description: "VPN-partner FW block <infra>.9.0"
+        kind: Number
+        optional: true
+      # ---- group D
+      - name: bgw_artifact_group
+        description: "Artifact target group for role bgw"
+        kind: Text
+        optional: true
+      - name: border_leaf_artifact_group
+        description: "Artifact target group for role border_leaf"
+        kind: Text
+        optional: true
+      - name: cloud_router_artifact_group
+        description: "Artifact target group for role cloud_router"
+        kind: Text
+        optional: true
+      - name: dci_artifact_group
+        description: "Artifact target group for role dci"
+        kind: Text
+        optional: true
+      - name: dmz_artifact_group
+        description: "Artifact target group for role dmz"
+        kind: Text
+        optional: true
+      - name: edge_artifact_group
+        description: "Artifact target group for role edge"
+        kind: Text
+        optional: true
+      - name: internal_fw_artifact_group
+        description: "Artifact target group for role internal_fw"
+        kind: Text
+        optional: true
+      - name: internet_fw_artifact_group
+        description: "Artifact target group for role internet_fw"
+        kind: Text
+        optional: true
+      - name: isp_router_artifact_group
+        description: "Artifact target group for role isp_router"
+        kind: Text
+        optional: true
+      - name: leaf_artifact_group
+        description: "Artifact target group for role leaf"
+        kind: Text
+        optional: true
+      - name: oob_access_artifact_group
+        description: "Artifact target group for role oob_access"
+        kind: Text
+        optional: true
+      - name: oob_agg_artifact_group
+        description: "Artifact target group for role oob_agg"
+        kind: Text
+        optional: true
+      - name: oob_fw_artifact_group
+        description: "Artifact target group for role oob_fw"
+        kind: Text
+        optional: true
+      - name: sdwan_fw_artifact_group
+        description: "Artifact target group for role sdwan_fw"
+        kind: Text
+        optional: true
+      - name: service_leaf_artifact_group
+        description: "Artifact target group for role service_leaf"
+        kind: Text
+        optional: true
+      - name: spine_artifact_group
+        description: "Artifact target group for role spine"
+        kind: Text
+        optional: true
+      - name: vpn_fw_artifact_group
+        description: "Artifact target group for role vpn_fw"
+        kind: Text
+        optional: true
+      - name: border_leaf_attach_ports
+        description: "Switch port -> attached device, port-channel/vPC number (role-specific on shared models) for role border_leaf"
+        kind: JSON
+        optional: true
+      - name: dmz_attach_ports
+        description: "Switch port -> attached device, port-channel/vPC number (role-specific on shared models) for role dmz"
+        kind: JSON
+        optional: true
+      - name: edge_attach_ports
+        description: "Switch port -> attached device, port-channel/vPC number (role-specific on shared models) for role edge"
+        kind: JSON
+        optional: true
+      - name: service_leaf_attach_ports
+        description: "Switch port -> attached device, port-channel/vPC number (role-specific on shared models) for role service_lea"
+        kind: JSON
+        optional: true
+      - name: bgw_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: border_leaf_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: cloud_router_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: console_server_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: dci_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: dmz_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: edge_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: internal_fw_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: internet_fw_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: isp_router_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: oob_access_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: oob_agg_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: oob_fw_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: sdwan_fw_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: service_leaf_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: spine_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: vpn_fw_count
+        description: "Devices per site (oob_access = network-management access switches OOBNET; BMC access switches stay derived fr"
+        kind: Number
+        optional: true
+      - name: bgw_device_type
+        description: "Device type (model) for role bgw"
+        kind: Text
+        optional: true
+      - name: border_leaf_device_type
+        description: "Device type (model) for role border_leaf"
+        kind: Text
+        optional: true
+      - name: cloud_router_device_type
+        description: "Device type (model) for role cloud_router"
+        kind: Text
+        optional: true
+      - name: console_server_device_type
+        description: "Device type (model) for role console_server"
+        kind: Text
+        optional: true
+      - name: dci_device_type
+        description: "Device type (model) for role dci"
+        kind: Text
+        optional: true
+      - name: dmz_device_type
+        description: "Device type (model) for role dmz"
+        kind: Text
+        optional: true
+      - name: edge_device_type
+        description: "Device type (model) for role edge"
+        kind: Text
+        optional: true
+      - name: internal_fw_device_type
+        description: "Device type (model) for role internal_fw"
+        kind: Text
+        optional: true
+      - name: internet_fw_device_type
+        description: "Device type (model) for role internet_fw"
+        kind: Text
+        optional: true
+      - name: isp_router_device_type
+        description: "Device type (model) for role isp_router"
+        kind: Text
+        optional: true
+      - name: leaf_device_type
+        description: "Device type (model) for role leaf"
+        kind: Text
+        optional: true
+      - name: oob_access_device_type
+        description: "Device type (model) for role oob_access"
+        kind: Text
+        optional: true
+      - name: oob_agg_device_type
+        description: "Device type (model) for role oob_agg"
+        kind: Text
+        optional: true
+      - name: oob_fw_device_type
+        description: "Device type (model) for role oob_fw"
+        kind: Text
+        optional: true
+      - name: sdwan_fw_device_type
+        description: "Device type (model) for role sdwan_fw"
+        kind: Text
+        optional: true
+      - name: service_leaf_device_type
+        description: "Device type (model) for role service_leaf"
+        kind: Text
+        optional: true
+      - name: spine_device_type
+        description: "Device type (model) for role spine"
+        kind: Text
+        optional: true
+      - name: vpn_fw_device_type
+        description: "Device type (model) for role vpn_fw"
+        kind: Text
+        optional: true
+      - name: bgw_mgmt_interface
+        description: "Management interface name for role bgw"
+        kind: Text
+        optional: true
+      - name: border_leaf_mgmt_interface
+        description: "Management interface name for role border_leaf"
+        kind: Text
+        optional: true
+      - name: cloud_router_mgmt_interface
+        description: "Management interface name for role cloud_router"
+        kind: Text
+        optional: true
+      - name: console_server_mgmt_interface
+        description: "Management interface name for role console_server"
+        kind: Text
+        optional: true
+      - name: dci_mgmt_interface
+        description: "Management interface name for role dci"
+        kind: Text
+        optional: true
+      - name: dmz_mgmt_interface
+        description: "Management interface name for role dmz"
+        kind: Text
+        optional: true
+      - name: edge_mgmt_interface
+        description: "Management interface name for role edge"
+        kind: Text
+        optional: true
+      - name: internal_fw_mgmt_interface
+        description: "Management interface name for role internal_fw"
+        kind: Text
+        optional: true
+      - name: internet_fw_mgmt_interface
+        description: "Management interface name for role internet_fw"
+        kind: Text
+        optional: true
+      - name: isp_router_mgmt_interface
+        description: "Management interface name for role isp_router"
+        kind: Text
+        optional: true
+      - name: leaf_mgmt_interface
+        description: "Management interface name for role leaf"
+        kind: Text
+        optional: true
+      - name: oob_access_mgmt_interface
+        description: "Management interface name for role oob_access"
+        kind: Text
+        optional: true
+      - name: oob_agg_mgmt_interface
+        description: "Management interface name for role oob_agg"
+        kind: Text
+        optional: true
+      - name: oob_fw_mgmt_interface
+        description: "Management interface name for role oob_fw"
+        kind: Text
+        optional: true
+      - name: pdu_mgmt_interface
+        description: "Management interface name for role pdu"
+        kind: Text
+        optional: true
+      - name: sdwan_fw_mgmt_interface
+        description: "Management interface name for role sdwan_fw"
+        kind: Text
+        optional: true
+      - name: service_leaf_mgmt_interface
+        description: "Management interface name for role service_leaf"
+        kind: Text
+        optional: true
+      - name: spine_mgmt_interface
+        description: "Management interface name for role spine"
+        kind: Text
+        optional: true
+      - name: vpn_fw_mgmt_interface
+        description: "Management interface name for role vpn_fw"
+        kind: Text
+        optional: true
+      - name: bgw_platform
+        description: "Platform for role bgw"
+        kind: Text
+        optional: true
+      - name: border_leaf_platform
+        description: "Platform for role border_leaf"
+        kind: Text
+        optional: true
+      - name: cloud_router_platform
+        description: "Platform for role cloud_router"
+        kind: Text
+        optional: true
+      - name: console_server_platform
+        description: "Platform for role console_server"
+        kind: Text
+        optional: true
+      - name: dci_platform
+        description: "Platform for role dci"
+        kind: Text
+        optional: true
+      - name: dmz_platform
+        description: "Platform for role dmz"
+        kind: Text
+        optional: true
+      - name: edge_platform
+        description: "Platform for role edge"
+        kind: Text
+        optional: true
+      - name: internal_fw_platform
+        description: "Platform for role internal_fw"
+        kind: Text
+        optional: true
+      - name: internet_fw_platform
+        description: "Platform for role internet_fw"
+        kind: Text
+        optional: true
+      - name: isp_router_platform
+        description: "Platform for role isp_router"
+        kind: Text
+        optional: true
+      - name: leaf_platform
+        description: "Platform for role leaf"
+        kind: Text
+        optional: true
+      - name: oob_access_platform
+        description: "Platform for role oob_access"
+        kind: Text
+        optional: true
+      - name: oob_agg_platform
+        description: "Platform for role oob_agg"
+        kind: Text
+        optional: true
+      - name: oob_fw_platform
+        description: "Platform for role oob_fw"
+        kind: Text
+        optional: true
+      - name: sdwan_fw_platform
+        description: "Platform for role sdwan_fw"
+        kind: Text
+        optional: true
+      - name: service_leaf_platform
+        description: "Platform for role service_leaf"
+        kind: Text
+        optional: true
+      - name: spine_platform
+        description: "Platform for role spine"
+        kind: Text
+        optional: true
+      - name: vpn_fw_platform
+        description: "Platform for role vpn_fw"
+        kind: Text
+        optional: true
+      - name: bgw_dci_link_ports
+        description: "Role override: BGWn<->DCIn link ports"
+        kind: JSON
+        optional: true
+      - name: dci_pair_link_ports
+        description: "Role override: DCI1<->DCI2 pair link members"
+        kind: List
+        optional: true
+      - name: edge_vpc_peer_link_ports
+        description: "Role override: edge peer-link members (model default differs)"
+        kind: List
+        optional: true
+      - name: max_server_leaves
+        description: "Max server leaves per site (spine port budget)"
+        kind: Number
+        optional: true
+      - name: oob_agg_fw_ports
+        description: "Role override: OOB agg port toward OOB FW unit u"
+        kind: JSON
+        optional: true
+      - name: oob_max_access_switches
+        description: "Max OOB access switches per agg pair (agg downlinks 1/1-1/20)"
+        kind: Number
+        optional: true
+      - name: roles_without_loopback0
+        description: "Roles built without loopback0"
+        kind: List
+        optional: true
+      - name: vtep_roles
+        description: "Roles with loopback1/NVE (VTEP); also the pairs that get the vPC backup SVI"
+        kind: List
+        optional: true
+      # ---- group E
+      - name: bgw_cable_tier
+        description: "Cable tier for role bgw"
+        kind: Number
+        optional: true
+      - name: border_leaf_cable_tier
+        description: "Cable tier for role border_leaf"
+        kind: Number
+        optional: true
+      - name: cloud_router_cable_tier
+        description: "Cable tier for role cloud_router"
+        kind: Number
+        optional: true
+      - name: dci_cable_tier
+        description: "Cable tier for role dci"
+        kind: Number
+        optional: true
+      - name: dmz_cable_tier
+        description: "Cable tier for role dmz"
+        kind: Number
+        optional: true
+      - name: edge_cable_tier
+        description: "Cable tier for role edge"
+        kind: Number
+        optional: true
+      - name: internal_fw_cable_tier
+        description: "Cable tier for role internal_fw"
+        kind: Number
+        optional: true
+      - name: internet_fw_cable_tier
+        description: "Cable tier for role internet_fw"
+        kind: Number
+        optional: true
+      - name: isp_router_cable_tier
+        description: "Cable tier for role isp_router"
+        kind: Number
+        optional: true
+      - name: leaf_cable_tier
+        description: "Cable tier for role leaf"
+        kind: Number
+        optional: true
+      - name: sdwan_fw_cable_tier
+        description: "Cable tier for role sdwan_fw"
+        kind: Number
+        optional: true
+      - name: service_leaf_cable_tier
+        description: "Cable tier for role service_leaf"
+        kind: Number
+        optional: true
+      - name: spine_cable_tier
+        description: "Cable tier for role spine"
+        kind: Number
+        optional: true
+      - name: vpn_fw_cable_tier
+        description: "Cable tier for role vpn_fw"
+        kind: Number
+        optional: true
+      - name: bgw_rack_u
+        description: "Lowest rack U for role bgw"
+        kind: Number
+        optional: true
+      - name: border_leaf_rack_u
+        description: "Lowest rack U for role border_leaf"
+        kind: Number
+        optional: true
+      - name: cloud_router_rack_u
+        description: "Lowest rack U for role cloud_router"
+        kind: Number
+        optional: true
+      - name: console_server_rack_u
+        description: "Lowest rack U for role console_server"
+        kind: Number
+        optional: true
+      - name: dci_rack_u
+        description: "Lowest rack U for role dci"
+        kind: Number
+        optional: true
+      - name: dmz_rack_u
+        description: "Lowest rack U for role dmz"
+        kind: Number
+        optional: true
+      - name: edge_rack_u
+        description: "Lowest rack U for role edge"
+        kind: Number
+        optional: true
+      - name: internal_fw_rack_u
+        description: "Lowest rack U for role internal_fw"
+        kind: Number
+        optional: true
+      - name: internet_fw_rack_u
+        description: "Lowest rack U for role internet_fw"
+        kind: Number
+        optional: true
+      - name: isp_router_rack_u
+        description: "Lowest rack U for role isp_router"
+        kind: Number
+        optional: true
+      - name: leaf_rack_u
+        description: "Lowest rack U for role leaf"
+        kind: Number
+        optional: true
+      - name: oob_access_rack_u
+        description: "Lowest rack U for role oob_access"
+        kind: Number
+        optional: true
+      - name: oob_agg_rack_u
+        description: "Lowest rack U for role oob_agg"
+        kind: Number
+        optional: true
+      - name: oob_fw_rack_u
+        description: "Lowest rack U for role oob_fw"
+        kind: Number
+        optional: true
+      - name: sdwan_fw_rack_u
+        description: "Lowest rack U for role sdwan_fw"
+        kind: Number
+        optional: true
+      - name: service_leaf_rack_u
+        description: "Lowest rack U for role service_leaf"
+        kind: Number
+        optional: true
+      - name: spine_rack_u
+        description: "Lowest rack U for role spine"
+        kind: Number
+        optional: true
+      - name: vpn_fw_rack_u
+        description: "Lowest rack U for role vpn_fw"
+        kind: Number
+        optional: true
+      - name: bmc_switch_rack_u
+        description: "Rack U of a BMC access switch (rack of its first leaf)"
+        kind: Number
+        optional: true
+      - name: cable_slack_m
+        description: "Cable slack"
+        kind: Text
+        optional: true
+      - name: cable_stock_lengths_m
+        description: "Cable stock lengths"
+        kind: List
+        optional: true
+      - name: cable_type_between_racks
+        description: "site_physical cable type between racks"
+        kind: Text
+        optional: true
+      - name: cable_type_same_rack
+        description: "site_physical cable type inside a rack"
+        kind: Text
+        optional: true
+      - name: device_rack_face
+        description: "Rack face of devices"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "front"
+            label: "front"
+      - name: network_patch_racks
+        description: "Network patch racks (MDA)"
+        kind: List
+        optional: true
+      - name: network_racks
+        description: "Network rack per pair member (count = 2 network racks)"
+        kind: JSON
+        optional: true
+      - name: oob_cable_type_console
+        description: "oob_site cable type: console"
+        kind: Text
+        optional: true
+      - name: oob_cable_type_ha
+        description: "oob_site cable type: FW HA"
+        kind: Text
+        optional: true
+      - name: oob_cable_type_mgmt
+        description: "oob_site cable type: mgmt home runs"
+        kind: Text
+        optional: true
+      - name: oob_cable_type_peer
+        description: "oob_site cable type: agg peer-link / keepalive"
+        kind: Text
+        optional: true
+      - name: oob_cable_type_uplink
+        description: "oob_site cable type: access uplinks"
+        kind: Text
+        optional: true
+      - name: oob_cross_mgmt_prefixes
+        description: "Device prefixes whose mgmt lands on the OTHER access switch"
+        kind: List
+        optional: true
+      - name: oob_port_slots
+        description: "OOB port slot base per zone; the slot rule itself is oob_units_per_port_slot"
+        kind: JSON
+        optional: true
+      - name: oob_racks
+        description: "OOB rack per unit"
+        kind: JSON
+        optional: true
+      - name: patch_block_ports_network_rack
+        description: "Patch block size per network rack"
+        kind: Number
+        optional: true
+      - name: patch_block_ports_server_rack
+        description: "Patch block size per server rack"
+        kind: Number
+        optional: true
+      - name: patch_panel_u
+        description: "Patch panel U in the patch racks"
+        kind: JSON
+        optional: true
+      - name: patch_rack_tie_break
+        description: "Patch rack chosen on a distance tie"
+        kind: Text
+        optional: true
+      - name: pdu_60a_rack_purposes
+        description: "Rack purposes that get 60A PDUs (others 30A)"
+        kind: List
+        optional: true
+      - name: pdu_feeds
+        description: "PDU feeds per rack"
+        kind: List
+        optional: true
+      - name: pdu_rack_face
+        description: "Rack face of PDUs"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "rear"
+            label: "rear"
+      - name: pdu_type_30a
+        description: "30A PDU type (copy of 09-pdu-types.yml)"
+        kind: Text
+        optional: true
+      - name: pdu_type_60a
+        description: "60A PDU type (copy of 09-pdu-types.yml)"
+        kind: Text
+        optional: true
+      - name: rack_local_panel_u
+        description: "Rack U of the local patch panel"
+        kind: Number
+        optional: true
+      - name: rack_width_m
+        description: "Rack width"
+        kind: Text
+        optional: true
+      - name: row_index
+        description: "Row order in the hall"
+        kind: JSON
+        optional: true
+      - name: row_pitch_m
+        description: "Row pitch"
+        kind: Text
+        optional: true
+      - name: server_racks_per_row
+        description: "Server racks per row (leaf n -> A01..A10, C01..)"
+        kind: Number
+        optional: true
+      - name: server_rows
+        description: "Server rows (also the rows with patch blocks)"
+        kind: List
+        optional: true
+      - name: vertical_per_end_m
+        description: "Vertical cable run per end"
+        kind: Text
+        optional: true
+      - name: nxos_scp_server
+        description: "Render 'feature scp-server' on production NX-OS devices (Day-2 config push prerequisite)"
+        kind: Boolean
+        optional: true
+      - name: cloud_backup_advertise_other_dc
+        description: "At the backup site, also advertise the other DC's tenant summary toward the clouds (prepended by PS-PREPEND)"
+        kind: Boolean
+        optional: true
+      - name: vpn_partner_snat_range
+        description: "Partner SNAT pool range inside the translated /28: first_to_last_usable or network_to_broadcast"
+        kind: Text
+        optional: true
+      - name: server_access_mtu
+        description: "MTU of a server-facing access port (lab test hosts included)"
+        kind: Number
+        optional: true
+      - name: oob_switch_local_admin
+        description: "Render the local admin account on the OOB switches, as on every other NX-OS device"
+        kind: Boolean
+        optional: true
+      - name: local_admin_role
+        description: "Privilege role of the local admin account (next to local_admin_username)"
+        kind: Text
+        optional: true
+      - name: overlay_send_community_standard
+        description: "Standard communities (send-community) on every EVPN session, next to send-community extended"
+        kind: Boolean
+        optional: true
+      - name: inter_site_storm_control_types
+        description: "BUM traffic types that get the inter-site storm-control level on the BGWs"
+        kind: List
+        optional: true
+      - name: ip_redirects
+        description: "ICMP redirects on routed interfaces and SVIs (false renders no ip redirects)"
+        kind: Boolean
+        optional: true
+      - name: vpc_role_priority_order
+        description: "How vpc_role_priority is given to the two vPC members (by_name: first member by name gets the first value)"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "by_name"
+            label: "by_name"
+      - name: dci_macsec
+        description: "MACsec on the DCI circuits (dci_macsec_* fields hold the parameters)"
+        kind: Boolean
+        optional: true
+      - name: dci_loopback0_advertise_method
+        description: "How the DCI switch loopback0 enters its IPv4 BGP"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "redistribute direct"
+            label: "redistribute direct"
+      - name: sdwan_advertise_cloud_prefixes
+        description: "Border leaves advertise the cloud prefixes (PL-CLOUD) to the SD-WAN hub"
+        kind: Boolean
+        optional: true
+      - name: transit_cloud_maximum_paths
+        description: "BGP maximum-paths of the TRANSIT VRF toward the cloud routers on the border leaves"
+        kind: Number
+        optional: true
+      - name: bfd_min_rx_ms
+        description: "BFD receive interval (min_rx / receive-interval / bfd-required-min-rx) of the bfd_interval_ms sessions"
+        kind: Number
+        optional: true
+      - name: dc1_multisite_site_id
+        description: "DC1 EVPN Multi-Site site-id (evpn multisite border-gateway)"
+        kind: Number
+        optional: true
+      - name: dc2_multisite_site_id
+        description: "DC2 EVPN Multi-Site site-id (evpn multisite border-gateway)"
+        kind: Number
+        optional: true
+      - name: overlay_bfd_interval_ms
+        description: "BFD multihop tx/rx interval on the overlay iBGP sessions"
+        kind: Number
+        optional: true
+      - name: overlay_bfd_multiplier
+        description: "BFD multihop multiplier on the overlay iBGP sessions"
+        kind: Number
+        optional: true
+      - name: l2_pair_mlag_peer_gateway
+        description: "peer-gateway on the L2-only vPC pairs (EDGE, DMZ)"
+        kind: Boolean
+        optional: true
+      - name: l2_pair_mlag_layer3_peer_router
+        description: "layer3 peer-router on the L2-only vPC pairs (EDGE, DMZ)"
+        kind: Boolean
+        optional: true
+      - name: l2_pair_mlag_arp_sync
+        description: "ip arp synchronize on the L2-only vPC pairs (EDGE, DMZ)"
+        kind: Boolean
+        optional: true
+      - name: inter_site_bgw_peering
+        description: "Inter-site BGW peering topology; only full_mesh is implemented"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "full_mesh"
+            label: "full_mesh"
+      - name: inter_site_bgp_bfd
+        description: "BFD on the inter-site BGW eBGP EVPN sessions"
+        kind: Boolean
+        optional: true
+      - name: dci_ebgp_bfd
+        description: "BFD on the BGW<->DCI and DCI<->DCI circuit eBGP sessions"
+        kind: Boolean
+        optional: true
+      - name: internal_fw_vlink_prefix_length
+        description: "Prefix length of each Internal FW NPU vlink subnet (tenant <-> TRANSIT)"
+        kind: Number
+        optional: true
+      - name: internal_fw_vlink_tenant_host
+        description: "Host number of the tenant end (LK-<vrf>) in the NPU vlink subnet"
+        kind: Number
+        optional: true
+      - name: internal_fw_vlink_transit_host
+        description: "Host number of the TRANSIT end (LK-T-<vrf>) in the NPU vlink subnet"
+        kind: Number
+        optional: true
+      - name: internal_fw_vlink_vlan_rule
+        description: "Rule for the VLAN id of the NPU vlink pair of a tenant"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "tenant_fortios_vrf_id"
+            label: "tenant_fortios_vrf_id"
+      - name: internal_fw_npu_vlink
+        description: "Internal FW single-VDOM NPU vlinks (VRF leaking) on"
+        kind: Boolean
+        optional: true
+      - name: fw_bfd
+        description: "FortiGate system-wide BFD (config system settings)"
+        kind: Boolean
+        optional: true
+      - name: fw_mtu_override
+        description: "FortiGate ports, aggregates and sub-interfaces override the default MTU"
+        kind: Boolean
+        optional: true
+      - name: internet_edge_bgp_bfd
+        description: "BFD on Internet FW <-> ISP router eBGP sessions (outside leg)"
+        kind: Boolean
+        optional: true
+      - name: fw_router_id_source
+        description: "FortiGate BGP router-id source (FW address on its TRANSIT / PARTNER attachment)"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "attachment_fw_address"
+            label: "attachment_fw_address"
+      - name: internet_fw_static_route_id_base
+        description: "First static route id on the Internet FW"
+        kind: Number
+        optional: true
+      - name: internet_fw_originate_public
+        description: "Internet FW anchors (blackhole) and originates the site public block"
+        kind: Boolean
+        optional: true
+      - name: internet_fw_outside_vrf
+        description: "VRF of the Internet FW outside and DMZ legs"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "transit"
+            label: "transit"
+      - name: wan_default_static_route_id
+        description: "Static route id of the WAN default route (SD-WAN hub, VPN FW)"
+        kind: Number
+        optional: true
+      - name: sdwan_hub_mode_cfg
+        description: "SD-WAN hub dial-up phase1 assigns addresses (mode-cfg)"
+        kind: Boolean
+        optional: true
+      - name: sdwan_overlay_vrf
+        description: "VRF of the SD-WAN hub overlay tunnel"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "transit"
+            label: "transit"
+      - name: sdwan_hub_aggregates
+        description: "Names of the prefix fields the SD-WAN hub aggregates, in order"
+        kind: List
+        optional: true
+      - name: esp_pfs_dh_group
+        description: "Phase-2 PFS DH group"
+        kind: Number
+        optional: true
+      - name: vpn_fw_originate_partner_nat
+        description: "VPN FW anchors (blackhole) and originates each partner translated prefix"
+        kind: Boolean
+        optional: true
+      - name: oob_carrier_port_role
+        description: "Interface role of the OOB FW carrier port"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "wan"
+            label: "wan"
+      - name: oob_ra_mode_cfg
+        description: "OOB remote-access dial-up phase1 assigns addresses (mode-cfg)"
+        kind: Boolean
+        optional: true
+      - name: oob_ra_split_tunnel
+        description: "OOB remote-access VPN is split-tunnel (only the OOB zones are pushed)"
+        kind: Boolean
+        optional: true
+      - name: oob_remote_blackhole
+        description: "OOB FW blackholes the other sites' OOB zones and RA pool (never via the carrier)"
+        kind: Boolean
+        optional: true
+      - name: cloud_advertise_partner_summaries
+        description: "Cloud routers advertise their site's PARTNER summaries to the clouds"
+        kind: Boolean
+        optional: true
+      - name: cloud_advertise_tenant_summary
+        description: "Cloud routers advertise their site's tenant block to the clouds"
+        kind: Boolean
+        optional: true
+      - name: cloud_aws_provider
+        description: "Name of the AWS OrganizationProvider object (lookup key)"
+        kind: Text
+        optional: true
+      - name: cloud_azure_provider
+        description: "Name of the Azure (Microsoft) OrganizationProvider object (lookup key)"
+        kind: Text
+        optional: true
+      - name: cloud_bgp_bfd
+        description: "BFD on the cloud router <-> AWS / Azure eBGP sessions (router and cloud-exchange stand-in)"
+        kind: Boolean
+        optional: true
+      - name: cloud_prepend_max_length
+        description: "Max length of the other DC's prefixes prepended at the backup site"
+        kind: Number
+        optional: true
+      - name: cloud_router_pair_bgp_bfd
+        description: "BFD on the CLOUD1 <-> CLOUD2 iBGP session"
+        kind: Boolean
+        optional: true
+      - name: cloud_router_pair_next_hop_self
+        description: "next-hop-self on the CLOUD1 <-> CLOUD2 iBGP session"
+        kind: Boolean
+        optional: true
+      - name: cloud_tenant_summary_mode
+        description: "How the cloud routers originate the tenant summary"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "aggregate"
+            label: "aggregate"
+      - name: dc1_cloud_pair_bgp_password
+        description: "Secret. Session: CLOUD1 <-> CLOUD2 iBGP (DC1)"
+        kind: Password
+        optional: true
+      - name: dc2_cloud_pair_bgp_password
+        description: "Secret. Session: CLOUD1 <-> CLOUD2 iBGP (DC2)"
+        kind: Password
+        optional: true
+      - name: edge_vrrp_track_object
+        description: "Object the edge VRRP group tracks"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "carrier_interface"
+            label: "carrier_interface"
+      - name: isp_carrier_bgp_bfd
+        description: "BFD on the ISP router <-> carrier eBGP session"
+        kind: Boolean
+        optional: true
+      - name: isp_default_to_inetfw
+        description: "Default route the ISP routers send to the Internet FW"
+        kind: Dropdown
+        optional: true
+        choices:
+          - name: "conditional"
+            label: "conditional (only while the router holds a default)"
+      - name: isp_inetfw_bgp_bfd
+        description: "BFD on the ISP router -> Internet FW eBGP session (ISP end)"
+        kind: Boolean
+        optional: true
+      - name: isp_pair_bgp_bfd
+        description: "BFD on the ISP1 <-> ISP2 iBGP session"
+        kind: Boolean
+        optional: true
+      - name: isp_pair_next_hop_self
+        description: "next-hop-self on the ISP1 <-> ISP2 iBGP session"
+        kind: Boolean
+        optional: true
+      - name: isp_static_next_hop_by_role
+        description: "ISP static route next hop per public prefix role (null0 / internet_fw / edge_host)"
+        kind: JSON
+        optional: true
+      - name: lab_aws_test_prefix
+        description: "Lab only: prefix the AWS stand-in announces (inside cloud_aws_block)"
+        kind: Text
+        optional: true
+      - name: lab_azure_test_prefix
+        description: "Lab only: prefix the Azure stand-in announces (inside cloud_azure_block)"
+        kind: Text
+        optional: true
+      - name: role_asn_group
+        description: "ASN group per role (fabric / per-role offset / none); null means the role has no BGP ASN"
+        kind: JSON
+        optional: true
+      - name: loopback_prefix_length
+        description: "Prefix length of loopback0 / loopback1 / anycast VTEP / Multi-Site VIP addresses (pools and fixed loopbacks)"
+        kind: Number
+        optional: true
+      - name: oob_carrier_name
+        description: "OOB WAN carrier name used in the OOB FW WAN descriptions"
+        kind: Text
+        optional: true
+      - name: fw_side_by_role
+        description: "FortiGate side per switch role: role -> [FW aggregate, side key in DcimDeviceType.fw_attach_ports]"
+        kind: JSON
+        optional: true
+      - name: oob_units_per_port_slot
+        description: "OOB devices per port slot: slot = ceil(n/units), side = (n-1) % units + 1"
+        kind: Number
+        optional: true
+      - name: oob_mgmt_zone_by_class
+        description: "OOB zone (oob_vlans zone) of a device's management port: oob devices, production devices"
+        kind: JSON
+        optional: true
+      - name: dci_peer_site
+        description: "Far-end site of the DCI circuits per site"
+        kind: JSON
+        optional: true
+      - name: spine_first_downlink_port
+        description: "Spine port number of server leaf 1's first downlink"
+        kind: Number
+        optional: true
+      - name: patch_block_first_port
+        description: "First port number of a patch-rack block"
+        kind: Number
+        optional: true
+      - name: bgw_dci_link_end_hosts
+        description: "Host index in each BGW-DCI /31: dci end, bgw end"
+        kind: JSON
+        optional: true
+      - name: dci_pair_link_member_hosts
+        description: "Host index of DCI 1, 2 in the DCI pair link /31"
+        kind: JSON
+        optional: true
+      - name: cloud_crosslink_member_hosts
+        description: "Host index of cloud router 1, 2 in the cloud cross-link /31"
+        kind: JSON
+        optional: true
+      - name: fabric_link_end_hosts
+        description: "Host index in each spine-leaf /31: spine end, leaf end"
+        kind: JSON
+        optional: true
+      - name: vpc_keepalive_member_hosts
+        description: "Host index of vPC member 1, 2 in the keepalive /31"
+        kind: JSON
+        optional: true
+      - name: vpc_backup_member_hosts
+        description: "Host index of vPC member 1, 2 in the backup SVI /31"
+        kind: JSON
+        optional: true
+      - name: mgmt0_rule_first_host
+        description: "Mgmt address by rule, not pool: role -> MGMT0 host of unit 1; unit n (device name) = host + n - 1"
+        kind: JSON
+        optional: true
+      - name: vpc_backup_rule_first_host
+        description: "vPC backup /31 by rule, not pool: role -> VPC-BACKUP host of pair 1; pair k = host + 2(k - 1)"
+        kind: JSON
+        optional: true
+      - name: oob_access_uplink_zones
+        description: "Tagged OOB zones on the access-switch uplinks per access switch kind (name prefix)"
+        kind: JSON
+        optional: true
+      - name: oob_agg_downlink_port_channel_base
+        description: "OOB aggregation downlink port-channel / vPC number = base + access switch index"
+        kind: Number
+        optional: true
+      - name: oob_keepalive_member_hosts
+        description: "Host index of OOB aggregation switch 1, 2 in the keepalive /31"
+        kind: JSON
+        optional: true
+      - name: wan_fw_roles
+        description: "FW roles with an edge VLAN outside leg and a public WAN loopback"
+        kind: List
+        optional: true
+      - name: tenant_attachment_pair
+        description: "Tenant VRF attachments: attached pair prefix, leaf pair prefix"
+        kind: JSON
+        optional: true
+      - name: isp_crosslink_network_host
+        description: "Fourth octet of the ISP cross-link /31 network in the ISP block"
+        kind: Number
+        optional: true
+      - name: roles_with_fixed_loopback0
+        description: "Roles whose loopback0 is a fixed address (not from the loopback0 pool)"
+        kind: List
+        optional: true
+      - name: interface_mtu_class
+        description: "MTU field per generated link kind"
+        kind: JSON
+        optional: true
+      - name: oob_platforms_without_os_version
+        description: "OOB platforms allowed to have no DcimPlatform.os_version (others fail loudly)"
+        kind: List
+        optional: true
+      - name: dmz_vlan_prefix_length
+        description: "DMZ VLAN prefix length"
+        kind: Number
+        optional: true
+      - name: ztp_dhcp_subnet
+        description: "ZTP DHCP subnet (Kea, carved from oob_supernet)"
+        kind: Text
+        optional: true
+      - name: ztp_pool_end_host
+        description: "ZTP DHCP pool last host in ztp_dhcp_subnet"
+        kind: Number
+        optional: true
+      - name: ztp_pool_start_host
+        description: "ZTP DHCP pool first host in ztp_dhcp_subnet"
+        kind: Number
+        optional: true
+      - name: ztp_server_host
+        description: "ZTP server and DHCP gateway host in ztp_dhcp_subnet"
+        kind: Number
+        optional: true
+      - name: ztp_verify_poll_s
+        description: "ZTP verification: seconds between SSH attempts"
+        kind: Number
+        optional: true
+      - name: ztp_verify_window_s
+        description: "ZTP verification: seconds after the callback before ztp_state = failed"
+        kind: Number
+        optional: true

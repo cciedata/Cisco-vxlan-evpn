@@ -11,11 +11,26 @@
     "DC1-ISP1",
     "DC1-ISP2",
     "DC1-L11",
+    "DC1-L12",
     "DC1-S1",
     "DC1-S2",
     "DC1-SL1",
     "DC1-SL2"
   ],
+  "node_asn": {
+    "DC1-BL1": 65100,
+    "DC1-BL2": 65100,
+    "DC1-INETFW1": 65140,
+    "DC1-INTFW1": 65110,
+    "DC1-ISP1": 65050,
+    "DC1-ISP2": 65050,
+    "DC1-L11": 65100,
+    "DC1-L12": 65100,
+    "DC1-S1": 65100,
+    "DC1-S2": 65100,
+    "DC1-SL1": 65100,
+    "DC1-SL2": 65100
+  },
   "bgp_sessions": [
     {
       "node": "DC1-BL1",
@@ -133,6 +148,46 @@
       "peer": "10.19.0.13",
       "remote_as": 65100,
       "description": "DC1-L11",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC1-L12",
+      "vrf": "default",
+      "peer": "10.19.0.1",
+      "remote_as": 65100,
+      "description": "DC1-S1",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC1-S1",
+      "vrf": "default",
+      "peer": "10.19.0.14",
+      "remote_as": 65100,
+      "description": "DC1-L12",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC1-L12",
+      "vrf": "default",
+      "peer": "10.19.0.2",
+      "remote_as": 65100,
+      "description": "DC1-S2",
+      "afi": "l2vpn evpn",
+      "bfd": true,
+      "state": "Established"
+    },
+    {
+      "node": "DC1-S2",
+      "vrf": "default",
+      "peer": "10.19.0.14",
+      "remote_as": 65100,
+      "description": "DC1-L12",
       "afi": "l2vpn evpn",
       "bfd": true,
       "state": "Established"
@@ -567,6 +622,13 @@
       "why": "default from the Internal FW via the service leaves (EVPN type-5)"
     },
     {
+      "node": "DC1-L12",
+      "vrf": "PROD",
+      "prefix": "0.0.0.0/0",
+      "present": true,
+      "why": "default from the Internal FW via the service leaves (EVPN type-5)"
+    },
+    {
       "node": "DC1-BL1",
       "vrf": "TRANSIT",
       "prefix": "0.0.0.0/0",
@@ -946,6 +1008,51 @@
       "from": "DC1-HOST-PROD",
       "to": "198.18.2.10",
       "why": "end to end via SL, Internal FW, TRANSIT, BL, Internet FW (NAT to 198.51.100.0/25), ISP-B"
+    },
+    {
+      "from": "DC1-HOST-PROD2",
+      "to": "10.16.10.1",
+      "why": "anycast gateway on the server leaf"
+    },
+    {
+      "from": "DC1-HOST-PROD2",
+      "to": "198.18.1.10",
+      "why": "end to end via SL, Internal FW, TRANSIT, BL, Internet FW (NAT to 198.51.100.0/25), ISP-A"
+    },
+    {
+      "from": "DC1-HOST-PROD2",
+      "to": "198.18.2.10",
+      "why": "end to end via SL, Internal FW, TRANSIT, BL, Internet FW (NAT to 198.51.100.0/25), ISP-B"
+    },
+    {
+      "from": "DC1-HOST-PROD3",
+      "to": "10.16.11.1",
+      "why": "anycast gateway on the server leaf"
+    },
+    {
+      "from": "DC1-HOST-PROD3",
+      "to": "198.18.1.10",
+      "why": "end to end via SL, Internal FW, TRANSIT, BL, Internet FW (NAT to 198.51.100.0/25), ISP-A"
+    },
+    {
+      "from": "DC1-HOST-PROD3",
+      "to": "198.18.2.10",
+      "why": "end to end via SL, Internal FW, TRANSIT, BL, Internet FW (NAT to 198.51.100.0/25), ISP-B"
+    },
+    {
+      "from": "DC1-HOST-PROD",
+      "to": "10.16.10.11",
+      "why": "host to host in one subnet on different leaves: EVPN bridging between leaves"
+    },
+    {
+      "from": "DC1-HOST-PROD",
+      "to": "10.16.11.10",
+      "why": "host to host across subnets through the anycast gateways: EVPN routing"
+    },
+    {
+      "from": "DC1-HOST-PROD2",
+      "to": "10.16.11.10",
+      "why": "host to host across subnets through the anycast gateways: EVPN routing"
     }
   ]
 }

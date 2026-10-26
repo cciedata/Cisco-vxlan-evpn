@@ -1,0 +1,113 @@
+# FabricDesign values copied from the IP plan (prefixes, OOB zone gateways), the rack reservations and the PDU
+# device types, plus those objects; the *_artifact_group fields (compared with the .infrahub.yml artifact
+# targets); vpn_attachment_slots and partner_vrf.
+query DesignCopyCheck {
+  FabricDesign {
+    count
+    edges {
+      node {
+        name { value }
+        carrier_block { value }
+        cloud_aws_block { value }
+        cloud_azure_block { value }
+        oob_supernet { value }
+        sdwan_branch_summary { value }
+        dci_circuits { value }
+        external_guardrail_prefixes { value }
+        dc1_cloud_aws_net_1 { value }
+        dc1_cloud_aws_net_2 { value }
+        dc2_cloud_aws_net_1 { value }
+        dc2_cloud_aws_net_2 { value }
+        dc1_cloud_er_net_1 { value }
+        dc1_cloud_er_net_2 { value }
+        dc2_cloud_er_net_1 { value }
+        dc2_cloud_er_net_2 { value }
+        dc1_infra_block { value }
+        dc2_infra_block { value }
+        dc1_tenant_block { value }
+        dc2_tenant_block { value }
+        dc1_sdwan_fw_wan_endpoint { value }
+        dc2_sdwan_fw_wan_endpoint { value }
+        dc1_vpn_fw_wan_endpoint { value }
+        dc2_vpn_fw_wan_endpoint { value }
+        network_racks { value }
+        oob_racks { value }
+        network_patch_racks { value }
+        cloud_router_rack_u { value }
+        vpn_fw_rack_u { value }
+        sdwan_fw_rack_u { value }
+        console_server_rack_u { value }
+        oob_access_rack_u { value }
+        oob_agg_rack_u { value }
+        oob_fw_rack_u { value }
+        rack_local_panel_u { value }
+        bmc_switch_rack_u { value }
+        pdu_type_30a { value }
+        pdu_type_60a { value }
+        bgw_artifact_group { value }
+        border_leaf_artifact_group { value }
+        cloud_router_artifact_group { value }
+        dci_artifact_group { value }
+        dmz_artifact_group { value }
+        edge_artifact_group { value }
+        internal_fw_artifact_group { value }
+        internet_fw_artifact_group { value }
+        isp_router_artifact_group { value }
+        leaf_artifact_group { value }
+        oob_access_artifact_group { value }
+        oob_agg_artifact_group { value }
+        oob_fw_artifact_group { value }
+        sdwan_fw_artifact_group { value }
+        service_leaf_artifact_group { value }
+        spine_artifact_group { value }
+        vpn_fw_artifact_group { value }
+        vpn_attachment_slots { value }
+        partner_vrf { value }
+        oob_gateway_host { value }
+        oob_vlans { value }
+        dc1_oob_block_base { value }
+        dc2_oob_block_base { value }
+      }
+    }
+  }
+  IpamIPAddress {
+    edges {
+      node {
+        address { value }
+      }
+    }
+  }
+  IpamPrefix {
+    edges {
+      node {
+        prefix { value }
+        site { node { name { value } } }
+      }
+    }
+  }
+  LocationRack {
+    edges {
+      node {
+        name { value }
+        purpose { value }
+      }
+    }
+  }
+  LocationRackReservation {
+    edges {
+      node {
+        name { value }
+        position { value }
+        label { value }
+        rack { node { name { value } } }
+      }
+    }
+  }
+  DcimDeviceType {
+    edges {
+      node {
+        name { value }
+      }
+    }
+  }
+}

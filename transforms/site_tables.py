@@ -1,7 +1,8 @@
-"""site_tables: Markdown tables per site (P2-107): prefix hierarchy, VLAN -> VNI -> VRF, BGP sessions.
+"""site_tables: Markdown tables per site: prefix hierarchy, VLAN -> VNI -> VRF, BGP sessions.
 
 Sessions are derived from the data the configs render from: spine route reflectors and their clients (same fabric ASN,
-loopback0), attachments (leaf .1/.2 <-> firewall .3 of each /29), ISP router cross-link /31 and carrier /30s.
+loopback0), attachments (leaves at attachment_leaf_hosts <-> firewall at attachment_device_host of each attachment prefix),
+ISP router cross-link and carrier links.
 """
 import ipaddress
 
@@ -14,6 +15,22 @@ def v(node, *path):
     return node
 
 
+def design(data: dict, fields) -> dict:
+    """FabricDesign values this transform uses; a missing object or value stops the transform."""
+    fd = data.get("FabricDesign") or {}
+    edges = fd.get("edges") or []
+    if fd.get("count") != 1 or len(edges) != 1:
+        raise ValueError(f"FabricDesign: expected exactly 1 object, found {fd.get('count', len(edges))}; fix it in Infrahub "
+                         "(and check that the query asks for FabricDesign)")
+    out = {}
+    for f in fields:
+        value = (edges[0]["node"].get(f) or {}).get("value")
+        if value is None:
+            raise ValueError(f"FabricDesign.{f} is empty; fix it in Infrahub")
+        out[f] = value
+    return out
+
+
 def natural(name):
     import re
     return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", str(name))]
@@ -23,6 +40,9 @@ class SiteTables(InfrahubTransform):
     query = "site_tables"
 
     async def transform(self, data: dict) -> str:
+        d_ = design(data, ("attachment_leaf_hosts", "attachment_device_host", "carrier_link_prefix_length", "p2p_link_prefix_length"))
+        leaf_hosts, fw_host = d_["attachment_leaf_hosts"], d_["attachment_device_host"]
+        carrier_len, p2p_len = d_["carrier_link_prefix_length"], d_["p2p_link_prefix_length"]
         devs = {}
         for e in data["DcimDevice"]["edges"]:
             d = e["node"]
@@ -69,8 +89,8 @@ class SiteTables(InfrahubTransform):
             fws = [d["node"] for d in a["devices"]["edges"]]
             fw_asn = v(fws[0], "asn", "node", "asn", "value") if fws else None
             for k, m in enumerate(members):
-                rows.append(("eBGP", a["vrf"]["node"]["name"]["value"], m["name"]["value"], f"{net[1 + k]}/{net.prefixlen}",
-                             v(m, "asn", "node", "asn", "value"), "/".join(f["name"]["value"] for f in fws), f"{net[3]}/{net.prefixlen}",
+                rows.append(("eBGP", a["vrf"]["node"]["name"]["value"], m["name"]["value"], f"{net[leaf_hosts[k]]}/{net.prefixlen}",
+                             v(m, "asn", "node", "asn", "value"), "/".join(f["name"]["value"] for f in fws), f"{net[fw_host]}/{net.prefixlen}",
                              fw_asn, f"{a['name']['value']} VLAN {a['vlan_id']['value']} (active unit only)"))
         for n, d in sorted(devs.items(), key=lambda t: natural(t[0])):
             if d["role"] != "isp_router":
@@ -78,14 +98,14 @@ class SiteTables(InfrahubTransform):
             for ifn, (addrs, role) in d["ifs"].items():
                 for addr in addrs:
                     iface = ipaddress.ip_interface(addr)
-                    if iface.network.prefixlen == 30 and role == "upstream":
+                    if iface.network.prefixlen == carrier_len and role == "upstream":
                         peer = next(h for h in iface.network.hosts() if h != iface.ip)
-                        rows.append(("eBGP", "default", n, addr, d["asn"], "carrier", f"{peer}/30", "", f"{ifn}"))
-                    if iface.network.prefixlen == 31 and role == "core":
+                        rows.append(("eBGP", "default", n, addr, d["asn"], "carrier", f"{peer}/{carrier_len}", "", f"{ifn}"))
+                    if iface.network.prefixlen == p2p_len and role == "core":
                         other = [o for o, od in devs.items() if o != n and od["role"] == "isp_router"]
                         peer = next(h for h in (iface.network.network_address, iface.network.broadcast_address) if h != iface.ip)
                         if other and n < other[0]:
-                            rows.append(("iBGP", "default", n, addr, d["asn"], other[0], f"{peer}/31", d["asn"], f"cross-link {ifn}"))
+                            rows.append(("iBGP", "default", n, addr, d["asn"], other[0], f"{peer}/{p2p_len}", d["asn"], f"cross-link {ifn}"))
         out += ["", "## BGP sessions", "", "| Type | VRF | Local | Local address | Local AS | Peer | Peer address | Peer AS | Note |",
                 "|---|---|---|---|---|---|---|---|---|"]
         for r in rows:

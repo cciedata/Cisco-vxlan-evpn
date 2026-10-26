@@ -3,13 +3,13 @@ query SitePorts($site: String!) {
     edges { node {
       name { value }
       role { value }
-      device_type { node { name { value } } }
+      device_type { node { name { value } front_panel_port_count { value } port_name_format { value } } }
       interfaces { edges { node {
         id
         __typename
         name { value }
         description { value }
-        ... on InterfacePhysical { role { value } connector { node { id } } }
+        ... on InterfacePhysical { role { value } }
       } } }
     } }
   }

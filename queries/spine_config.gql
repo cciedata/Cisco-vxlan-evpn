@@ -5,6 +5,7 @@ query SpineConfig($device: String!) {
       node {
         name { value }
         role { value }
+        location { node { name { value } } }
         asn {
           node {
             asn { value }
@@ -47,6 +48,28 @@ query SpineConfig($device: String!) {
             }
           }
         }
+      }
+    }
+  }
+  # design values used by spine_config.j2 (one FabricDesign object)
+  FabricDesign {
+    count
+    edges {
+      node {
+        underlay_ospf_area { value }
+        overlay_bfd_interval_ms { value }
+        overlay_bfd_multiplier { value }
+        local_admin_username { value }
+        local_admin_role { value }
+        dns_lookup { value }
+        oob_gateway_host { value }
+        underlay_ospf_network_type { value }
+        rr_retain_all_route_targets { value }
+        overlay_bgp_bfd { value }
+        overlay_send_community_standard { value }
+        dc1_overlay_bgp_password { value }
+        dc2_overlay_bgp_password { value }
+    nxos_scp_server { value }
       }
     }
   }

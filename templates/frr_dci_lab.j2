@@ -1,16 +1,27 @@
-{# Option 5 (D5-23, D5-35): lab stand-in for a DCI switch of the other site, as one POSIX shell script run in an FRR container.
+{# Option 5 lab: stand-in for a DCI switch of the other site, as one POSIX shell script run in an FRR container.
    Same query as dci_config.j2: every routed interface with its /31, the port-channel to the pair peer (LACP), loopback0, and eBGP
    or iBGP to the far end of every /31 (the far end's name is the first word of the description, its ASN from the BGW and DCI
    lists), loopback0 redistributed. Containerlab port names: Ethernet1/<n> -> eth<n>, port-channel<n> -> po<n>. #}
-{% set bgp_password = "cisco123" -%}
-{% set mtu = 9216 -%}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.dci_circuit_bgp_password.value is none %}{{ missing_FabricDesign_dci_circuit_bgp_password() }}{% endif -%}
+{%- if fd.route_policy_seq_step.value is none %}{{ missing_FabricDesign_route_policy_seq_step() }}{% endif -%}
+{%- if fd.p2p_link_prefix_length.value is none %}{{ missing_FabricDesign_p2p_link_prefix_length() }}{% endif -%}
+{%- if fd.dci_pair_next_hop_self.value is none %}{{ missing_FabricDesign_dci_pair_next_hop_self() }}{% endif -%}
 {% set bond_mode = "802.3ad" -%}
-{% set seq_step = 10 -%}
+{% set seq_step = fd.route_policy_seq_step.value -%}
 {% macro lx(n) %}{% if n.startswith("Ethernet1/") %}eth{{ n.split("/")[1] }}{% elif n.startswith("port-channel") %}po{{ n[12:] }}{% else %}{{ n }}{% endif %}{% endmacro -%}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set name = device.name.value -%}
 {% set asn = device.asn.node.asn.value -%}
+{% set site_name = device.location.node.name.value -%}
+{% set bgw_key = site_name | lower ~ "_bgw_dci_bgp_password" -%}
+{% set pair_key = site_name | lower ~ "_dci_pair_bgp_password" -%}
+{%- if fd[bgw_key] is not defined or fd[bgw_key].value is none %}{{ fd["missing_FabricDesign_" ~ bgw_key].value() }}{% endif -%}
+{%- if fd[pair_key] is not defined or fd[pair_key].value is none %}{{ fd["missing_FabricDesign_" ~ pair_key].value() }}{% endif -%}
+{% set bgw_names = data.Bgws.edges | map(attribute="node.name.value") | list -%}
+{% macro bgp_password(fname, fasn) %}{% if fname in bgw_names %}{{ fd[bgw_key].value }}{% elif fasn == asn %}{{ fd[pair_key].value }}{% else %}{{ fd.dci_circuit_bgp_password.value }}{% endif %}{% endmacro -%}   {#- BGW-DCI in the site / DCI pair iBGP / DCI circuit between the sites -#}
 {% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
 {% set lo0 = interfaces | selectattr("name.value", "equalto", "loopback0") | list | first -%}
 {% set router_id = lo0.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
@@ -19,7 +30,7 @@
 {% set routed = interfaces | rejectattr("name.value", "equalto", "loopback0") | rejectattr("role.value", "equalto", "management") | selectattr("ip_addresses", "defined") | list -%}
 {% set known = (data.Bgws.edges + data.Dcis.edges) | map(attribute="node") | list -%}
 {% set peers = namespace(items=[]) -%}
-{% for i in routed | sort(attribute="name.value") %}{% if i.ip_addresses.edges %}{% set a = i.ip_addresses.edges[0].node.address.value %}{% if a.endswith("/31") %}{% set o = (a | ipaddress_interface("ip") | string).split(".") %}{% set far = o[:3] | join(".") ~ "." ~ ((o[3] | int) + (1 if (o[3] | int) % 2 == 0 else -1)) %}{% set fname = (i.description.value or "").split(" ")[0] %}{% set fdev = known | selectattr("name.value", "equalto", fname) | list | first %}{% set peers.items = peers.items + [(i, a, far, fname, fdev.asn.node.asn.value)] %}{% endif %}{% endif %}{% endfor -%}
+{% for i in routed | sort(attribute="name.value") %}{% if i.ip_addresses.edges %}{% set a = i.ip_addresses.edges[0].node.address.value %}{% if a.endswith("/" ~ fd.p2p_link_prefix_length.value) %}{% set o = (a | ipaddress_interface("ip") | string).split(".") %}{% set far = o[:3] | join(".") ~ "." ~ ((o[3] | int) + (1 if (o[3] | int) % 2 == 0 else -1)) %}{% set fname = (i.description.value or "").split(" ")[0] %}{% set fdev = known | selectattr("name.value", "equalto", fname) | list | first %}{% set peers.items = peers.items + [(i, a, far, fname, fdev.asn.node.asn.value)] %}{% endif %}{% endif %}{% endfor -%}
 #!/bin/sh
 # {{ name }}: lab stand-in for the DCI switch (FRR in a Linux container), used as the other site's DCI. Rendered by Infrahub, do not edit.
 set -eu
@@ -29,12 +40,12 @@ ip addr replace {{ router_id }}/32 dev lo
 {% for pc in pcs %}
 ip link add {{ lx(pc.name.value) }} type bond mode {{ bond_mode }} 2>/dev/null || true
 {% for m in members | selectattr("port_channel.node", "ne", none) | list %}{% if m.port_channel.node.name.value == pc.name.value %}
-if [ -e /sys/class/net/{{ lx(m.name.value) }} ]; then ip link set {{ lx(m.name.value) }} down; ip link set {{ lx(m.name.value) }} mtu {{ mtu }}; ip link set {{ lx(m.name.value) }} master {{ lx(pc.name.value) }}; ip link set {{ lx(m.name.value) }} up; fi
+if [ -e /sys/class/net/{{ lx(m.name.value) }} ]; then ip link set {{ lx(m.name.value) }} down; ip link set {{ lx(m.name.value) }} mtu {{ m.mtu.value }}; ip link set {{ lx(m.name.value) }} master {{ lx(pc.name.value) }}; ip link set {{ lx(m.name.value) }} up; fi
 {% endif %}{% endfor %}
-ip link set {{ lx(pc.name.value) }} mtu {{ mtu }} up
+ip link set {{ lx(pc.name.value) }} mtu {{ pc.mtu.value }} up
 {% endfor %}
 {% for i, a, far, fname, fasn in peers.items %}
-if [ -e /sys/class/net/{{ lx(i.name.value) }} ]; then ip link set {{ lx(i.name.value) }} mtu {{ mtu }}; ip addr replace {{ a }} dev {{ lx(i.name.value) }}; ip link set {{ lx(i.name.value) }} up; fi
+if [ -e /sys/class/net/{{ lx(i.name.value) }} ]; then ip link set {{ lx(i.name.value) }} mtu {{ i.mtu.value }}; ip addr replace {{ a }} dev {{ lx(i.name.value) }}; ip link set {{ lx(i.name.value) }} up; fi
 {% endfor %}
 pgrep -x bfdd >/dev/null || /usr/lib/frr/bfdd -d -A 127.0.0.1
 pgrep -x bgpd >/dev/null || /usr/lib/frr/bgpd -d -A 127.0.0.1
@@ -53,11 +64,11 @@ router bgp {{ asn }}
 {% for i, a, far, fname, fasn in peers.items %}
  neighbor {{ far }} remote-as {{ fasn }}
  neighbor {{ far }} description {{ fname }}
- neighbor {{ far }} password {{ bgp_password }}
+ neighbor {{ far }} password {{ bgp_password(fname, fasn) }}
 {% endfor %}
  address-family ipv4 unicast
   redistribute connected route-map RM-LOOPBACK0
-{% for i, a, far, fname, fasn in peers.items %}{% if fasn == asn %}
+{% for i, a, far, fname, fasn in peers.items %}{% if fasn == asn and fd.dci_pair_next_hop_self.value %}
   neighbor {{ far }} next-hop-self
 {% endif %}{% endfor %}
  exit-address-family

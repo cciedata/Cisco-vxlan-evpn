@@ -9,7 +9,7 @@ One query, two consumers:
 Scope: devices whose platform is Cisco NX-OS (the Day-2 push target), with their primary (management) address.
 Filters: DAY2_SITE / --site, DAY2_DEVICES / --devices (comma-separated). Nothing is typed per device.
 
-Snapshot (FU-17, auto-approved 7 Oct): laptop 1 cannot run Infrahub and an N9Kv together, so
+Snapshot: laptop 1 cannot run Infrahub and an N9Kv together, so
   infrahub_inventory.py --site DC1 --devices DC1-L11 --export <dir>   writes the inventory and each startup-config artifact
 and DAY2_CACHE=<dir> makes both tools read that snapshot instead of Infrahub (same data; the live path is the default).
 """
@@ -20,7 +20,7 @@ import sys
 
 import httpx
 
-INFRAHUB = os.environ.get("INFRAHUB_ADDRESS", "http://localhost:8000")     # = labctl (P3D-03)
+INFRAHUB = os.environ.get("INFRAHUB_ADDRESS", "http://localhost:8000")     # same as labctl
 INFRAHUB_USER = os.environ.get("INFRAHUB_USERNAME", "admin")
 INFRAHUB_PASS = os.environ.get("INFRAHUB_PASSWORD", "infrahub")
 PLATFORM = "Cisco NX-OS"                                                    # objects/04-hardware.yml

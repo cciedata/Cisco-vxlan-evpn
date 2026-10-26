@@ -1,4 +1,4 @@
-# Phase 2 PC2: border and service leaves (VTEPs with firewall attachments on their vPC pair)
+# Border and service leaves (VTEPs with firewall attachments on their vPC pair)
 query BorderServiceLeafConfig($device: String!) {
   DcimDevice(name__value: $device) {
     count
@@ -15,6 +15,7 @@ query BorderServiceLeafConfig($device: String!) {
                   node {
                     name { value }
                     multisite { value }
+                    sdwan_excluded { value }
                     summaries {
                       edges {
                         node {
@@ -65,7 +66,7 @@ query BorderServiceLeafConfig($device: String!) {
                     name { value }
                     vlan_id { value }
                     prefix { node { prefix { value } } }
-                    vrf { node { name { value } l3_vni { value } l3_vni_vlan { value } } }
+                    vrf { node { name { value } l3_vni { value } l3_vni_vlan { value } border_static_summary { value } } }
                     devices { edges { node { name { value } role { value } asn { node { asn { value } } } } } }
                   }
                 }
@@ -110,6 +111,74 @@ query BorderServiceLeafConfig($device: String!) {
             }
           }
         }
+      }
+    }
+  }
+  # design values used by border_service_leaf_config.j2 (one FabricDesign object)
+  FabricDesign {
+    count
+    edges {
+      node {
+        underlay_ospf_area { value }
+        bfd_interval_ms { value }
+        bfd_multiplier { value }
+        bfd_min_rx_ms { value }
+        overlay_bfd_interval_ms { value }
+        overlay_bfd_multiplier { value }
+        anycast_gateway_mac { value }
+        mtu_svi { value }
+        evpn_maximum_paths { value }
+        vpc_keepalive_vrf { value }
+        vpc_keepalive_interval_ms { value }
+        vpc_keepalive_timeout_s { value }
+        vpc_keepalive_hold_timeout_s { value }
+        vpc_role_priority { value }
+        vpc_role_priority_order { value }
+        vpc_delay_restore_s { value }
+        vpc_auto_recovery_reload_delay_s { value }
+        vpc_stp_priority { value }
+        vpc_peer_link_port_channel { value }
+        vpc_backup_vlan { value }
+        transit_vrf { value }
+        sdwan_branch_summary { value }
+        partner_nat_prefix_length { value }
+        route_policy_seq_step { value }
+        attachment_device_host { value }
+        cloud_aws_block { value }
+        cloud_azure_block { value }
+        cloud_prefix_max_length { value }
+        local_admin_username { value }
+        local_admin_role { value }
+        dns_lookup { value }
+        oob_gateway_host { value }
+        evpn_rd_rt_mode { value }
+        mlag_peer_switch { value }
+        mlag_peer_gateway { value }
+        mlag_layer3_peer_router { value }
+        mlag_arp_sync { value }
+        bfd_echo { value }
+        underlay_ospf_network_type { value }
+        lacp_mode { value }
+        vpc_peer_link_stp_port_type { value }
+        attachment_port_stp_edge { value }
+        attachment_port_bpdu_guard { value }
+        mlag_vtep_virtual_router_mac { value }
+        mlag_vtep_advertise_primary_ip { value }
+        arp_suppression { value }
+        evpn_bum_replication { value }
+        overlay_bgp_bfd { value }
+        attachment_bgp_bfd { value }
+        overlay_send_community_standard { value }
+        ip_redirects { value }
+        distributed_anycast_gateway { value }
+        cloud_accept_default_from_fabric { value }
+        sdwan_advertise_cloud_prefixes { value }
+        transit_cloud_maximum_paths { value }
+        dc1_overlay_bgp_password { value }
+        dc2_overlay_bgp_password { value }
+        dc1_attachment_bgp_password { value }
+        dc2_attachment_bgp_password { value }
+    nxos_scp_server { value }
       }
     }
   }

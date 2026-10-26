@@ -213,7 +213,7 @@ generics:
             color: "#B4E0DC"
           - name: console
             label: Console Port
-            description: "Serial console port of a device, or a console-server port (Phase 4 OOB)."
+            description: "Serial console port of a device, or a console-server port."
             color: "#E8DAEF"
           - name: management
             label: Management Interface
@@ -229,11 +229,11 @@ generics:
             color: "#B2D4E6"
           - name: dci_circuit
             label: DCI Circuit
-            description: "Inter-site circuit port on a DCI switch (Phase 4)."
+            description: "Inter-site circuit port on a DCI switch."
             color: "#AED6F1"
           - name: cloud_handoff
             label: Cloud Handoff
-            description: "Cloud-exchange port and its AWS / ExpressRoute sub-interfaces on a cloud router (Phase 4)."
+            description: "Cloud-exchange port and its AWS / ExpressRoute sub-interfaces on a cloud router."
             color: "#D5F5E3"
           - name: vpc_peer_link
             label: vPC Peer-Link
@@ -461,7 +461,7 @@ nodes:
         kind: Dropdown
         label: ZTP State
         optional: true
-        description: Zero-touch provisioning state (Phase 3b). Written by the ZTP server through the ztp-callback account.
+        description: Zero-touch provisioning state. Written by the ZTP server through the ztp-callback account.
         choices:
           - name: pending
             label: Pending
@@ -473,11 +473,12 @@ nodes:
             color: "#f0ad4e"
           - name: complete
             label: Complete
-            description: Verified after the POAP reload (SSH, hostname = device name).
+            description: Verified after the POAP reload (SSH, hostname = device name, release = DcimPlatform.os_version).
             color: "#00d25b"
           - name: failed
             label: Failed
-            description: The POAP script reported an error, or no verified login within 30 min.
+            description: The POAP script reported an error, no verified login within FabricDesign.ztp_verify_window_s, or the release
+              differs from DcimPlatform.os_version.
             color: "#e04040"
         order_weight: 1210
       - name: ztp_updated
@@ -516,7 +517,7 @@ nodes:
             label: Tor Switch
             description: Tor switch part of a Fabric.
             color: "#e8e7fd"
-          # Phase 4 PC6: out-of-band management (generator oob_site)
+          # out-of-band management (generator oob_site)
           - name: oob_fw
             label: OOB Firewall
             description: OOB FortiGate pair; gateway of the OOB zones, IPsec to the other DC, remote-access VPN.
@@ -567,7 +568,8 @@ nodes:
             color: "#fdd49e"
           - name: sdwan_fw
             label: SD-WAN Hub Firewall
-            description: ADVPN hub between the branches (overlay AS 65400) and TRANSIT (border leaves), outside leg on the edge VLAN.
+            description: ADVPN hub between the branches (overlay AS FabricDesign.sdwan_overlay_asn) and TRANSIT (border leaves), outside
+              leg on the edge VLAN.
             color: "#9ebcda"
           - name: vpn_fw
             label: VPN-Partner Firewall

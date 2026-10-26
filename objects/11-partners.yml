@@ -4,7 +4,7 @@ kind: Object
 spec:
   kind: IpamPrefix
   data:
-    # Phase 4 PC4: translated /28 of the first partner = first /28 of each site's PARTNER block (decided)
+    # Translated /28 of the first partner = first /28 of each site's PARTNER block
     - prefix: 10.16.160.0/28
       description: PARTNER01 translated /28 (DC1 VPN-partner FW source NAT)
       status: active
@@ -21,7 +21,7 @@ kind: Object
 spec:
   kind: FabricPartner
   data:
-    # Phase 4 PC4 (row 47: one partner). Documentation values, P4A-422: peer from 198.18.0.0/15 (RFC 2544 benchmarking),
+    # One sample partner. Documentation values: peer from 198.18.0.0/15 (RFC 2544 benchmarking),
     # protected network from RFC 1918 space we do not use
     - name: PARTNER01
       description: Sample partner (documentation values)

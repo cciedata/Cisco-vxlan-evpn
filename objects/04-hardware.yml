@@ -14,10 +14,16 @@ spec:
   data:
     - name: Cisco NX-OS
       manufacturer: Cisco
+      # target OS release
+      os_version: "10.6(1)F"
     - name: Cisco IOS XR
       manufacturer: Cisco
+      # target OS release
+      os_version: "25.2.1"
     - name: Fortinet FortiOS
       manufacturer: Fortinet
+      # target OS release
+      os_version: "7.6.7"
 ---
 apiVersion: infrahub.app/v1
 kind: Object
@@ -29,46 +35,92 @@ spec:
       height: 2
       part_number: N9K-C9364D-GX2A
       description: 64 x 400G QSFP-DD, 2RU, 51.2 Tbps
+      # model default ports
+      console_port: "console"
+      downlink_ports_per_leaf: 2
+      fixed_leaf_downlink_ports:
+        BL1: "Ethernet1/41"
+        BL2: "Ethernet1/42"
+        SL1: "Ethernet1/43"
+        SL2: "Ethernet1/44"
+        BGW1: "Ethernet1/45"
+        BGW2: "Ethernet1/46"
+      front_panel_port_count: 64
+      port_name_format: "Ethernet1/{n}"
+      uplink_speed_100g: false
     - name: N9K-C93180YC-FX3
       manufacturer: Cisco
       height: 1
       part_number: N9K-C93180YC-FX3
       esi_min_release: "10.6(1)F"
       description: 48 x 1/10/25G SFP28, 6 x 40/100G QSFP28, 1RU; server leaf
+      # model default ports
+      console_port: "console"
+      front_panel_port_count: 54
+      port_name_format: "Ethernet1/{n}"
+      uplink_ports: {"S1": ["Ethernet1/49", "Ethernet1/50"], "S2": ["Ethernet1/51", "Ethernet1/52"]}
+      uplink_speed_100g: true
+      vpc_keepalive_port: "Ethernet1/48"
+      vpc_peer_link_ports: ["Ethernet1/53", "Ethernet1/54"]
     - name: N9K-C9332D-GX2B
       manufacturer: Cisco
       height: 1
       part_number: N9K-C9332D-GX2B
       description: 32 x 400G QSFP-DD, 1RU; border and service leaves, BGWs, edge and DCI switches
+      # model default ports
+      console_port: "console"
+      dci_circuit_port: "Ethernet1/25"
+      front_panel_port_count: 34
+      port_name_format: "Ethernet1/{n}"
+      uplink_ports: {"S1": "Ethernet1/1", "S2": "Ethernet1/2"}
+      uplink_speed_100g: false
+      vpc_keepalive_port: "Ethernet1/34"
+      vpc_peer_link_ports: ["Ethernet1/3", "Ethernet1/4", "Ethernet1/5", "Ethernet1/6"]
     - name: FG-3800G
       manufacturer: Fortinet
       height: 3
       part_number: FG-3800G
       description: FortiGate 3800G; 4 x 400G QSFP-DD, 4 x 200G QSFP56, 16 x 50G SFP56, HA and mgmt ports; Internet and Internal FW
+      # model default ports
+      console_port: "console"
+      fw_attach_ports: {"inside": ["port19", "port20"], "outside": ["port21", "port22"], "dmz": ["port15", "port16"]}
+      ha_ports: ["ha3", "ha4"]
+      uplink_speed_100g: false
+      vrf_leak_link_ports: ["npu0_vlink0", "npu0_vlink1"]
     - name: 8201-24H8FH
       manufacturer: Cisco
       height: 1
       part_number: 8201-24H8FH
       description: Cisco 8201, 8 x 400G QSFP56-DD + 24 x 100G QSFP28, 1RU, IOS XR; ISP and cloud routers
+      # model default ports
+      carrier_port: "FourHundredGigE0/0/0/6"
+      cloud_exchange_port: "HundredGigE0/0/0/16"
+      console_port: "console"
+      crosslink_port: "FourHundredGigE0/0/0/4"
+      fabric_facing_ports: ["FourHundredGigE0/0/0/0", "FourHundredGigE0/0/0/2"]
+      uplink_speed_100g: false
 ---
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
   kind: DcimDeviceType
   data:
-    # Phase 4 PC3 (row 37 B)
     - name: FG-1800F
       manufacturer: Fortinet
       height: 2
       part_number: FG-1800F
       description: FortiGate 1800F; 4 x 100G QSFP28 (port37-40), 12 x 25G SFP28, ha1/ha2, mgmt1/mgmt2; SD-WAN and VPN-partner FW
+      # model default ports
+      console_port: "console"
+      fw_attach_ports: {"inside": ["port37", "port38"], "outside": ["port39", "port40"]}
+      ha_ports: ["ha1", "ha2"]
+      uplink_speed_100g: false
 ---
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
   kind: OrganizationManufacturer
   data:
-    # Phase 4 PC6 (row 63 B)
     - name: Opengear
 ---
 apiVersion: infrahub.app/v1
@@ -84,19 +136,35 @@ kind: Object
 spec:
   kind: DcimDeviceType
   data:
-    # Phase 4 PC6: OOB (P2-115, P2-117, row 63 B)
+    # OOB
     - name: N9K-C9348GC-FX3
       manufacturer: Cisco
       height: 1
       part_number: N9K-C9348GC-FX3
       description: 48 x 100M/1G RJ45, 4 x 1/10/25G SFP28, 2 x 40/100G QSFP28, 1RU; OOB access switch
+      # model default ports
+      access_port_count: 48
+      console_port: "console"
+      port_name_format: "Ethernet1/{n}"
+      uplink_ports: ["Ethernet1/49", "Ethernet1/50"]
+      uplink_speed_100g: false
     - name: FG-120G
       manufacturer: Fortinet
       height: 1
       part_number: FG-120G
       description: FortiGate 120G; 16 x GE RJ45 (1-16), 8 x GE SFP (17-24), 4 x 10GE SFP+ (X1-X4), MGMT, HA; OOB FW
+      # model default ports
+      console_port: "console"
+      ha_ports: ["ha", "port16"]
+      uplink_ports: ["x1", "x2"]
+      uplink_speed_100g: false
+      wan_port: "port1"
     - name: OM2248-10G-L
       manufacturer: Opengear
       height: 1
       part_number: OM2248-10G-L
       description: Opengear OM2248-10G-L; 48 x RS-232 serial (RJ45), 2 x 10G SFP+, 1 x 1G RJ45, 4G LTE; console server
+      # model default ports
+      access_port_count: 48
+      port_name_format: "port{n}"
+      uplink_speed_100g: false

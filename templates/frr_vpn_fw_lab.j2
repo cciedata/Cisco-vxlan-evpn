@@ -1,40 +1,69 @@
-{# Option 5 (D5-21): lab stand-in for the VPN-partner FortiGate, as one POSIX shell script run in an FRR container. Same query
+{# Option 5 lab: stand-in for the VPN-partner FortiGate, as one POSIX shell script run in an FRR container. Same query
    and derivation rules as vpn_fw_config.j2. Linux side: LACP aggregates, the PARTNER leg in kernel VRF vrf16 (FortiOS VRF 16),
    the OUTSIDE leg and the WAN loopback in the main table (VRF 0). FRR side mirrors the FortiOS routing: eBGP to the border leaves
    (0/0 in, the translated /28s out), the /28 blackholes and networks, statics to each partner's protected networks.
    Lab-only (P5): each route-based IKEv2 tunnel is a GRE tunnel to the partner stand-in; the partner source NAT is an iptables
    SNAT to the translated /28; the static 0/0 goes to ISP1's address instead of the VRRP VIP. #}
-{% set partner_vrf = "PARTNER" -%}
-{% set table_vrf = 16 -%}
-{% set bgp_password = "cisco123" -%}
-{% set bfd_tx = 999 -%}{% set bfd_rx = 999 -%}{% set bfd_mult = 3 -%}
-{% set seq_step = 10 -%}
-{% set fw_host = 3 -%}
-{% set edge_fw_host = 12 -%}
-{% set mtu = 9216 -%}
-{% set wan_lo = "LO-WAN" -%}
-{% set table_base = 1000 -%}{# P3-63 #}
-{% set bfd_profile = "FW-BFD" -%}{# P3-64 #}
-{% set bond_mode = "802.3ad" -%}{# P3-65 #}
-{% set isp_gw_host = 2 -%}{# P5 (D5-21): ISP1's address on the edge VLAN, instead of the VRRP VIP .1 #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.partner_vrf.value is none %}{{ missing_FabricDesign_partner_vrf() }}{% endif -%}
+{%- if fd.bfd_interval_ms.value is none %}{{ missing_FabricDesign_bfd_interval_ms() }}{% endif -%}
+{%- if fd.bfd_multiplier.value is none %}{{ missing_FabricDesign_bfd_multiplier() }}{% endif -%}
+{%- if fd.bfd_min_rx_ms.value is none %}{{ missing_FabricDesign_bfd_min_rx_ms() }}{% endif -%}
+{%- if fd.route_policy_seq_step.value is none %}{{ missing_FabricDesign_route_policy_seq_step() }}{% endif -%}
+{%- if fd.attachment_device_host.value is none %}{{ missing_FabricDesign_attachment_device_host() }}{% endif -%}
+{%- if fd.edge_vlan_hosts.value is none %}{{ missing_FabricDesign_edge_vlan_hosts() }}{% endif -%}
+{%- if fd.mtu_fw_subinterface.value is none %}{{ missing_FabricDesign_mtu_fw_subinterface() }}{% endif -%}
+{%- if fd.fw_bgp_graceful_restart.value is none %}{{ missing_FabricDesign_fw_bgp_graceful_restart() }}{% endif -%}
+{%- if fd.attachment_leaf_hosts.value is none %}{{ missing_FabricDesign_attachment_leaf_hosts() }}{% endif -%}
+{%- if fd.vpn_partner_snat_range.value is none %}{{ missing_FabricDesign_vpn_partner_snat_range() }}{% endif -%}
+{%- if fd.bfd_echo.value is none %}{{ missing_FabricDesign_bfd_echo() }}{% endif -%}
+{%- if fd.attachment_bgp_bfd.value is none %}{{ missing_FabricDesign_attachment_bgp_bfd() }}{% endif -%}
+{%- if fd.fw_wan_vrf_id.value is none %}{{ missing_FabricDesign_fw_wan_vrf_id() }}{% endif -%}
+{# table_vrf: FabricVRF.fortios_vrf_id of the PARTNER attachment; wan_lo: the interface name on the pair whose address lies in
+   dc*_vpn_fw_wan_endpoint (both read below from the graph) #}
+{% set partner_vrf = fd.partner_vrf.value -%}
+{% set bfd_tx = fd.bfd_interval_ms.value -%}{% set bfd_rx = fd.bfd_min_rx_ms.value -%}{% set bfd_mult = fd.bfd_multiplier.value -%}
+{% set seq_step = fd.route_policy_seq_step.value -%}
+{% set fw_host = fd.attachment_device_host.value -%}
+{% set edge_fw_host = fd.edge_vlan_hosts.value["VPNFW"] -%}
+{% set mtu = fd.mtu_fw_subinterface.value -%}
+{% set table_base = 1000 -%}{# kernel table = 1000 + FortiOS VRF id #}
+{% set bfd_profile = "FW-BFD" -%}{# BFD profile name used in this lab script #}
+{% set bond_mode = "802.3ad" -%}{# LACP like FortiOS lacp-mode active #}
+{% set isp_gw_host = fd.edge_vlan_hosts.value["ISP1"] -%}{# lab-only: ISP1's address on the edge VLAN, instead of the VRRP VIP .1 #}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set name = device.name.value -%}
 {% set asn = device.asn.node.asn.value -%}
 {% set site = device.location.node -%}
 {% set site_name = site.name.value -%}
+{% set pw_key = site_name | lower ~ "_attachment_bgp_password" -%}
+{% set wep_key = site_name | lower ~ "_vpn_fw_wan_endpoint" -%}
+{%- if fd[pw_key] is not defined or fd[pw_key].value is none %}{{ fd["missing_FabricDesign_" ~ pw_key].value() }}{% endif -%}
+{%- if fd[wep_key] is not defined or fd[wep_key].value is none %}{{ fd["missing_FabricDesign_" ~ wep_key].value() }}{% endif -%}
+{% set bgp_password = fd[pw_key].value -%}
+{% set wep = fd[wep_key].value -%}
 {% set fabric_asn = site.fabric_asn.node.asn.value -%}
 {% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
 {% set aggs = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | sort(attribute="name.value") -%}
 {% set partner_att = data.FabricAttachment.edges | map(attribute="node") | list | selectattr("vrf.node.name.value", "equalto", partner_vrf) | list | first -%}
+{%- if partner_att.vrf.node.fortios_vrf_id.value is none %}{{ missing_FabricVRF_fortios_vrf_id() }}{% endif -%}
+{% set wan_vrf = fd.fw_wan_vrf_id.value -%}{# outside leg and WAN loopback: FortiOS VRF fw_wan_vrf_id (0 = the main table) #}
+{% set table_vrf = partner_att.vrf.node.fortios_vrf_id.value -%}
+{%- if wan_vrf != 0 and wan_vrf != table_vrf %}{{ missing_lab_vrf_for_FabricDesign_fw_wan_vrf_id() }}{% endif -%}
 {% set l2_site = data.FabricL2Vlan.edges | map(attribute="node") | list | selectattr("site.node.name.value", "equalto", site_name) | list -%}
 {% set edge_vlan = l2_site | selectattr("switch_pair.node.name.value", "equalto", site_name ~ "-VPC-EDGE1-EDGE2") | list | first -%}
-{% set unit_ns = namespace(wan=none) -%}
-{% for u in data.VpnUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges and i.name.value == wan_lo %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endfor %}{% endfor -%}
+{% set unit_ns = namespace(wan=none, wan_name=none) -%}
+{% for u in data.VpnUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges and ((i.ip_addresses.edges[0].node.address.value.split("/")[0] ~ "/" ~ wep.split("/")[1]) | ipaddress_interface("network") | string) == wep %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% set unit_ns.wan_name = i.name.value %}{% endif %}{% endfor %}{% endfor -%}
+{%- if unit_ns.wan_name is none %}{{ fd["missing_interface_in_" ~ wep_key].value() }}{% endif -%}
+{% set wan_lo = unit_ns.wan_name -%}
 {% set p_ns = namespace(items=[]) -%}
 {% for p in data.FabricPartner.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for t in p.translated_prefixes.edges | map(attribute="node") | list %}{% if t.site.node is not none and t.site.node.name.value == site_name %}{% set p_ns.items = p_ns.items + [(p.name.value, p.description.value or "", p.peer_ip.value, p.protected_prefixes.value | sort, t.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
 {% set partners = p_ns.items -%}
+{% macro obj_mtu(n) %}{% set i = interfaces | selectattr("name.value", "equalto", n) | list | first %}{% if i is not defined or i.mtu.value is none %}{{ missing_Interface_mtu() }}{% else %}{{ i.mtu.value }}{% endif %}{% endmacro -%}   {#- physical members and aggregates: the interface object's MTU, as the FortiOS config -#}
 {% macro host(p, n) %}{% set o = p.split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + n }}/{{ p.split("/")[1] }}{% endmacro -%}
+{% macro parent_of(n) %}{{ (interfaces | selectattr("name.value", "equalto", n) | list | first).parent_interface.node.name.value }}{% endmacro -%}   {#- template_name_reads: the aggregate a FortiOS sub-interface sits on -#}
 {% set inside_if = partner_vrf ~ "-" ~ partner_att.vlan_id.value -%}
 {% set outside_if = "OUTSIDE-" ~ edge_vlan.vlan_id.value -%}
 {% set outside_ip = host(edge_vlan.prefix.node.prefix.value, edge_fw_host) -%}
@@ -56,26 +85,33 @@ ip link set vrf{{ table_vrf }} up
 {% for a in aggs %}
 ip link add {{ a.name.value }} type bond mode {{ bond_mode }} 2>/dev/null || true
 {% for m in a.members.edges | map(attribute="node.name.value") | list | sort %}
-if [ -e /sys/class/net/{{ m }} ]; then ip link set {{ m }} down; ip link set {{ m }} mtu {{ mtu }}; ip link set {{ m }} master {{ a.name.value }}; ip link set {{ m }} up; fi
+if [ -e /sys/class/net/{{ m }} ]; then ip link set {{ m }} down; ip link set {{ m }} mtu {{ obj_mtu(m) }}; ip link set {{ m }} master {{ a.name.value }}; ip link set {{ m }} up; fi
 {% endfor %}
-ip link set {{ a.name.value }} mtu {{ mtu }} up
+ip link set {{ a.name.value }} mtu {{ obj_mtu(a.name.value) }} up
 {% endfor %}
-# --- inside leg (VRF {{ table_vrf }}), outside leg and WAN loopback (main table)
-ip link add link agg-inside name {{ inside_if }} type vlan id {{ partner_att.vlan_id.value }} 2>/dev/null || true
+# --- inside leg (VRF {{ table_vrf }}), outside leg and WAN loopback ({{ "main table" if wan_vrf == 0 else "VRF " ~ wan_vrf }})
+ip link add link {{ parent_of(inside_if) }} name {{ inside_if }} type vlan id {{ partner_att.vlan_id.value }} 2>/dev/null || true
 ip link set {{ inside_if }} master vrf{{ table_vrf }}
 ip addr replace {{ host(partner_att.prefix.node.prefix.value, fw_host) }} dev {{ inside_if }}
 ip link set {{ inside_if }} mtu {{ mtu }} up
-ip link add link agg-outside name {{ outside_if }} type vlan id {{ edge_vlan.vlan_id.value }} 2>/dev/null || true
+ip link add link {{ parent_of(outside_if) }} name {{ outside_if }} type vlan id {{ edge_vlan.vlan_id.value }} 2>/dev/null || true
+{% if wan_vrf != 0 %}
+ip link set {{ outside_if }} master vrf{{ wan_vrf }}
+{% endif %}
 ip addr replace {{ outside_ip }} dev {{ outside_if }}
 ip link set {{ outside_if }} mtu {{ mtu }} up
 ip link add {{ wan_lo }} type dummy 2>/dev/null || true
+{% if wan_vrf != 0 %}
+ip link set {{ wan_lo }} master vrf{{ wan_vrf }}
+{% endif %}
 ip addr replace {{ wan_ip }}/32 dev {{ wan_lo }}
 ip link set {{ wan_lo }} up
 # --- one tunnel per partner (lab-only GRE; FortiOS: route-based IKEv2 on {{ wan_lo }}) in VRF {{ table_vrf }}, SNAT to its /28
 command -v iptables >/dev/null || apk add --no-cache iptables >/dev/null 2>&1 || echo "WARNING: iptables not available (no package mirror): partner source NAT not set"
 {% for pname, pdesc, peer, protected, nat in partners %}
-{% set nat_first = host(nat, 1) | ipaddress_interface("ip") -%}
-{% set nat_last = host(nat, (2 ** (32 - (nat.split("/")[1] | int))) - 2) | ipaddress_interface("ip") -%}
+{% set first_usable = fd.vpn_partner_snat_range.value == "first_to_last_usable" -%}
+{% set nat_first = (host(nat, 1) | ipaddress_interface("ip") | string) if first_usable else (net(nat) | ipaddress_network("network_address") | string) -%}
+{% set nat_last = (host(nat, (2 ** (32 - (nat.split("/")[1] | int))) - 2) | ipaddress_interface("ip") | string) if first_usable else (net(nat) | ipaddress_network("broadcast_address") | string) -%}
 ip tunnel add {{ pname }} mode gre local {{ wan_ip }} remote {{ peer | ipaddress_interface("ip") }} ttl 64 2>/dev/null || true
 ip link set {{ pname }} master vrf{{ table_vrf }}
 ip link set {{ pname }} up
@@ -114,27 +150,35 @@ bfd
   transmit-interval {{ bfd_tx }}
   receive-interval {{ bfd_rx }}
   detect-multiplier {{ bfd_mult }}
+{% if fd.bfd_echo.value %}
+  echo-mode
+{% else %}
   no echo-mode
+{% endif %}
  exit
 exit
 !
 {% set leaves = partner_att.switch_pair.node.members.edges | map(attribute="node.name.value") | list | sort_interface_list %}
 router bgp {{ asn }} vrf vrf{{ table_vrf }}
  bgp router-id {{ router_id }}
+{% if fd.fw_bgp_graceful_restart.value %}
  bgp graceful-restart
-{% for k in [1, 2] %}
+{% endif %}
+{% for k in fd.attachment_leaf_hosts.value %}
 {% set peer = host(partner_att.prefix.node.prefix.value, k) | ipaddress_interface("ip") %}
  neighbor {{ peer }} remote-as {{ fabric_asn }}
- neighbor {{ peer }} description {{ leaves[k - 1] }}
+ neighbor {{ peer }} description {{ leaves[loop.index0] }}
  neighbor {{ peer }} password {{ bgp_password }}
  neighbor {{ peer }} update-source {{ inside_if }}
+{% if fd.attachment_bgp_bfd.value %}
  neighbor {{ peer }} bfd profile {{ bfd_profile }}
+{% endif %}
 {% endfor %}
  address-family ipv4 unicast
 {% for pname, pdesc, peer, protected, nat in partners %}
   network {{ nat }}
 {% endfor %}
-{% for k in [1, 2] %}
+{% for k in fd.attachment_leaf_hosts.value %}
 {% set peer = host(partner_att.prefix.node.prefix.value, k) | ipaddress_interface("ip") %}
   neighbor {{ peer }} route-map RM-{{ partner_vrf }}-FROM-LEAF in
   neighbor {{ peer }} route-map RM-{{ partner_vrf }}-TO-LEAF out

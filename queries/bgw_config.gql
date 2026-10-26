@@ -1,4 +1,4 @@
-# Phase 4 PC1: anycast border gateway (EVPN Multi-Site). The device, its site's segments and VRFs, its ASN's spines,
+# Anycast border gateway (EVPN Multi-Site). The device, its site's segments and VRFs, its ASN's spines,
 # every BGW (remote overlay peers, the site VIP on BGW1's loopback2) and every DCI switch (underlay peer ASN).
 query BgwConfig($device: String!) {
   DcimDevice(name__value: $device) {
@@ -99,6 +99,58 @@ query BgwConfig($device: String!) {
       node {
         name { value }
         asn { node { asn { value } } }
+      }
+    }
+  }
+  # design values used by bgw_config.j2 (one FabricDesign object)
+  FabricDesign {
+    count
+    edges {
+      node {
+        underlay_ospf_area { value }
+        inter_site_bgw_bgp_password { value }
+        bfd_interval_ms { value }
+        bfd_multiplier { value }
+        bfd_min_rx_ms { value }
+        overlay_bfd_interval_ms { value }
+        overlay_bfd_multiplier { value }
+        mtu_svi { value }
+        inter_site_delay_restore_s { value }
+        inter_site_storm_control_percent { value }
+        inter_site_storm_control_types { value }
+        inter_site_ebgp_multihop_ttl { value }
+        route_policy_seq_step { value }
+        inter_site_vip_third_octet { value }
+        inter_site_vip_host { value }
+        local_admin_username { value }
+        local_admin_role { value }
+        dns_lookup { value }
+        inter_site_split_horizon { value }
+        oob_gateway_host { value }
+        evpn_rd_rt_mode { value }
+        underlay_ospf_network_type { value }
+        bfd_echo { value }
+        evpn_bum_replication { value }
+        inter_site_bum_replication { value }
+        bgw_underlay_advertise_method { value }
+        overlay_bgp_bfd { value }
+        inter_site_rt_asn_rewrite { value }
+        overlay_send_community_standard { value }
+        ip_redirects { value }
+        inter_site_bgw_peering { value }
+        inter_site_bgp_bfd { value }
+        dci_ebgp_bfd { value }
+        dc1_overlay_bgp_password { value }
+        dc2_overlay_bgp_password { value }
+        dc1_multisite_site_id { value }
+        dc2_multisite_site_id { value }
+        dc1_bgw_dci_bgp_password { value }
+        dc2_bgw_dci_bgp_password { value }
+        dc1_infra_block { value }
+        dc2_infra_block { value }
+        # lab stand-in frr_bgw_lab.j2
+        mtu_fabric { value }
+    nxos_scp_server { value } evpn_maximum_paths { value }
       }
     }
   }

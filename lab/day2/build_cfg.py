@@ -14,12 +14,12 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 import labctl  # noqa: E402  (Infrahub client, artifact read)
-import vamd_secrets  # noqa: E402  (Phase 3b: delivery-time secrets)
+import vamd_secrets  # noqa: E402  (delivery-time secrets)
 
 KEEP = [r"^no password strength-check$", r"^username \S+ password ", r"^username \S+ role ", r"^username \S+ sshkey ",
         r"^boot nxos ", r"^hardware access-list tcam region ", r"^feature (nxapi|scp-server)$", r"^ssh key ", r"^snmp-server user admin "]   # FU-13; snmp admin: FU-20
 KEEP_RE = re.compile("|".join(KEEP))
-# FU-20 (7 Oct, job 233): NX-OS 'configure replace' pre-check refused the file: "Version command not found in User config file",
+# NX-OS 'configure replace' pre-check refused the file: "Version command not found in User config file",
 # "does not contain mandatory [snmp-server user admin ] command", "does not contain mandatory [vlan 1] command".
 REPLACE_MANDATORY_VLAN = "vlan 1"
 VERSION_RE = re.compile(r"^version \S+")
@@ -41,7 +41,7 @@ def artifact(device, branch):
 def build(device, running, branch="main"):
     """Returns (config text, artifact checksum, kept lines)."""
     text, checksum = artifact(device, branch)
-    text, warns = vamd_secrets.fill(text)                                          # Phase 3b: __VAMDADMIN_HASH__
+    text, warns = vamd_secrets.fill(text)                                          # fills __CISCOADMIN_HASH__
     for w in warns:
         print(f"WARNING {device}: {w}", file=sys.stderr)
     keep = kept_lines(running)

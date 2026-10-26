@@ -1,4 +1,4 @@
-# Phase 2 PC2: L2-only vPC pairs (EDGE and DMZ); one query, two templates (edge_config.j2, dmz_config.j2)
+# L2-only vPC pairs (EDGE and DMZ); one query, two templates (edge_config.j2, dmz_config.j2)
 query L2PairConfig($device: String!) {
   DcimDevice(name__value: $device) {
     count
@@ -60,6 +60,37 @@ query L2PairConfig($device: String!) {
             }
           }
         }
+      }
+    }
+  }
+  # design values used by edge_config.j2 and dmz_config.j2 (one FabricDesign object)
+  FabricDesign {
+    count
+    edges {
+      node {
+        vpc_keepalive_vrf { value }
+        vpc_keepalive_interval_ms { value }
+        vpc_keepalive_timeout_s { value }
+        vpc_keepalive_hold_timeout_s { value }
+        vpc_role_priority { value }
+        vpc_role_priority_order { value }
+        vpc_delay_restore_s { value }
+        vpc_auto_recovery_reload_delay_s { value }
+        vpc_stp_priority { value }
+        vpc_peer_link_port_channel { value }
+        local_admin_username { value }
+        local_admin_role { value }
+        dns_lookup { value }
+        oob_gateway_host { value }
+        mlag_peer_switch { value }
+        l2_pair_mlag_peer_gateway { value }
+        l2_pair_mlag_layer3_peer_router { value }
+        l2_pair_mlag_arp_sync { value }
+        lacp_mode { value }
+        vpc_peer_link_stp_port_type { value }
+        attachment_port_stp_edge { value }
+        attachment_port_bpdu_guard { value }
+    nxos_scp_server { value }
       }
     }
   }

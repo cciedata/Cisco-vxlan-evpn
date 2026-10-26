@@ -1,4 +1,4 @@
-# Lab tooling (Phase 3)
+# Lab tooling
 
 Builds and runs a site's lab from what Infrahub rendered. Nothing here holds device values: the node list, kinds,
 links, configs and expectations are Infrahub artifacts (`lab-topology`, `lab-expected`, `startup-config`,
@@ -11,16 +11,18 @@ links, configs and expectations are Infrahub artifacts (`lab-topology`, `lab-exp
 .venv/bin/python lab/labctl.py carve DC1                        # ARP-suppression TCAM carve on the VTEP nodes (N9Kv)
 .venv-lab/bin/python lab/postcheck.py DC1 --plan                    # list every check
 .venv-lab/bin/python lab/postcheck.py DC1                           # run them, report in lab/build/DC1/reports/
-.venv-lab/bin/python lab/failtests.py DC1 --list                  # the 15 failure tests and what each expects
+.venv-lab/bin/python lab/failtests.py DC1 --list                  # the failure tests and what each expects
 .venv-lab/bin/python lab/failtests.py DC1 --run 3,5                 # run some (default all); report in lab/build/DC1/reports/
 .venv/bin/python lab/labctl.py destroy DC1
 ```
 
-Partial lab (laptop, one N9Kv): `deploy DC1 --node-filter DC1-L11,DC1-HOST-PROD --memory 6144 --reserve 512`, then
-`postcheck.py DC1 --nodes DC1-L11,DC1-HOST-PROD`. The memory override goes to `topology.override.yml`; the artifact is untouched.
+Partial lab (laptop, one N9Kv): `deploy DC1 --node-filter DC1-L11,DC1-HOST-PROD --memory <MB> --reserve <MB>`, then
+`postcheck.py DC1 --nodes DC1-L11,DC1-HOST-PROD`. `--memory` overrides the N9Kv `QEMU_MEMORY` from the artifact and
+`--reserve` the host memory kept free (default `HOST_RESERVE_MB` in `labctl.py`); `validate` prints the estimate for the
+chosen values. The memory override goes to `topology.override.yml`; the artifact is untouched.
 
 Lab-only additions, applied at fetch or deploy time and recorded in `lab/build/<site>/MANIFEST.json`:
-`feature nxapi` and `feature scp-server` (Day-2 push, FU-16) on every N9Kv config (P3-47) and the TCAM carve (L-12). The production templates are unchanged.
+`feature nxapi` (lab-only) on every N9Kv config and the TCAM carve. `feature scp-server` is no longer added here: the production templates render it from FabricDesign.nxos_scp_server, because the Day-2 push needs it on the real devices too.
 `lab/build/` is not tracked in Git.
 
 Post-checks and failure tests run on Nornir + netmiko (NX-OS over SSH, `show ... | json`) in their own environment:
@@ -35,5 +37,5 @@ nodes: carriers and internet hosts, the PROD host, one SD-WAN branch (GRE to the
 FW) and one cloud exchange per cloud router (AWS and Microsoft peers in two VRFs). Unit 2 of each FortiGate pair runs
 with its data ports down (A/P HA shares the addresses). Use the site name with `-full`: `labctl.py fetch DC1-full`,
 `validate DC1-full`, `deploy DC1-full`, `push DC1-full`, `carve DC1-full`. Lab-only nodes carry the artifact that
-builds them as containerlab labels (`vamd.artifact`, `vamd.target`). DC1-full is 59 nodes (34 N9Kv) and about 290 GB:
-rendered and checked offline, not run. Decisions: `claude/option5-decisions.md` in the project records.
+builds them as containerlab labels (`vamd.artifact`, `vamd.target`). `labctl.py validate DC1-full` prints its node count
+and memory estimate (the counts follow the per-role device counts in FabricDesign): rendered and checked offline, not run.

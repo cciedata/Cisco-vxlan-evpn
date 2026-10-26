@@ -1,16 +1,17 @@
-# Phase 3 (P3-45, P3-48): everything the containerlab topology and the post-check expectations are built from, for one site.
+# Everything the containerlab topology and the post-check expectations are built from, for one site.
 query LabSite($site: String!) {
   LocationSite(name__value: $site) {
     edges {
       node {
         name { value }
         fabric_asn { node { asn { value } } }
-        owned_prefixes { edges { node { prefix { value } description { value } } } }
+        owned_prefixes { edges { node { prefix { value } description { value } role { value } } } }
         vrfs {
           edges {
             node {
               name { value }
               multisite { value }
+              fortios_vrf_id { value }
               summaries { edges { node { prefix { value } site { node { name { value } } } } } }
             }
           }
@@ -62,5 +63,20 @@ query LabSite($site: String!) {
   }
   FabricAutonomousSystem {
     edges { node { asn { value } provider { node { name { value } } } } }
+  }
+  # Design values (FabricDesign) read by transforms/lab.py (LabTopology, LabExpected); role sets come from the <role>_platform fields
+  FabricDesign {
+    count
+    edges {
+      node {
+        vtep_roles { value } segment_gateway_host { value } attachment_device_host { value } edge_vlan_hosts { value }
+        p2p_link_prefix_length { value } attachment_leaf_hosts { value } transit_vrf { value } spine_platform { value }
+        leaf_platform { value } border_leaf_platform { value } service_leaf_platform { value } bgw_platform { value }
+        dci_platform { value } edge_platform { value } dmz_platform { value } internal_fw_platform { value }
+        internet_fw_platform { value } sdwan_fw_platform { value } vpn_fw_platform { value } isp_router_platform { value }
+        cloud_router_platform { value }
+        overlay_bgp_bfd { value } attachment_bgp_bfd { value } carrier_side_host { value } isp_bundle_id { value } edge_vlan { value }
+      }
+    }
   }
 }

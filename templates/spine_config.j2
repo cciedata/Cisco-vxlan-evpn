@@ -1,9 +1,26 @@
 {# Approved constants: one place to change them #}
+{# Design values: read from the FabricDesign object in Infrahub; a missing value stops the render #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.underlay_ospf_area.value is none %}{{ missing_FabricDesign_underlay_ospf_area() }}{% endif -%}
+{%- if fd.overlay_bfd_interval_ms.value is none %}{{ missing_FabricDesign_overlay_bfd_interval_ms() }}{% endif -%}
+{%- if fd.overlay_bfd_multiplier.value is none %}{{ missing_FabricDesign_overlay_bfd_multiplier() }}{% endif -%}
+{%- if fd.local_admin_username.value is none %}{{ missing_FabricDesign_local_admin_username() }}{% endif -%}
+{%- if fd.local_admin_role.value is none %}{{ missing_FabricDesign_local_admin_role() }}{% endif -%}
+{%- if fd.dns_lookup.value is none %}{{ missing_FabricDesign_dns_lookup() }}{% endif -%}
+{%- if fd.oob_gateway_host.value is none %}{{ missing_FabricDesign_oob_gateway_host() }}{% endif -%}
+{%- if fd.underlay_ospf_network_type.value is none %}{{ missing_FabricDesign_underlay_ospf_network_type() }}{% endif -%}
+{%- if fd.rr_retain_all_route_targets.value is none %}{{ missing_FabricDesign_rr_retain_all_route_targets() }}{% endif -%}
+{%- if fd.overlay_bgp_bfd.value is none %}{{ missing_FabricDesign_overlay_bgp_bfd() }}{% endif -%}
+{%- if fd.nxos_scp_server.value is none %}{{ missing_FabricDesign_nxos_scp_server() }}{% endif -%}
+{%- if fd.overlay_send_community_standard.value is none %}{{ missing_FabricDesign_overlay_send_community_standard() }}{% endif -%}
+{%- set site_key = data.DcimDevice.edges[0].node.location.node.name.value | lower -%}
+{%- if fd[site_key ~ "_overlay_bgp_password"] is not defined or fd[site_key ~ "_overlay_bgp_password"].value is none %}{{ fd["missing_FabricDesign_" ~ site_key ~ "_overlay_bgp_password"]() }}{% endif -%}
 {% set ospf_process = "UNDERLAY" -%}
-{% set ospf_area = "0.0.0.0" -%}
+{% set ospf_area = fd.underlay_ospf_area.value -%}
 {% set rr_template = "RR-CLIENTS" -%}
-{% set bgp_password = "cisco123" -%}
-{% set bfd_timers = "interval 999 min_rx 999 multiplier 3" -%}   {#- L-13b: NX-OS 10.6 ranges 10-999 / multihop 250-999 -#}
+{% set bgp_password = fd[site_key ~ "_overlay_bgp_password"].value -%}
+{% set overlay_bfd_timers = "interval " ~ fd.overlay_bfd_interval_ms.value ~ " min_rx " ~ fd.overlay_bfd_interval_ms.value ~ " multiplier " ~ fd.overlay_bfd_multiplier.value -%}   {#- NX-OS 10.6 ranges 10-999 / multihop 250-999 -#}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set asn = device.asn.node.asn.value -%}
@@ -19,13 +36,20 @@
 {% set lo0_addr = lo0.ip_addresses.edges[0].node.address.value -%}
 {% set router_id = lo0_addr | ipaddress_interface("ip") -%}
 {% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
-{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+{% set mgmt_gw = ((mgmt_addr | ipaddress_interface("network")).network_address + fd.oob_gateway_host.value) | string -%}
 hostname {{ device.name.value }}
-username vamdadmin password 5 __VAMDADMIN_HASH__ role network-admin
+username {{ fd.local_admin_username.value }} password 5 __CISCOADMIN_HASH__ role {{ fd.local_admin_role.value }}
+{% if not fd.dns_lookup.value %}
 no ip domain-lookup
+{% endif %}
 feature ospf
 feature bgp
+{% if fd.overlay_bgp_bfd.value %}
 feature bfd
+{% endif %}
+{% if fd.nxos_scp_server.value %}
+feature scp-server
+{% endif %}
 nv overlay evpn
 
 vrf context management
@@ -47,7 +71,7 @@ interface {{ intf.name.value }}
   no switchport
   mtu {{ intf.mtu.value }}
   ip address {{ intf.ip_addresses.edges[0].node.address.value }}
-  ip ospf network point-to-point
+  ip ospf network {{ fd.underlay_ospf_network_type.value }}
   ip router ospf {{ ospf_process }} area {{ ospf_area }}
   no shutdown
 {% endfor %}
@@ -58,15 +82,21 @@ router ospf {{ ospf_process }}
 router bgp {{ asn }}
   router-id {{ router_id }}
   address-family l2vpn evpn
+{% if fd.rr_retain_all_route_targets.value %}
     retain route-target all
+{% endif %}
   template peer {{ rr_template }}
     remote-as {{ asn }}
     update-source loopback0
     password {{ bgp_password }}
+{% if fd.overlay_bgp_bfd.value %}
     bfd multihop
-    bfd multihop {{ bfd_timers }}
+    bfd multihop {{ overlay_bfd_timers }}
+{% endif %}
     address-family l2vpn evpn
+{% if fd.overlay_send_community_standard.value %}
       send-community
+{% endif %}
       send-community extended
       route-reflector-client
 {% for name in peer_names %}{% set peer = peers_all | selectattr("name.value", "equalto", name) | list | first %}

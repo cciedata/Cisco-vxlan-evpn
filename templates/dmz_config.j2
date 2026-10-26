@@ -1,12 +1,38 @@
-{# Phase 2 PC2: DMZ pair (L2 only). Bridges the DMZ VLANs to the Internet FW DMZ legs (Po11/Po12); the gateway is the Internet FW. LB ports 1/1-1/4 come later. #}
-{# Approved constants: vPC values as on the VTEP leaves minus the L3 lines (decided PC2) #}
-{% set keepalive_vrf = "VPC-KEEPALIVE" -%}
-{% set keepalive_timers = "interval 1000 timeout 5 hold-timeout 3" -%}
-{% set role_priority = [10, 20] -%}
-{% set delay_restore = 360 -%}
-{% set auto_recovery_delay = 360 -%}
-{% set stp_priority = 8192 -%}
-{% set peer_link_po = 1000 -%}
+{# DMZ pair (L2 only). Bridges the DMZ VLANs to the Internet FW DMZ legs (Po11/Po12); the gateway is the Internet FW. LB ports 1/1-1/4 come later. #}
+{# Approved constants: vPC values as on the VTEP leaves minus the L3 lines #}
+{# Design values: read from the FabricDesign object in Infrahub; a missing value stops the render #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.vpc_keepalive_vrf.value is none %}{{ missing_FabricDesign_vpc_keepalive_vrf() }}{% endif -%}
+{%- if fd.vpc_keepalive_interval_ms.value is none %}{{ missing_FabricDesign_vpc_keepalive_interval_ms() }}{% endif -%}
+{%- if fd.vpc_keepalive_timeout_s.value is none %}{{ missing_FabricDesign_vpc_keepalive_timeout_s() }}{% endif -%}
+{%- if fd.vpc_keepalive_hold_timeout_s.value is none %}{{ missing_FabricDesign_vpc_keepalive_hold_timeout_s() }}{% endif -%}
+{%- if fd.vpc_role_priority.value is none %}{{ missing_FabricDesign_vpc_role_priority() }}{% endif -%}
+{%- if fd.vpc_role_priority_order.value is none %}{{ missing_FabricDesign_vpc_role_priority_order() }}{% endif -%}
+{%- if fd.vpc_delay_restore_s.value is none %}{{ missing_FabricDesign_vpc_delay_restore_s() }}{% endif -%}
+{%- if fd.vpc_auto_recovery_reload_delay_s.value is none %}{{ missing_FabricDesign_vpc_auto_recovery_reload_delay_s() }}{% endif -%}
+{%- if fd.vpc_stp_priority.value is none %}{{ missing_FabricDesign_vpc_stp_priority() }}{% endif -%}
+{%- if fd.vpc_peer_link_port_channel.value is none %}{{ missing_FabricDesign_vpc_peer_link_port_channel() }}{% endif -%}
+{%- if fd.local_admin_username.value is none %}{{ missing_FabricDesign_local_admin_username() }}{% endif -%}
+{%- if fd.local_admin_role.value is none %}{{ missing_FabricDesign_local_admin_role() }}{% endif -%}
+{%- if fd.dns_lookup.value is none %}{{ missing_FabricDesign_dns_lookup() }}{% endif -%}
+{%- if fd.oob_gateway_host.value is none %}{{ missing_FabricDesign_oob_gateway_host() }}{% endif -%}
+{%- if fd.mlag_peer_switch.value is none %}{{ missing_FabricDesign_mlag_peer_switch() }}{% endif -%}
+{%- if fd.l2_pair_mlag_peer_gateway.value is none %}{{ missing_FabricDesign_l2_pair_mlag_peer_gateway() }}{% endif -%}
+{%- if fd.l2_pair_mlag_layer3_peer_router.value is none %}{{ missing_FabricDesign_l2_pair_mlag_layer3_peer_router() }}{% endif -%}
+{%- if fd.l2_pair_mlag_arp_sync.value is none %}{{ missing_FabricDesign_l2_pair_mlag_arp_sync() }}{% endif -%}
+{%- if fd.lacp_mode.value is none %}{{ missing_FabricDesign_lacp_mode() }}{% endif -%}
+{%- if fd.vpc_peer_link_stp_port_type.value is none %}{{ missing_FabricDesign_vpc_peer_link_stp_port_type() }}{% endif -%}
+{%- if fd.attachment_port_stp_edge.value is none %}{{ missing_FabricDesign_attachment_port_stp_edge() }}{% endif -%}
+{%- if fd.attachment_port_bpdu_guard.value is none %}{{ missing_FabricDesign_attachment_port_bpdu_guard() }}{% endif -%}
+{%- if fd.nxos_scp_server.value is none %}{{ missing_FabricDesign_nxos_scp_server() }}{% endif -%}
+{% set keepalive_vrf = fd.vpc_keepalive_vrf.value -%}
+{% set keepalive_timers = "interval " ~ fd.vpc_keepalive_interval_ms.value ~ " timeout " ~ fd.vpc_keepalive_timeout_s.value ~ " hold-timeout " ~ fd.vpc_keepalive_hold_timeout_s.value -%}
+{% set role_priority = fd.vpc_role_priority.value -%}
+{% set delay_restore = fd.vpc_delay_restore_s.value -%}
+{% set auto_recovery_delay = fd.vpc_auto_recovery_reload_delay_s.value -%}
+{% set stp_priority = fd.vpc_stp_priority.value -%}
+{% set peer_link_po = fd.vpc_peer_link_port_channel.value -%}
 {% macro vlan_ranges(ids) %}{% set ns = namespace(out=[], start=none, prev=none) %}{% for v in ids %}{% if ns.start is none %}{% set ns.start = v %}{% elif v != ns.prev + 1 %}{% set ns.out = ns.out + [ns.start ~ ("-" ~ ns.prev if ns.prev != ns.start else "")] %}{% set ns.start = v %}{% endif %}{% set ns.prev = v %}{% endfor %}{% if ns.start is not none %}{% set ns.out = ns.out + [ns.start ~ ("-" ~ ns.prev if ns.prev != ns.start else "")] %}{% endif %}{{ ns.out | join(",") }}{% endmacro -%}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
@@ -18,11 +44,12 @@
 {% set l2vlans = pair.l2_vlans.edges | map(attribute="node") | list | sort(attribute="vlan_id.value") -%}
 {# Values derived by rule #}
 {% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
-{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+{% set mgmt_gw = ((mgmt_addr | ipaddress_interface("network")).network_address + fd.oob_gateway_host.value) | string -%}
 {% set member_nodes = pair.members.edges | map(attribute="node") | list -%}
 {% set member_names = member_nodes | map(attribute="name.value") | list | sort_interface_list -%}
 {% set peer = member_nodes | rejectattr("name.value", "equalto", device.name.value) | list | first -%}
-{% set my_priority = role_priority[0] if member_names[0] == device.name.value else role_priority[1] -%}
+{% if fd.vpc_role_priority_order.value != "by_name" %}{{ unsupported_FabricDesign_vpc_role_priority_order() }}{% endif -%}
+{% set my_priority = role_priority[0] if member_names[0] == device.name.value else role_priority[1] -%}   {#- vpc_role_priority_order by_name -#}
 {% set keepalive = physical | selectattr("role.value", "equalto", "vpc_keepalive") | list | first -%}
 {% set keepalive_ip = keepalive.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
 {% set peer_keepalive_ip = peer.interfaces.edges[0].node.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
@@ -35,10 +62,15 @@
 {% set host_member_names = host_members | map(attribute="name.value") | list | sort_interface_list -%}
 {% set vlan_list = vlan_ranges(l2vlans | map(attribute="vlan_id.value") | list) -%}
 hostname {{ device.name.value }}
-username vamdadmin password 5 __VAMDADMIN_HASH__ role network-admin
+username {{ fd.local_admin_username.value }} password 5 __CISCOADMIN_HASH__ role {{ fd.local_admin_role.value }}
+{% if not fd.dns_lookup.value %}
 no ip domain-lookup
+{% endif %}
 feature lacp
 feature vpc
+{% if fd.nxos_scp_server.value %}
+feature scp-server
+{% endif %}
 
 vrf context management
   ip route 0.0.0.0/0 {{ mgmt_gw }}
@@ -53,12 +85,22 @@ vlan {{ v.vlan_id.value }}
 spanning-tree vlan {{ vlan_list }} priority {{ stp_priority }}
 
 vpc domain {{ pair.domain_id.value }}
+{% if fd.mlag_peer_switch.value %}
   peer-switch
+{% endif %}
   role priority {{ my_priority }}
   peer-keepalive destination {{ peer_keepalive_ip }} source {{ keepalive_ip }} vrf {{ keepalive_vrf }} {{ keepalive_timers }}
   delay restore {{ delay_restore }}
   auto-recovery reload-delay {{ auto_recovery_delay }}
+{% if fd.l2_pair_mlag_peer_gateway.value %}
   peer-gateway
+{% endif %}
+{% if fd.l2_pair_mlag_layer3_peer_router.value %}
+  layer3 peer-router
+{% endif %}
+{% if fd.l2_pair_mlag_arp_sync.value %}
+  ip arp synchronize
+{% endif %}
 
 interface {{ mgmt.name.value }}
   description {{ mgmt.description.value }}
@@ -79,7 +121,7 @@ interface {{ intf.name.value }}
   switchport
   switchport mode trunk
   switchport trunk allowed vlan {{ vlan_list }}
-  channel-group {{ peer_link_po }} mode active
+  channel-group {{ peer_link_po }} mode {{ fd.lacp_mode.value }}
   no shutdown
 {% endfor %}
 
@@ -88,7 +130,7 @@ interface {{ po.name.value }}
   switchport
   switchport mode trunk
   switchport trunk allowed vlan {{ vlan_list }}
-  spanning-tree port type network
+  spanning-tree port type {{ fd.vpc_peer_link_stp_port_type.value }}
   vpc peer-link
 {% for name in host_member_names %}{% set intf = host_members | selectattr("name.value", "equalto", name) | list | first %}
 
@@ -98,7 +140,7 @@ interface {{ intf.name.value }}
   switchport mode trunk
   switchport trunk allowed vlan {{ vlan_list }}
   mtu {{ intf.mtu.value }}
-  channel-group {{ intf.port_channel.node.name.value | replace("port-channel", "") }} mode active
+  channel-group {{ intf.port_channel.node.name.value | replace("port-channel", "") }} mode {{ fd.lacp_mode.value }}
   no shutdown
 {% endfor %}
 {% for name in host_po_names %}{% set intf = host_pos | selectattr("name.value", "equalto", name) | list | first %}
@@ -108,8 +150,12 @@ interface {{ intf.name.value }}
   switchport
   switchport mode trunk
   switchport trunk allowed vlan {{ vlan_list }}
+{% if fd.attachment_port_stp_edge.value %}
   spanning-tree port type edge trunk
+{% endif %}
+{% if fd.attachment_port_bpdu_guard.value %}
   spanning-tree bpduguard enable
+{% endif %}
   mtu {{ intf.mtu.value }}
   vpc {{ intf.name.value | replace("port-channel", "") }}
 {% endfor %}

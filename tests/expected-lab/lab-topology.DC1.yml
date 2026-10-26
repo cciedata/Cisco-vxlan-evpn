@@ -1,4 +1,4 @@
-# DC1 Phase 3 lab topology for containerlab. Rendered by Infrahub (lab_topology), do not edit.
+# DC1 lab topology for containerlab. Rendered by Infrahub (lab_topology), do not edit.
 # Startup configs: configs/<node>.cfg (NX-OS startup-config artifacts);
 # stand-in scripts: configs/<node>.sh (frr-lab-init artifacts, ISP routers included; carriers from the ISP routers' carrier-lab-init).
 name: vamd-dc1-p3
@@ -89,6 +89,16 @@ topology:
         QEMU_SMP: 3
         CLAB_MGMT_PASSTHROUGH: "true"
         SCRAPLI_TIMEOUT: 3600
+    DC1-L12:
+      kind: cisco_n9kv
+      image: vrnetlab/cisco_n9kv:10.6.4.M-lite
+      mgmt-ipv4: 10.250.0.15
+      startup-config: configs/DC1-L12.cfg
+      env:
+        QEMU_MEMORY: 8192
+        QEMU_SMP: 3
+        CLAB_MGMT_PASSTHROUGH: "true"
+        SCRAPLI_TIMEOUT: 3600
     DC1-S1:
       kind: cisco_n9kv
       image: vrnetlab/cisco_n9kv:10.6.4.M-lite
@@ -169,6 +179,22 @@ topology:
         - ip addr add 10.16.10.10/24 dev eth1
         - ip link set eth1 up
         - ip route replace default via 10.16.10.1 dev eth1
+    DC1-HOST-PROD2:
+      kind: linux
+      image: alpine:3.22
+      mgmt-ipv4: 10.250.0.238
+      exec:
+        - ip addr add 10.16.10.11/24 dev eth1
+        - ip link set eth1 up
+        - ip route replace default via 10.16.10.1 dev eth1
+    DC1-HOST-PROD3:
+      kind: linux
+      image: alpine:3.22
+      mgmt-ipv4: 10.250.0.239
+      exec:
+        - ip addr add 10.16.11.10/24 dev eth1
+        - ip link set eth1 up
+        - ip route replace default via 10.16.11.1 dev eth1
   links:
     - endpoints: ["DC1-BL1:eth1", "DC1-S1:eth41"]
     - endpoints: ["DC1-BL1:eth2", "DC1-S2:eth41"]
@@ -199,6 +225,10 @@ topology:
     - endpoints: ["DC1-L11:eth50", "DC1-S1:eth22"]
     - endpoints: ["DC1-L11:eth51", "DC1-S2:eth21"]
     - endpoints: ["DC1-L11:eth52", "DC1-S2:eth22"]
+    - endpoints: ["DC1-L12:eth49", "DC1-S1:eth23"]
+    - endpoints: ["DC1-L12:eth50", "DC1-S1:eth24"]
+    - endpoints: ["DC1-L12:eth51", "DC1-S2:eth23"]
+    - endpoints: ["DC1-L12:eth52", "DC1-S2:eth24"]
     - endpoints: ["DC1-S1:eth43", "DC1-SL1:eth1"]
     - endpoints: ["DC1-S1:eth44", "DC1-SL2:eth1"]
     - endpoints: ["DC1-S2:eth43", "DC1-SL1:eth2"]
@@ -213,4 +243,6 @@ topology:
     - endpoints: ["DC1-ISP2:Gi0-0-0-3", "DC1-ISP-B:isp"]
     - endpoints: ["DC1-ISP-B:host", "DC1-HOST-ISP-B:eth1"]
     - endpoints: ["DC1-L11:eth1", "DC1-HOST-PROD:eth1"]
+    - endpoints: ["DC1-L12:eth1", "DC1-HOST-PROD2:eth1"]
+    - endpoints: ["DC1-L12:eth2", "DC1-HOST-PROD3:eth1"]
 

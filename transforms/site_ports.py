@@ -1,15 +1,15 @@
-"""site_ports: one .drawio file per site, one tab per switch, every front-panel port (P2-106, P2-108).
+"""site_ports: one .drawio file per site, one tab per switch, every front-panel port.
 
-Port counts come from the device type (design-decisions.md, platforms). Faceplate layout (P2-216): odd ports top row, even ports bottom row. Uncabled ports read "<port> unused" (P2-215).
-Colour = interface role; label = far end device:port from the cable (P2-151), with cable type and length.
+Port counts come from the device type. Faceplate layout: odd ports top row, even ports bottom row. Uncabled ports read "<port> unused".
+Colour = interface role; label = far end device:port from the cable, with cable type and length.
 """
 from html import escape
 
 from infrahub_sdk.transforms import InfrahubTransform
 
 SWITCH_ROLES = ("spine", "leaf", "border_leaf", "service_leaf", "bgw", "edge", "dci", "dmz")
-FRONT_PANEL = {"N9K-C9364D-GX2A": 64, "N9K-C9332D-GX2B": 34, "N9K-C93180YC-FX3": 54}   # 64x400G; 32x400G+2x10G; 48x25G+6x100G
-ROLE_COLOUR = {            # draw.io built-in pairs (P2-200)
+# Front-panel port count and port name format: DcimDeviceType.front_panel_port_count / port_name_format, read per device
+ROLE_COLOUR = {            # draw.io built-in pairs
     "core": ("#dae8fc", "#6c8ebf"), "vpc_peer_link": ("#e1d5e7", "#9673a6"), "vpc_keepalive": ("#fff2cc", "#d6b656"),
     "peering": ("#f8cecc", "#b85450"), "upstream": ("#f8cecc", "#b85450"), "management": ("#f5f5f5", "#666666"),
 }
@@ -39,8 +39,10 @@ class SitePorts(InfrahubTransform):
         for e in data["DcimDevice"]["edges"]:
             d = e["node"]
             name = d["name"]["value"]
-            devices[name] = {"role": d["role"]["value"],
-                             "type": (((d.get("device_type") or {}).get("node") or {}).get("name") or {}).get("value"), "ifs": {}}
+            dt = (d.get("device_type") or {}).get("node") or {}
+            devices[name] = {"role": d["role"]["value"], "type": (dt.get("name") or {}).get("value"), "ifs": {},
+                             "front_panel": (dt.get("front_panel_port_count") or {}).get("value"),
+                             "port_format": (dt.get("port_name_format") or {}).get("value")}
             for ie in d["interfaces"]["edges"]:
                 i = ie["node"]
                 owner[i["id"]], ifname[i["id"]] = name, i["name"]["value"]
@@ -54,6 +56,9 @@ class SitePorts(InfrahubTransform):
                     far[a] = f"{owner[b]}:{short(ifname[b])} ({c['cable_type']['value']}" + (f", {c['length_m']['value']} m)" if c['length_m']['value'] is not None else ")")
         pages = []
         for name in sorted((n for n, d in devices.items() if d["role"] in SWITCH_ROLES), key=natural):
+            for attr, field in (("front_panel", "front_panel_port_count"), ("port_format", "port_name_format")):
+                if devices[name][attr] is None:
+                    raise ValueError(f"DcimDeviceType {devices[name]['type']}.{field} is empty ({name}); fix it in Infrahub")
             pages.append(self.page(name, devices[name], far))
         return '<mxfile host="infrahub">' + "".join(pages) + "</mxfile>"
 
@@ -65,8 +70,8 @@ class SitePorts(InfrahubTransform):
             cells.append(f'<mxCell id="p{n[0]}" value="{escape(text)}" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;'
                          f'fillColor={fill};strokeColor={stroke};{extra}" vertex="1" parent="1">'
                          f'<mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
-        count = FRONT_PANEL.get(d["type"], 0)
-        names = [f"Ethernet1/{k}" for k in range(1, count + 1)]
+        count = d["front_panel"]
+        names = [d["port_format"].format(n=k) for k in range(1, count + 1)]
         extra_ifs = sorted((i for i in d["ifs"] if i not in names and not i.startswith(("loopback", "Vlan", "port-channel", "nve"))), key=natural)
         cols = (count + 1) // 2 + len(extra_ifs)
         cell(0, 0, max(cols, 8) * PORT_W, 30, f"{name} | {d['type']} | {count} front-panel ports | odd top, even bottom | colour = interface role",

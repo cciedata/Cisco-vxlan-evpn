@@ -4,8 +4,11 @@ kind: Object
 spec:
   kind: InterfacePhysical
   data:
-    # Phase 3 (P3-39, P3-60): server-facing access port for the PROD lab test host on the first DC1 single-homed leaf.
+    # Server-facing access ports for the lab test hosts, on the single-homed leaves.
     # Owned by this file, not by the fabric_site generator (role "access" is outside the reconciler's owned roles).
+    # mtu is server_access_mtu; keep both in step - this file is static data, it cannot read FabricDesign.
+    # Ports: DC1-L11 and DC2-L11 Eth1/1, DC1-L12 and DC2-L12 Eth1/1 and Eth1/2.
+    # DC1-L12 Eth1/2 is a trunk: native PROD-1011, tagged DEV-1110 and CITRIX-DC1-1500.
     - device: DC1-L11
       name: Ethernet1/1
       description: Lab PROD test host
@@ -14,3 +17,44 @@ spec:
       status: active
       mtu: 9216
       access_segment: PROD-1010
+    - device: DC2-L11
+      name: Ethernet1/1
+      description: Lab DC2-PROD test host
+      role: access
+      l2_mode: access
+      status: active
+      mtu: 9216
+      access_segment: DC2-PROD-1240
+    - device: DC1-L12
+      name: Ethernet1/1
+      description: Lab PROD test host 2
+      role: access
+      l2_mode: access
+      status: active
+      mtu: 9216
+      access_segment: PROD-1010
+    - device: DC2-L12
+      name: Ethernet1/1
+      description: Lab DC2-PROD test host 2
+      role: access
+      l2_mode: access
+      status: active
+      mtu: 9216
+      access_segment: DC2-PROD-1240
+    - device: DC1-L12
+      name: Ethernet1/2
+      description: Lab PROD-1011 test host
+      role: access
+      l2_mode: trunk
+      status: active
+      mtu: 9216
+      access_segment: PROD-1011
+      tagged_segments: [DEV-1110, CITRIX-DC1-1500]
+    - device: DC2-L12
+      name: Ethernet1/2
+      description: Lab DC2-PROD-1241 test host
+      role: access
+      l2_mode: access
+      status: active
+      mtu: 9216
+      access_segment: DC2-PROD-1241

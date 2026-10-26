@@ -1,32 +1,92 @@
-{# Phase 4 PC6: OOB FortiGate (FG-120G, FortiOS 7.6.7), A/P HA, single VDOM, one routing table. Fully independent of
+{# OOB FortiGate (FG-120G, FortiOS 7.6.7), A/P HA, single VDOM, one routing table. Fully independent of
    production: no route to any production prefix, only the OOB zones of both DCs and 0/0 to the OOB carrier.
-   Zones (row 66 B): network mgmt (VLAN 100), OOB infrastructure (101), server BMC (102), remote access, the other DC
+   Zones: network mgmt (VLAN 100), OOB infrastructure (101), server BMC (102), remote access, the other DC
    (route-based IKEv2 over the OOB circuits, never the DCI). No policy from the BMC zone to the network-mgmt zone.
-   Remote access: IKEv2 dial-up skeleton with EAP; users and FortiToken assignment are not rendered (notes.md).
-   Rows = decisions.xlsx Open-Phase4 (62-67); P4A-6xx = p4-files/oob/auto_approved.md. #}
-{# Approved constants #}
-{% set ha_group_base = 50 -%}   {#- P4A-654: next free after the 10/20/30/40 FW groups -#}
-{% set ha_site_offset = 100 -%}   {#- same as the other FWs -#}
-{% set ha_priority = {1: 200, 2: 100} -%}   {#- same as the other FWs -#}
-{% set ha_hbdev = [("ha", 50), ("port16", 50)] -%}   {#- P4A-651 -#}
-{% set ha_monitor = ["agg-oob"] -%}   {#- P4A-655: the WAN is shared by both units, not monitored -#}
-{% set mgmt_access = "ping https ssh" -%}   {#- P4A-656 -#}
-{% set psk = "cisco123" -%}   {#- P4A-661: placeholder (public repo), same approach as row 43 B -#}
-{% set ike_proposal = "aes256gcm-prfsha384" -%}{% set ike_dhgrp = 20 -%}{% set ike_keylife = 28800 -%}   {#- P4A-661 (= P4A-315) -#}
-{% set esp_proposal = "aes256gcm" -%}{% set esp_keylife = 3600 -%}   {#- P4A-661 (= P4A-315) -#}
-{% set dpd_retry = 10 -%}   {#- (= P4A-316) -#}
-{% set zone_of = {"NETMGMT": "Z-NETMGMT", "OOBINFRA": "Z-OOBINFRA", "BMC": "Z-BMC"} -%}   {#- P4A-662 -#}
+   Remote access: IKEv2 dial-up skeleton with EAP; users and FortiToken assignment are not rendered. #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.oob_fw_ha_group_base.value is none %}{{ missing_FabricDesign_oob_fw_ha_group_base() }}{% endif -%}
+{%- if fd.fw_ha_priority.value is none %}{{ missing_FabricDesign_fw_ha_priority() }}{% endif -%}
+{%- if fd.ha_heartbeat_priority.value is none %}{{ missing_FabricDesign_ha_heartbeat_priority() }}{% endif -%}
+{%- if fd.ha_monitor_aggregates.value is none %}{{ missing_FabricDesign_ha_monitor_aggregates() }}{% endif -%}
+{%- if fd.ha_mode.value is none %}{{ missing_FabricDesign_ha_mode() }}{% endif -%}
+{%- if fd.ha_session_pickup.value is none %}{{ missing_FabricDesign_ha_session_pickup() }}{% endif -%}
+{%- if fd.ha_preempt.value is none %}{{ missing_FabricDesign_ha_preempt() }}{% endif -%}
+{%- if fd.ha_reserved_mgmt_interface.value is none %}{{ missing_FabricDesign_ha_reserved_mgmt_interface() }}{% endif -%}
+{%- if fd.oob_gateway_host.value is none %}{{ missing_FabricDesign_oob_gateway_host() }}{% endif -%}
+{%- if fd.lacp_mode.value is none %}{{ missing_FabricDesign_lacp_mode() }}{% endif -%}
+{%- if fd.fw_mgmt_allowed_access.value is none %}{{ missing_FabricDesign_fw_mgmt_allowed_access() }}{% endif -%}
+{%- if fd.oob_inter_site_ipsec_psk.value is none %}{{ missing_FabricDesign_oob_inter_site_ipsec_psk() }}{% endif -%}
+{%- if fd.ike_proposal.value is none %}{{ missing_FabricDesign_ike_proposal() }}{% endif -%}
+{%- if fd.ike_dh_group.value is none %}{{ missing_FabricDesign_ike_dh_group() }}{% endif -%}
+{%- if fd.ike_keylife_s.value is none %}{{ missing_FabricDesign_ike_keylife_s() }}{% endif -%}
+{%- if fd.esp_proposal.value is none %}{{ missing_FabricDesign_esp_proposal() }}{% endif -%}
+{%- if fd.esp_keylife_s.value is none %}{{ missing_FabricDesign_esp_keylife_s() }}{% endif -%}
+{%- if fd.ike_dpd_retry_interval_s.value is none %}{{ missing_FabricDesign_ike_dpd_retry_interval_s() }}{% endif -%}
+{%- if fd.oob_ra_pool_start_host.value is none %}{{ missing_FabricDesign_oob_ra_pool_start_host() }}{% endif -%}
+{%- if fd.oob_ra_pool_end_host.value is none %}{{ missing_FabricDesign_oob_ra_pool_end_host() }}{% endif -%}
+{%- if fd.oob_ra_remote_ip_host.value is none %}{{ missing_FabricDesign_oob_ra_remote_ip_host() }}{% endif -%}
+{%- if fd.oob_policy_service.value is none %}{{ missing_FabricDesign_oob_policy_service() }}{% endif -%}
+{%- if fd.oob_blackhole_distance.value is none %}{{ missing_FabricDesign_oob_blackhole_distance() }}{% endif -%}
+{%- if fd.oob_static_route_id_base.value is none %}{{ missing_FabricDesign_oob_static_route_id_base() }}{% endif -%}
+{%- if fd.oob_zone_allowed_access.value is none %}{{ missing_FabricDesign_oob_zone_allowed_access() }}{% endif -%}
+{%- if fd.ike_version.value is none %}{{ missing_FabricDesign_ike_version() }}{% endif -%}
+{%- if fd.ike_peer_type.value is none %}{{ missing_FabricDesign_ike_peer_type() }}{% endif -%}
+{%- if fd.ike_dpd_mode.value is none %}{{ missing_FabricDesign_ike_dpd_mode() }}{% endif -%}
+{%- if fd.ipsec_per_peer_interface.value is none %}{{ missing_FabricDesign_ipsec_per_peer_interface() }}{% endif -%}
+{%- if fd.ipsec_add_route.value is none %}{{ missing_FabricDesign_ipsec_add_route() }}{% endif -%}
+{%- if fd.ipsec_auto_negotiate.value is none %}{{ missing_FabricDesign_ipsec_auto_negotiate() }}{% endif -%}
+{%- if fd.ipsec_phase2_selector.value is none %}{{ missing_FabricDesign_ipsec_phase2_selector() }}{% endif -%}
+{%- if fd.oob_ra_eap.value is none %}{{ missing_FabricDesign_oob_ra_eap() }}{% endif -%}
+{%- if fd.oob_ra_eap_identity.value is none %}{{ missing_FabricDesign_oob_ra_eap_identity() }}{% endif -%}
+{%- if fd.oob_ra_assign_ip_from.value is none %}{{ missing_FabricDesign_oob_ra_assign_ip_from() }}{% endif -%}
+{%- if fd.fw_zone_intrazone_allow.value is none %}{{ missing_FabricDesign_fw_zone_intrazone_allow() }}{% endif -%}
+{%- if fd.oob_policy_schedule.value is none %}{{ missing_FabricDesign_oob_policy_schedule() }}{% endif -%}
+{%- if fd.oob_policy_log_traffic.value is none %}{{ missing_FabricDesign_oob_policy_log_traffic() }}{% endif -%}
+{%- if fd.oob_policy_matrix.value is none %}{{ missing_FabricDesign_oob_policy_matrix() }}{% endif -%}
+{%- if fd.oob_vlans.value is none %}{{ missing_FabricDesign_oob_vlans() }}{% endif -%}
+{%- if fd.oob_wan_carrier_host.value is none %}{{ missing_FabricDesign_oob_wan_carrier_host() }}{% endif -%}
+{%- if fd.oob_carrier_port_role.value is none %}{{ missing_FabricDesign_oob_carrier_port_role() }}{% endif -%}
+{%- if fd.oob_ra_mode_cfg.value is none %}{{ missing_FabricDesign_oob_ra_mode_cfg() }}{% endif -%}
+{%- if fd.oob_ra_split_tunnel.value is none %}{{ missing_FabricDesign_oob_ra_split_tunnel() }}{% endif -%}
+{%- if fd.oob_remote_blackhole.value is none %}{{ missing_FabricDesign_oob_remote_blackhole() }}{% endif -%}
+{%- if fd.esp_pfs_dh_group.value is none %}{{ missing_FabricDesign_esp_pfs_dh_group() }}{% endif -%}
+{# Approved constants, read from FabricDesign #}
+{% set ha_group_base = fd.oob_fw_ha_group_base.value -%}   {#- next free after the 10/20/30/40 FW groups -#}
+{% set ha_priority = fd.fw_ha_priority.value -%}   {#- same as the other FWs -#}
+{% set ha_hb_weight = fd.ha_heartbeat_priority.value -%}   {#- hb weight -#}
+{% set mgmt_access = fd.fw_mgmt_allowed_access.value | join(" ") -%}   {#- management access protocols -#}
+{% set psk = fd.oob_inter_site_ipsec_psk.value -%}   {#- placeholder (public repo), as for the SD-WAN PSK; OOB site-to-site (shared) -#}
+{% set ike_proposal = fd.ike_proposal.value -%}{% set ike_dhgrp = fd.ike_dh_group.value -%}{% set ike_keylife = fd.ike_keylife_s.value -%}   {#- same IKE values as the SD-WAN hub -#}
+{% set esp_proposal = fd.esp_proposal.value -%}{% set esp_keylife = fd.esp_keylife_s.value -%}   {#- same ESP values as the SD-WAN hub -#}
+{% set dpd_retry = fd.ike_dpd_retry_interval_s.value -%}   {#- same DPD retry as the SD-WAN hub -#}
+{% set zmap_ns = namespace(pairs=[]) -%}{% for v in fd.oob_vlans.value %}{% set zmap_ns.pairs = zmap_ns.pairs + [(v.zone, "Z-" ~ v.zone)] %}{% endfor -%}
+{% set zone_of = dict(zmap_ns.pairs) -%}   {#- one zone per oob_vlans zone key, named Z-<zone> -#}
 {% set ra_zone = "Z-RA" -%}{% set dci_zone = "Z-OOB-DCI" -%}
-{% set ra_if = "RA-DIALUP" -%}   {#- P4A-660 -#}
-{% set ra_start_host = 10 -%}{% set ra_end_host = 253 -%}{% set ra_remote_host = 254 -%}   {#- P4A-660: pool .10 - .253; .1 tunnel, .254 remote-ip -#}
-{% set ra_net_group = "OOB-NET-TEAM" -%}{% set ra_srv_group = "OOB-SRV-TEAM" -%}   {#- P4A-663: network team / server team -#}
-{% set service = "ALL" -%}   {#- P4A-665: skeleton, tighten per zone later -#}
-{% set blackhole_distance = 254 -%}   {#- P4A-666 -#}
+{% set ra_start_host = fd.oob_ra_pool_start_host.value -%}{% set ra_end_host = fd.oob_ra_pool_end_host.value -%}{% set ra_remote_host = fd.oob_ra_remote_ip_host.value -%}   {#- pool .10 - .253; .1 tunnel, .254 remote-ip -#}
+{% set service = fd.oob_policy_service.value -%}   {#- skeleton, tighten per zone later -#}
+{% set blackhole_distance = fd.oob_blackhole_distance.value -%}   {#- distance of the blackhole routes -#}
+{# Policy matrix: which zones each remote-access group reaches, and the inter-site rule #}
+{% set pm = fd.oob_policy_matrix.value -%}
+{%- if pm.inter_site is not defined %}{{ missing_FabricDesign_oob_policy_matrix_inter_site() }}{% endif -%}
+{%- if pm.inter_site_sources is not defined %}{{ missing_FabricDesign_oob_policy_matrix_inter_site_sources() }}{% endif -%}
+{%- if pm.action is not defined %}{{ missing_FabricDesign_oob_policy_matrix_action() }}{% endif -%}
+{# Remote-access user groups = the matrix keys other than the rule keys, in matrix order: network team first, server team second #}
+{% set ra_groups = pm.keys() | reject("in", ["inter_site", "inter_site_sources", "action"]) | list -%}
+{%- if ra_groups | length != 2 %}{{ missing_FabricDesign_oob_policy_matrix_two_team_groups() }}{% endif -%}
+{% set ra_net_group = ra_groups[0] -%}{% set ra_srv_group = ra_groups[1] -%}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set name = device.name.value -%}
 {% set unit = name[-1] | int -%}
 {% set site_name = device.location.node.name.value -%}
+{# Per-site FabricDesign fields (dc1_/dc2_): a site without its field fails on the lookup, naming the field #}
+{% set site_key = site_name | lower -%}
+{%- if fd[site_key ~ "_fw_ha_group_offset"].value is none %}{{ missing_FabricDesign_fw_ha_group_offset() }}{% endif -%}
+{%- if fd[site_key ~ "_oob_remote_access_psk"].value is none %}{{ missing_FabricDesign_oob_remote_access_psk() }}{% endif -%}
+{%- if ha_priority[unit | string] is not defined %}{{ missing_FabricDesign_fw_ha_priority_for_unit() }}{% endif -%}
+{% set ha_site_offset = fd[site_key ~ "_fw_ha_group_offset"].value -%}   {#- same as the other FWs -#}
+{% set ra_psk = fd[site_key ~ "_oob_remote_access_psk"].value -%}   {#- remote access (per site) -#}
 {% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
 {% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
 {% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
@@ -34,6 +94,13 @@
 {% set aggs = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | sort(attribute="name.value") -%}
 {% set wan = physical | selectattr("role.value", "equalto", "upstream") | list | first -%}
 {% set subifs = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | selectattr("role.value", "equalto", "peering") | list | sort(attribute="name.value") -%}
+{# HA heartbeat ports from the device type #}
+{%- if device.device_type.node.ha_ports.value is none %}{{ missing_DcimDeviceType_ha_ports() }}{% endif -%}
+{% set ha_ports = device.device_type.node.ha_ports.value -%}
+{# Remote-access dial-up interface: the access-role virtual interface on this FW; its name is read from the object #}
+{% set ra_obj = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | selectattr("role.value", "equalto", "access") | list | first -%}
+{%- if ra_obj is not defined %}{{ missing_InterfaceVirtual_role_access() }}{% endif -%}
+{% set ra_if = ra_obj.name.value -%}
 {% set oob_vlans = data.FabricL2Vlan.edges | map(attribute="node") | list | selectattr("site.node.name.value", "equalto", site_name) | list -%}
 {# Unit 1 of each site holds the shared addresses: interface name -> address #}
 {% macro unit1_addr(site, ifname) %}{% set ns = namespace(a="") %}{% for u in data.OobFws.edges | map(attribute="node") | list %}{% if u.location.node.name.value == site and u.name.value.endswith("1") %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.name.value == ifname and i.ip_addresses is defined and i.ip_addresses.edges %}{% set ns.a = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endfor %}{% endif %}{% endfor %}{{ ns.a }}{% endmacro -%}
@@ -46,8 +113,16 @@
 {% set z_ns = namespace(items=[]) -%}
 {% for s in subifs %}{% set key = s.name.value.split("-")[0] %}{% set v = oob_vlans | selectattr("name.value", "equalto", s.description.value) | list | first %}{% set z_ns.items = z_ns.items + [(key, s.name.value, v.vlan_id.value, unit1_addr(site_name, s.name.value), s.parent_interface.node.name.value, s.description.value)] %}{% endfor -%}
 {% set zone_list = z_ns.items -%}
+{# Sub-interface parents and the HA monitor list are read from the interface objects #}
+{% set subif_objs = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
+{% macro parent_of(n) %}{% set s = subif_objs | selectattr("name.value", "equalto", n) | list | first %}{% if s is not defined or s.parent_interface.node is none %}{{ missing_InterfaceVirtual_parent_interface() }}{% else %}{{ s.parent_interface.node.name.value }}{% endif %}{% endmacro -%}
+{% set pc_names = aggs | selectattr("role.value", "equalto", "peering") | map(attribute="name.value") | list -%}
+{% set mon_ns = namespace(names=[]) -%}
+{% for n in zone_list | map(attribute="1") | list %}{% set p = parent_of(n) | string %}{% if p in pc_names and p not in mon_ns.names %}{% set mon_ns.names = mon_ns.names + [p] %}{% endif %}{% endfor -%}
+{% for p in pc_names %}{% if p not in mon_ns.names %}{% set mon_ns.names = mon_ns.names + [p] %}{% endif %}{% endfor -%}
+{% set ha_monitor = mon_ns.names -%}
 {% set wan_addr = unit1_addr(site_name, wan.name.value) -%}
-{% set wan_gw = net(wan_addr) | get_first_usable -%}
+{% set wan_gw = host(net(wan_addr), fd.oob_wan_carrier_host.value) -%}
 {% set ra_addr = unit1_addr(site_name, ra_if) -%}
 {% set ra_net = net(ra_addr) -%}
 {% set ra_first = ra_net.split("/")[0] -%}
@@ -56,23 +131,28 @@ config system global
     set hostname "{{ name }}"
 end
 config system ha
-    set group-id {{ ha_group_base + ha_site_offset * ((site_name[-1] | int) - 1) }}
+    set group-id {{ ha_group_base + ha_site_offset }}
     set group-name "{{ name[:-1] }}-HA"
-    set mode a-p
-    set hbdev{% for p, w in ha_hbdev %} "{{ p }}" {{ w }}{% endfor %}
+    set mode {{ fd.ha_mode.value }}
+    set hbdev{% for p in ha_ports %} "{{ p }}" {{ ha_hb_weight }}{% endfor %}
 
-    set session-pickup enable
-    set override disable
-    set priority {{ ha_priority[unit] }}
+    set session-pickup {{ "enable" if fd.ha_session_pickup.value else "disable" }}
+    set override {{ "enable" if fd.ha_preempt.value else "disable" }}
+    set priority {{ ha_priority[unit | string] }}
+{% if fd.ha_monitor_aggregates.value %}
     set monitor{% for m in ha_monitor %} "{{ m }}"{% endfor %}
 
+{% endif %}
+{% if fd.ha_reserved_mgmt_interface.value %}
     set ha-mgmt-status enable
     config ha-mgmt-interfaces
         edit 1
             set interface "{{ mgmt.name.value }}"
-            set gateway {{ net(mgmt.ip_addresses.edges[0].node.address.value) | get_first_usable }}
         next
     end
+{% else %}
+    set ha-mgmt-status disable
+{% endif %}
 end
 config system interface
     edit "{{ mgmt.name.value }}"
@@ -90,7 +170,7 @@ config system interface
         set type aggregate
         set member{% for m in a.members.edges | map(attribute="node.name.value") | list | sort %} "{{ m }}"{% endfor %}
 
-        set lacp-mode active
+        set lacp-mode {{ fd.lacp_mode.value }}
         set description "{{ a.description.value }}"
     next
 {% endfor %}
@@ -99,13 +179,13 @@ config system interface
         set interface "{{ parent }}"
         set vlanid {{ vid }}
         set ip {{ ipmask(addr) }}
-        set allowaccess ping
+        set allowaccess {{ fd.oob_zone_allowed_access.value | join(" ") }}
         set description "{{ vdesc }}"
     next
 {% endfor %}
     edit "{{ wan.name.value }}"
         set ip {{ ipmask(wan_addr) }}
-        set role wan
+        set role {{ fd.oob_carrier_port_role.value }}
         set description "{{ wan.description.value }}"
     next
 end
@@ -119,15 +199,15 @@ config vpn ipsec phase1-interface
 {% for o in others %}
     edit "OOB-{{ o }}"
         set interface "{{ wan.name.value }}"
-        set ike-version 2
-        set peertype any
-        set net-device disable
+        set ike-version {{ fd.ike_version.value }}
+        set peertype {{ fd.ike_peer_type.value }}
+        set net-device {{ "enable" if fd.ipsec_per_peer_interface.value else "disable" }}
         set proposal {{ ike_proposal }}
         set dhgrp {{ ike_dhgrp }}
         set keylife {{ ike_keylife }}
         set remote-gw {{ unit1_addr(o, wan.name.value) | ipaddress_interface("ip") }}
-        set add-route disable
-        set dpd on-idle
+        set add-route {{ "enable" if fd.ipsec_add_route.value else "disable" }}
+        set dpd {{ fd.ike_dpd_mode.value }}
         set dpd-retryinterval {{ dpd_retry }}
         set psksecret {{ psk }}
     next
@@ -135,23 +215,25 @@ config vpn ipsec phase1-interface
     edit "{{ ra_if }}"
         set type dynamic
         set interface "{{ wan.name.value }}"
-        set ike-version 2
-        set peertype any
-        set net-device disable
-        set mode-cfg enable
+        set ike-version {{ fd.ike_version.value }}
+        set peertype {{ fd.ike_peer_type.value }}
+        set net-device {{ "enable" if fd.ipsec_per_peer_interface.value else "disable" }}
+        set mode-cfg {{ "enable" if fd.oob_ra_mode_cfg.value else "disable" }}
         set proposal {{ ike_proposal }}
         set dhgrp {{ ike_dhgrp }}
         set keylife {{ ike_keylife }}
-        set eap enable
-        set eap-identity send-request
-        set assign-ip-from range
+        set eap {{ "enable" if fd.oob_ra_eap.value else "disable" }}
+        set eap-identity {{ fd.oob_ra_eap_identity.value }}
+        set assign-ip-from {{ fd.oob_ra_assign_ip_from.value }}
         set ipv4-start-ip {{ host(ra_net, ra_start_host) }}
         set ipv4-end-ip {{ host(ra_net, ra_end_host) }}
         set ipv4-netmask {{ ra_net | ipaddress_interface("netmask") }}
+{% if fd.oob_ra_split_tunnel.value %}
         set ipv4-split-include "G-{{ addr_name(site_name, 'ALL') }}"
-        set dpd on-idle
+{% endif %}
+        set dpd {{ fd.ike_dpd_mode.value }}
         set dpd-retryinterval {{ dpd_retry }}
-        set psksecret {{ psk }}
+        set psksecret {{ ra_psk }}
     next
 end
 config vpn ipsec phase2-interface
@@ -159,17 +241,17 @@ config vpn ipsec phase2-interface
     edit "OOB-{{ o }}"
         set phase1name "OOB-{{ o }}"
         set proposal {{ esp_proposal }}
-        set dhgrp {{ ike_dhgrp }}
+        set dhgrp {{ fd.esp_pfs_dh_group.value }}
         set keylifeseconds {{ esp_keylife }}
-        set auto-negotiate enable
-        set src-subnet 0.0.0.0 0.0.0.0
-        set dst-subnet 0.0.0.0 0.0.0.0
+        set auto-negotiate {{ "enable" if fd.ipsec_auto_negotiate.value else "disable" }}
+        set src-subnet {{ pfxmask(fd.ipsec_phase2_selector.value) }}
+        set dst-subnet {{ pfxmask(fd.ipsec_phase2_selector.value) }}
     next
 {% endfor %}
     edit "{{ ra_if }}"
         set phase1name "{{ ra_if }}"
         set proposal {{ esp_proposal }}
-        set dhgrp {{ ike_dhgrp }}
+        set dhgrp {{ fd.esp_pfs_dh_group.value }}
         set keylifeseconds {{ esp_keylife }}
     next
 end
@@ -188,16 +270,16 @@ end
 config system zone
 {% for key, ifname, vid, addr, parent, vdesc in zone_list %}
     edit "{{ zone_of[key] }}"
-        set intrazone deny
+        set intrazone {{ "allow" if fd.fw_zone_intrazone_allow.value else "deny" }}
         set interface "{{ ifname }}"
     next
 {% endfor %}
     edit "{{ ra_zone }}"
-        set intrazone deny
+        set intrazone {{ "allow" if fd.fw_zone_intrazone_allow.value else "deny" }}
         set interface "{{ ra_if }}"
     next
     edit "{{ dci_zone }}"
-        set intrazone deny
+        set intrazone {{ "allow" if fd.fw_zone_intrazone_allow.value else "deny" }}
         set interface{% for o in others %} "OOB-{{ o }}"{% endfor %}
 
     next
@@ -220,15 +302,15 @@ config firewall addrgrp
 
     next
 end
-{# Policy matrix (P4A-664): (name, from zone, to zone, sources, destinations, user group or none) #}
+{# Policy matrix: (name, from zone, to zone, sources, destinations, user group or none) #}
 {% set p_ns = namespace(items=[]) -%}
-{% for key, ifname, vid, addr, parent, vdesc in zone_list %}{% set p_ns.items = p_ns.items + [("RA-NET-TO-" ~ key, ra_zone, zone_of[key], [addr_name(site_name, "RA")], [addr_name(site_name, key)], ra_net_group)] %}{% endfor -%}
-{% set p_ns.items = p_ns.items + [("RA-SRV-TO-BMC", ra_zone, zone_of["BMC"], [addr_name(site_name, "RA")], [addr_name(site_name, "BMC")], ra_srv_group)] -%}
+{% for key, ifname, vid, addr, parent, vdesc in zone_list %}{% if key in pm[ra_net_group] %}{% set p_ns.items = p_ns.items + [("RA-NET-TO-" ~ key, ra_zone, zone_of[key], [addr_name(site_name, "RA")], [addr_name(site_name, key)], ra_net_group)] %}{% endif %}{% endfor -%}
+{% for key, ifname, vid, addr, parent, vdesc in zone_list %}{% if key in pm[ra_srv_group] %}{% set p_ns.items = p_ns.items + [("RA-SRV-TO-" ~ key, ra_zone, zone_of[key], [addr_name(site_name, "RA")], [addr_name(site_name, key)], ra_srv_group)] %}{% endif %}{% endfor -%}
 {% for o in others %}
-{% set d_ns = namespace(items=[]) %}{% for z in zone_list %}{% set d_ns.items = d_ns.items + [addr_name(o, z[0])] %}{% endfor -%}
+{% set d_ns = namespace(items=[]) %}{% for z in zone_list %}{% if z[0] in pm[ra_net_group] %}{% set d_ns.items = d_ns.items + [addr_name(o, z[0])] %}{% endif %}{% endfor -%}
 {% set p_ns.items = p_ns.items + [("RA-NET-TO-" ~ o, ra_zone, dci_zone, [addr_name(site_name, "RA")], d_ns.items, ra_net_group)] -%}
-{% set p_ns.items = p_ns.items + [("RA-SRV-TO-" ~ o ~ "-BMC", ra_zone, dci_zone, [addr_name(site_name, "RA")], [addr_name(o, "BMC")], ra_srv_group)] -%}
-{% for key, ifname, vid, addr, parent, vdesc in zone_list %}{% set p_ns.items = p_ns.items + [(key ~ "-TO-" ~ o, zone_of[key], dci_zone, [addr_name(site_name, key)], [addr_name(o, key)], none), (o ~ "-TO-" ~ key, dci_zone, zone_of[key], [addr_name(o, key), addr_name(o, "RA")], [addr_name(site_name, key)], none)] %}{% endfor -%}
+{% for z in zone_list %}{% if z[0] in pm[ra_srv_group] %}{% set p_ns.items = p_ns.items + [("RA-SRV-TO-" ~ o ~ "-" ~ z[0], ra_zone, dci_zone, [addr_name(site_name, "RA")], [addr_name(o, z[0])], ra_srv_group)] %}{% endif %}{% endfor -%}
+{% if pm.inter_site == "same-zone" %}{% for key, ifname, vid, addr, parent, vdesc in zone_list %}{% set src_ns = namespace(items=[]) %}{% for s in pm.inter_site_sources %}{% if s == "zone" %}{% set src_ns.items = src_ns.items + [addr_name(o, key)] %}{% elif s == "ra_pool" %}{% set src_ns.items = src_ns.items + [addr_name(o, "RA")] %}{% else %}{{ unsupported_FabricDesign_oob_policy_matrix_inter_site_sources() }}{% endif %}{% endfor %}{% set p_ns.items = p_ns.items + [(key ~ "-TO-" ~ o, zone_of[key], dci_zone, [addr_name(site_name, key)], [addr_name(o, key)], none), (o ~ "-TO-" ~ key, dci_zone, zone_of[key], src_ns.items, [addr_name(site_name, key)], none)] %}{% endfor %}{% else %}{{ unsupported_FabricDesign_oob_policy_matrix_inter_site() }}{% endif -%}
 {% endfor %}
 config firewall policy
 {% for pname, src_zone, dst_zone, srcs, dsts, grp in p_ns.items %}
@@ -236,28 +318,28 @@ config firewall policy
         set name "{{ pname }}"
         set srcintf "{{ src_zone }}"
         set dstintf "{{ dst_zone }}"
-        set action accept
+        set action {{ pm.action }}
         set srcaddr{% for a in srcs %} "{{ a }}"{% endfor %}
 
         set dstaddr{% for a in dsts %} "{{ a }}"{% endfor %}
 
-        set schedule "always"
+        set schedule "{{ fd.oob_policy_schedule.value }}"
         set service "{{ service }}"
 {% if grp %}
         set groups "{{ grp }}"
 {% endif %}
-        set logtraffic all
+        set logtraffic {{ fd.oob_policy_log_traffic.value }}
     next
 {% endfor %}
 end
 config router static
-    edit 1
+    edit {{ fd.oob_static_route_id_base.value }}
         set dst 0.0.0.0 0.0.0.0
         set gateway {{ wan_gw }}
         set device "{{ wan.name.value }}"
         set comment "OOB carrier ({{ net(wan_addr) }})"
     next
-{% set sid = namespace(n=1) %}
+{% set sid = namespace(n=fd.oob_static_route_id_base.value) %}
 {% for o in others %}
 {% for key, ifname, vid, addr, parent, vdesc in zone_list %}
 {% set sid.n = sid.n + 1 %}
@@ -273,6 +355,7 @@ config router static
         set device "OOB-{{ o }}"
         set comment "{{ o }} OOB remote-access pool"
     next
+{% if fd.oob_remote_blackhole.value %}
 {% for key, ifname, vid, addr, parent, vdesc in zone_list %}
 {% set sid.n = sid.n + 1 %}
     edit {{ sid.n }}
@@ -289,5 +372,6 @@ config router static
         set distance {{ blackhole_distance }}
         set comment "{{ o }} OOB remote-access pool: never via the carrier"
     next
+{% endif %}
 {% endfor %}
 end

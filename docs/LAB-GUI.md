@@ -45,7 +45,7 @@ The same two commands work for every FRR node and host: replace `DC1-INTFW1` wit
 
 ## Nexus 9000v: take it out without stopping it
 
-Shut its ports from the switch CLI (`ssh vamdadmin@<mgmt address>`, password from `ztp/make-secret.sh`):
+Shut its ports from the switch CLI (`ssh ciscoadmin@<mgmt address>`, password from `ztp/make-secret.sh`):
 ```
 configure terminal
 interface Ethernet1/49-52
@@ -68,7 +68,7 @@ interface Ethernet1/49-52
 2. Open the repo folder on the machine that runs the lab (Windows: "WSL: Connect to WSL", then open the folder).
 3. Containerlab icon in the left bar → **Running Labs** → `vamd-dc1-p3` → right-click a device → **Stop** or **Start**
    (FRR stand-ins and hosts, as in the table above). **Attach shell** opens a shell in the container (`vtysh` on an FRR
-   node); **Connect (SSH)** opens a Nexus CLI: log in as `vamdadmin` with the password from `ztp/make-secret.sh`.
+   node); **Connect (SSH)** opens a Nexus CLI: log in as `ciscoadmin` with the password from `ztp/make-secret.sh`.
 
 ## The whole lab
 

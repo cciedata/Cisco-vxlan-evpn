@@ -1,13 +1,14 @@
 # yaml-language-server: $schema=https://schema.infrahub.app/infrahub/schema/latest.json
-# Racks, reserved rack space, cables and device-type power.
-# Decisions: P2-129, P2-151 to P2-195 (decisions.xlsx). DRAFT: not loaded anywhere.
+# Racks, reserved rack space and cables.
+# Loaded with the other files under schemas/ (.infrahub.yml loads schemas/);
+# used by generator site_physical and checks/design_copy_check.
 ---
 version: "1.0"
 nodes:
   - name: Rack
     namespace: Location
     label: Rack
-    description: A rack in a site row. Devices point at it through DcimDevice.rack (P2-195).
+    description: A rack in a site row. Devices point at it through DcimDevice.rack.
     icon: mdi:server
     inherit_from:
       - LocationGeneric
@@ -47,7 +48,7 @@ nodes:
       - name: power_budget_kw
         kind: Number
         optional: true
-        description: Power budget per feed (2N, P2-130).
+        description: Power budget per feed (2N).
     relationships:
       - name: devices
         peer: DcimDevice
@@ -82,7 +83,7 @@ nodes:
         kind: Text
         optional: false
         description: Text drawn in the rack diagram.
-    # name format <rack>-U<start>, for example DC1-A01-U38 (P2-170)
+    # name format <rack>-U<start>, for example DC1-A01-U38
     relationships:
       - name: rack
         peer: LocationRack
@@ -90,7 +91,7 @@ nodes:
         cardinality: one
         optional: false
 
-# DcimCable: defined in schemas/oob.yml (Phase 4); smf + length_m added there (P2-231, P2-233)
+# DcimCable: defined in schemas/oob.yml; smf + length_m added there
 
 extensions:
   nodes:
@@ -102,16 +103,20 @@ extensions:
           kind: Attribute
           cardinality: one
           optional: true
-          description: Rack the device is mounted in (location stays the site, P2-195).
+          description: Rack the device is mounted in (location stays the site).
     - kind: DcimDeviceType
       attributes:
+        # Device-type power attributes dropped (never set or read; PDU sizing uses FabricDesign pdu_60a_rack_purposes).
+        # state: absent removes them from the running schema on the next load; delete these entries once that load is done.
         - name: typical_power_w
           kind: Number
           optional: true
+          state: absent
         - name: max_power_w
           kind: Number
           optional: true
+          state: absent
         - name: power_source
           kind: Text
           optional: true
-          description: Datasheet the power figures come from.
+          state: absent

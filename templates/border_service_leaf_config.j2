@@ -1,35 +1,97 @@
-{# Phase 2 PC2: border and service leaves. VTEPs like the server leaves (underlay, EVPN, vPC), no server segments;
+{# Border and service leaves. VTEPs like the server leaves (underlay, EVPN, vPC), no server segments;
    the VRFs come from the firewall attachments on the device's vPC pair (BL: TRANSIT; SL: tenant VRFs + TRANSIT). #}
-{# Approved constants: same values as leaf_config.j2 (Phase 1), plus the PC2 decisions #}
+{# Constants: the same values as leaf_config.j2, plus the firewall attachment values #}
+{# Design values: read from the FabricDesign object in Infrahub; a missing value stops the render #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.underlay_ospf_area.value is none %}{{ missing_FabricDesign_underlay_ospf_area() }}{% endif -%}
+{%- if fd.bfd_interval_ms.value is none %}{{ missing_FabricDesign_bfd_interval_ms() }}{% endif -%}
+{%- if fd.bfd_multiplier.value is none %}{{ missing_FabricDesign_bfd_multiplier() }}{% endif -%}
+{%- if fd.bfd_min_rx_ms.value is none %}{{ missing_FabricDesign_bfd_min_rx_ms() }}{% endif -%}
+{%- if fd.overlay_bfd_interval_ms.value is none %}{{ missing_FabricDesign_overlay_bfd_interval_ms() }}{% endif -%}
+{%- if fd.overlay_bfd_multiplier.value is none %}{{ missing_FabricDesign_overlay_bfd_multiplier() }}{% endif -%}
+{%- if fd.anycast_gateway_mac.value is none %}{{ missing_FabricDesign_anycast_gateway_mac() }}{% endif -%}
+{%- if fd.mtu_svi.value is none %}{{ missing_FabricDesign_mtu_svi() }}{% endif -%}
+{%- if fd.evpn_maximum_paths.value is none %}{{ missing_FabricDesign_evpn_maximum_paths() }}{% endif -%}
+{%- if fd.vpc_keepalive_vrf.value is none %}{{ missing_FabricDesign_vpc_keepalive_vrf() }}{% endif -%}
+{%- if fd.vpc_keepalive_interval_ms.value is none %}{{ missing_FabricDesign_vpc_keepalive_interval_ms() }}{% endif -%}
+{%- if fd.vpc_keepalive_timeout_s.value is none %}{{ missing_FabricDesign_vpc_keepalive_timeout_s() }}{% endif -%}
+{%- if fd.vpc_keepalive_hold_timeout_s.value is none %}{{ missing_FabricDesign_vpc_keepalive_hold_timeout_s() }}{% endif -%}
+{%- if fd.vpc_role_priority.value is none %}{{ missing_FabricDesign_vpc_role_priority() }}{% endif -%}
+{%- if fd.vpc_role_priority_order.value is none %}{{ missing_FabricDesign_vpc_role_priority_order() }}{% endif -%}
+{%- if fd.vpc_delay_restore_s.value is none %}{{ missing_FabricDesign_vpc_delay_restore_s() }}{% endif -%}
+{%- if fd.vpc_auto_recovery_reload_delay_s.value is none %}{{ missing_FabricDesign_vpc_auto_recovery_reload_delay_s() }}{% endif -%}
+{%- if fd.vpc_stp_priority.value is none %}{{ missing_FabricDesign_vpc_stp_priority() }}{% endif -%}
+{%- if fd.vpc_peer_link_port_channel.value is none %}{{ missing_FabricDesign_vpc_peer_link_port_channel() }}{% endif -%}
+{%- if fd.vpc_backup_vlan.value is none %}{{ missing_FabricDesign_vpc_backup_vlan() }}{% endif -%}
+{%- if fd.transit_vrf.value is none %}{{ missing_FabricDesign_transit_vrf() }}{% endif -%}
+{%- if fd.sdwan_branch_summary.value is none %}{{ missing_FabricDesign_sdwan_branch_summary() }}{% endif -%}
+{%- if fd.partner_nat_prefix_length.value is none %}{{ missing_FabricDesign_partner_nat_prefix_length() }}{% endif -%}
+{%- if fd.route_policy_seq_step.value is none %}{{ missing_FabricDesign_route_policy_seq_step() }}{% endif -%}
+{%- if fd.attachment_device_host.value is none %}{{ missing_FabricDesign_attachment_device_host() }}{% endif -%}
+{%- if fd.cloud_aws_block.value is none %}{{ missing_FabricDesign_cloud_aws_block() }}{% endif -%}
+{%- if fd.cloud_azure_block.value is none %}{{ missing_FabricDesign_cloud_azure_block() }}{% endif -%}
+{%- if fd.cloud_prefix_max_length.value is none %}{{ missing_FabricDesign_cloud_prefix_max_length() }}{% endif -%}
+{%- if fd.local_admin_username.value is none %}{{ missing_FabricDesign_local_admin_username() }}{% endif -%}
+{%- if fd.local_admin_role.value is none %}{{ missing_FabricDesign_local_admin_role() }}{% endif -%}
+{%- if fd.dns_lookup.value is none %}{{ missing_FabricDesign_dns_lookup() }}{% endif -%}
+{%- if fd.oob_gateway_host.value is none %}{{ missing_FabricDesign_oob_gateway_host() }}{% endif -%}
+{%- if fd.evpn_rd_rt_mode.value is none %}{{ missing_FabricDesign_evpn_rd_rt_mode() }}{% endif -%}
+{%- if fd.mlag_peer_switch.value is none %}{{ missing_FabricDesign_mlag_peer_switch() }}{% endif -%}
+{%- if fd.mlag_peer_gateway.value is none %}{{ missing_FabricDesign_mlag_peer_gateway() }}{% endif -%}
+{%- if fd.mlag_layer3_peer_router.value is none %}{{ missing_FabricDesign_mlag_layer3_peer_router() }}{% endif -%}
+{%- if fd.mlag_arp_sync.value is none %}{{ missing_FabricDesign_mlag_arp_sync() }}{% endif -%}
+{%- if fd.bfd_echo.value is none %}{{ missing_FabricDesign_bfd_echo() }}{% endif -%}
+{%- if fd.underlay_ospf_network_type.value is none %}{{ missing_FabricDesign_underlay_ospf_network_type() }}{% endif -%}
+{%- if fd.lacp_mode.value is none %}{{ missing_FabricDesign_lacp_mode() }}{% endif -%}
+{%- if fd.vpc_peer_link_stp_port_type.value is none %}{{ missing_FabricDesign_vpc_peer_link_stp_port_type() }}{% endif -%}
+{%- if fd.attachment_port_stp_edge.value is none %}{{ missing_FabricDesign_attachment_port_stp_edge() }}{% endif -%}
+{%- if fd.attachment_port_bpdu_guard.value is none %}{{ missing_FabricDesign_attachment_port_bpdu_guard() }}{% endif -%}
+{%- if fd.mlag_vtep_virtual_router_mac.value is none %}{{ missing_FabricDesign_mlag_vtep_virtual_router_mac() }}{% endif -%}
+{%- if fd.mlag_vtep_advertise_primary_ip.value is none %}{{ missing_FabricDesign_mlag_vtep_advertise_primary_ip() }}{% endif -%}
+{%- if fd.arp_suppression.value is none %}{{ missing_FabricDesign_arp_suppression() }}{% endif -%}
+{%- if fd.evpn_bum_replication.value is none %}{{ missing_FabricDesign_evpn_bum_replication() }}{% endif -%}
+{%- if fd.overlay_bgp_bfd.value is none %}{{ missing_FabricDesign_overlay_bgp_bfd() }}{% endif -%}
+{%- if fd.attachment_bgp_bfd.value is none %}{{ missing_FabricDesign_attachment_bgp_bfd() }}{% endif -%}
+{%- if fd.nxos_scp_server.value is none %}{{ missing_FabricDesign_nxos_scp_server() }}{% endif -%}
+{%- if fd.overlay_send_community_standard.value is none %}{{ missing_FabricDesign_overlay_send_community_standard() }}{% endif -%}
+{%- if fd.ip_redirects.value is none %}{{ missing_FabricDesign_ip_redirects() }}{% endif -%}
+{%- if fd.distributed_anycast_gateway.value is none %}{{ missing_FabricDesign_distributed_anycast_gateway() }}{% endif -%}
+{%- if fd.cloud_accept_default_from_fabric.value is none %}{{ missing_FabricDesign_cloud_accept_default_from_fabric() }}{% endif -%}
+{%- if fd.sdwan_advertise_cloud_prefixes.value is none %}{{ missing_FabricDesign_sdwan_advertise_cloud_prefixes() }}{% endif -%}
+{%- if fd.transit_cloud_maximum_paths.value is none %}{{ missing_FabricDesign_transit_cloud_maximum_paths() }}{% endif -%}
+{%- set site_key = data.DcimDevice.edges[0].node.location.node.name.value | lower -%}
+{%- if fd[site_key ~ "_overlay_bgp_password"] is not defined or fd[site_key ~ "_overlay_bgp_password"].value is none %}{{ fd["missing_FabricDesign_" ~ site_key ~ "_overlay_bgp_password"]() }}{% endif -%}
+{%- if fd[site_key ~ "_attachment_bgp_password"] is not defined or fd[site_key ~ "_attachment_bgp_password"].value is none %}{{ fd["missing_FabricDesign_" ~ site_key ~ "_attachment_bgp_password"]() }}{% endif -%}
 {% set ospf_process = "UNDERLAY" -%}
-{% set ospf_area = "0.0.0.0" -%}
+{% set ospf_area = fd.underlay_ospf_area.value -%}
 {% set rr_template = "SPINE-RR" -%}
-{% set bgp_password = "cisco123" -%}
-{% set bfd_timers = "interval 999 min_rx 999 multiplier 3" -%}   {#- L-13b: NX-OS 10.6 ranges 10-999 / multihop 250-999 -#}
-{% set anycast_gw_mac = "0200.0000.00aa" -%}
-{% set svi_mtu = 9216 -%}
-{% set max_paths = 4 -%}
-{% set keepalive_vrf = "VPC-KEEPALIVE" -%}
-{% set keepalive_timers = "interval 1000 timeout 5 hold-timeout 3" -%}
-{% set role_priority = [10, 20] -%}
-{% set delay_restore = 360 -%}
-{% set auto_recovery_delay = 360 -%}
-{% set stp_priority = 8192 -%}
-{% set backup_vlan = 3900 -%}   {#- L-19: 3999 is reserved on NX-OS -#}
-{% set peer_link_po = 1000 -%}
-{% set transit_vrf = "TRANSIT" -%}
-{% set static_summary_vrfs = ["PARTNER"] -%}
-{% set rm_tag = {"sdwan_fw": "SDWAN"} -%}   {#- Phase 4 PC3 (P4A-320): route-map suffix per attached role (PC2: CLOUD; Phase 2 FWs: FW) -#}
-{% set branch_summary = "10.64.0.0/12" -%}   {#- design: TRANSIT carries the branches 10.64.0.0/12 from the SD-WAN FW -#}
-{% set no_branch_vrfs = ["PARTNER"] -%}   {#- design: never PARTNER summaries toward the SD-WAN -#}
-{% set partner_nat_len = 28 -%}   {#- design: one translated /28 per partner from the site's PARTNER block -#}
-{% set seq_step = 10 -%}
-{% set fw_host = 3 -%}
-{% set cloud_role = "cloud_router" -%}                            {#- Phase 4 PC2: attachments to a cloud router get their own route-maps -#}
-{% set cloud_blocks = ["172.16.0.0/13", "172.30.0.0/15"] -%}     {#- design: cloud address plan (AWS, Azure) -#}
-{% set cloud_le = 24 -%}                                          {#- P4A-119 / P4A-123 -#}
+{% set bgp_password = fd[site_key ~ "_overlay_bgp_password"].value -%}
+{% set attachment_bgp_password = fd[site_key ~ "_attachment_bgp_password"].value -%}
+{% set bfd_timers = "interval " ~ fd.bfd_interval_ms.value ~ " min_rx " ~ fd.bfd_min_rx_ms.value ~ " multiplier " ~ fd.bfd_multiplier.value -%}   {#- NX-OS 10.6 ranges 10-999 / multihop 250-999 -#}
+{% set overlay_bfd_timers = "interval " ~ fd.overlay_bfd_interval_ms.value ~ " min_rx " ~ fd.overlay_bfd_interval_ms.value ~ " multiplier " ~ fd.overlay_bfd_multiplier.value -%}
+{% set anycast_gw_mac = fd.anycast_gateway_mac.value -%}
+{% set svi_mtu = fd.mtu_svi.value -%}
+{% set max_paths = fd.evpn_maximum_paths.value -%}
+{% set keepalive_vrf = fd.vpc_keepalive_vrf.value -%}
+{% set keepalive_timers = "interval " ~ fd.vpc_keepalive_interval_ms.value ~ " timeout " ~ fd.vpc_keepalive_timeout_s.value ~ " hold-timeout " ~ fd.vpc_keepalive_hold_timeout_s.value -%}
+{% set role_priority = fd.vpc_role_priority.value -%}
+{% set delay_restore = fd.vpc_delay_restore_s.value -%}
+{% set auto_recovery_delay = fd.vpc_auto_recovery_reload_delay_s.value -%}
+{% set stp_priority = fd.vpc_stp_priority.value -%}
+{% set backup_vlan = fd.vpc_backup_vlan.value -%}   {#- 3999 is reserved on NX-OS -#}
+{% set peer_link_po = fd.vpc_peer_link_port_channel.value -%}
+{% set transit_vrf = fd.transit_vrf.value -%}
+{% set rm_tag = {"sdwan_fw": "SDWAN"} -%}   {#- route-map suffix per attached role (cloud routers: CLOUD; firewalls: FW) -#}
+{% set branch_summary = fd.sdwan_branch_summary.value -%}   {#- design: TRANSIT carries the branch summary from the SD-WAN FW -#}
+{% set partner_nat_len = fd.partner_nat_prefix_length.value -%}   {#- design: one translated prefix per partner from the site's PARTNER block -#}
+{% set seq_step = fd.route_policy_seq_step.value -%}
+{% set fw_host = fd.attachment_device_host.value -%}
+{% set cloud_role = "cloud_router" -%}                            {#- attachments to a cloud router get their own route-maps -#}
+{% set cloud_blocks = [fd.cloud_aws_block.value, fd.cloud_azure_block.value] -%}     {#- design: cloud address plan (AWS, Azure) -#}
+{% set cloud_le = fd.cloud_prefix_max_length.value -%}                                          {#- cloud prefix le -#}
 {% macro vlan_ranges(ids) %}{% set ns = namespace(out=[], start=none, prev=none) %}{% for v in ids %}{% if ns.start is none %}{% set ns.start = v %}{% elif v != ns.prev + 1 %}{% set ns.out = ns.out + [ns.start ~ ("-" ~ ns.prev if ns.prev != ns.start else "")] %}{% set ns.start = v %}{% endif %}{% set ns.prev = v %}{% endfor %}{% if ns.start is not none %}{% set ns.out = ns.out + [ns.start ~ ("-" ~ ns.prev if ns.prev != ns.start else "")] %}{% endif %}{{ ns.out | join(",") }}{% endmacro -%}
-{# Phase 4 PC2: trunk VLANs of one attach port-channel = the attachments of the device named first in its description #}
+{# Trunk VLANs of one attach port-channel = the attachments of the device named first in its description #}
 {% macro far_vlans(desc, atts) %}{% set far = desc.split(" ")[0] %}{% set ns = namespace(ids=[]) %}{% for a in atts %}{% if far in (a.devices.edges | map(attribute="node.name.value") | list) %}{% set ns.ids = ns.ids + [a.vlan_id.value] %}{% endif %}{% endfor %}{{ vlan_ranges(ns.ids | sort) }}{% endmacro -%}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
@@ -53,7 +115,9 @@
 {% set vrf_ns = namespace(items=[]) -%}
 {% for name in vrf_names %}{% set vrf_ns.items = vrf_ns.items + [(attachments | selectattr("vrf.node.name.value", "equalto", name) | list | first).vrf.node] %}{% endfor -%}
 {% set vrfs = vrf_ns.items | sort(attribute="l3_vni.value") -%}
-{# Summaries per VRF for this site (decided): summaries owned by this site; a multisite VRF uses all its summaries #}
+{%- for v in vrfs if v.border_static_summary.value is none %}{{ missing_FabricVRF_border_static_summary() }}{% endfor -%}
+{% set static_summary_vrfs = vrfs | selectattr("border_static_summary.value") | map(attribute="name.value") | list -%}
+{# Summaries per VRF for this site: summaries owned by this site; a multisite VRF uses all its summaries #}
 {% set summ_ns = namespace(pairs=[]) -%}
 {% for v in site.vrfs.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for s in v.summaries.edges | map(attribute="node") | list | sort(attribute="prefix.value") %}{% if v.multisite.value or (s.site.node is not none and s.site.node.name.value == site_name) %}{% set summ_ns.pairs = summ_ns.pairs + [(v.name.value, s.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
 {% set site_summaries = summ_ns.pairs | rejectattr("0", "equalto", transit_vrf) | map(attribute="1") | unique | list -%}
@@ -61,11 +125,12 @@
 {% set lo0_addr = lo0.ip_addresses.edges[0].node.address.value -%}
 {% set router_id = lo0_addr | ipaddress_interface("ip") -%}
 {% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
-{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+{% set mgmt_gw = ((mgmt_addr | ipaddress_interface("network")).network_address + fd.oob_gateway_host.value) | string -%}
 {% set member_nodes = pair.members.edges | map(attribute="node") | list -%}
 {% set member_names = member_nodes | map(attribute="name.value") | list | sort_interface_list -%}
 {% set peer = member_nodes | rejectattr("name.value", "equalto", device.name.value) | list | first -%}
-{% set my_priority = role_priority[0] if member_names[0] == device.name.value else role_priority[1] -%}
+{% if fd.vpc_role_priority_order.value != "by_name" %}{{ unsupported_FabricDesign_vpc_role_priority_order() }}{% endif -%}
+{% set my_priority = role_priority[0] if member_names[0] == device.name.value else role_priority[1] -%}   {#- vpc_role_priority_order by_name -#}
 {% set keepalive = physical | selectattr("role.value", "equalto", "vpc_keepalive") | list | first -%}
 {% set keepalive_ip = keepalive.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
 {% set peer_keepalive_ip = peer.interfaces.edges[0].node.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
@@ -85,22 +150,35 @@
 {% set is_border = device.role.value == "border_leaf" -%}
 {% set cloud_atts = attachments | selectattr("devices.edges.0.node.role.value", "equalto", cloud_role) | list -%}
 {% set sdwan_atts = attachments | selectattr("devices.edges.0.node.role.value", "equalto", "sdwan_fw") | list -%}
+{%- for v in site.vrfs.edges | map(attribute="node") | list if v.sdwan_excluded.value is none %}{{ missing_FabricVRF_sdwan_excluded() }}{% endfor -%}
+{% set no_branch_vrfs = site.vrfs.edges | map(attribute="node") | selectattr("sdwan_excluded.value") | map(attribute="name.value") | list -%}   {#- design: never summaries of these VRFs toward the SD-WAN -#}
 {% set sdwan_out = summ_ns.pairs | rejectattr("0", "equalto", transit_vrf) | rejectattr("0", "in", no_branch_vrfs) | map(attribute="1") | unique | list -%}
 hostname {{ device.name.value }}
-username vamdadmin password 5 __VAMDADMIN_HASH__ role network-admin
+username {{ fd.local_admin_username.value }} password 5 __CISCOADMIN_HASH__ role {{ fd.local_admin_role.value }}
+{% if not fd.dns_lookup.value %}
 no ip domain-lookup
+{% endif %}
 feature ospf
 feature bgp
+{% if fd.overlay_bgp_bfd.value or fd.attachment_bgp_bfd.value %}
 feature bfd
+{% endif %}
 feature interface-vlan
 feature vn-segment-vlan-based
 feature nv overlay
+{% if fd.distributed_anycast_gateway.value %}
 feature fabric forwarding
+{% endif %}
 feature lacp
 feature vpc
+{% if fd.nxos_scp_server.value %}
+feature scp-server
+{% endif %}
 nv overlay evpn
 
+{% if fd.distributed_anycast_gateway.value %}
 fabric forwarding anycast-gateway-mac {{ anycast_gw_mac }}
+{% endif %}
 system nve infra-vlans {{ backup_vlan }}
 
 ip prefix-list PL-DEFAULT seq {{ seq_step }} permit 0.0.0.0/0
@@ -148,8 +226,10 @@ route-map RM-{{ v }}-FROM-FW permit {{ seq_step }}
 {% endfor %}
 {% if cloud_atts %}
 
+{% if fd.cloud_accept_default_from_fabric.value %}
 route-map RM-{{ transit_vrf }}-TO-CLOUD permit {{ seq_step }}
   match ip address prefix-list PL-DEFAULT
+{% endif %}
 route-map RM-{{ transit_vrf }}-TO-CLOUD permit {{ 2 * seq_step }}
   match ip address prefix-list PL-{{ transit_vrf }}-SUMMARY
 route-map RM-{{ transit_vrf }}-FROM-CLOUD permit {{ seq_step }}
@@ -159,7 +239,7 @@ route-map RM-{{ transit_vrf }}-FROM-CLOUD permit {{ seq_step }}
 
 route-map RM-{{ transit_vrf }}-TO-SDWAN permit {{ seq_step }}
   match ip address prefix-list PL-{{ transit_vrf }}-SDWAN-OUT
-{% if cloud_atts %}
+{% if cloud_atts and fd.sdwan_advertise_cloud_prefixes.value %}
 route-map RM-{{ transit_vrf }}-TO-SDWAN permit {{ 2 * seq_step }}
   match ip address prefix-list PL-CLOUD
 {% endif %}
@@ -180,10 +260,10 @@ vrf context {{ vrf.name.value }}
   ip route {{ p }} Null0
 {% endfor %}
 {% endif %}
-  rd auto
+  rd {{ fd.evpn_rd_rt_mode.value }}
   address-family ipv4 unicast
-    route-target both auto
-    route-target both auto evpn
+    route-target both {{ fd.evpn_rd_rt_mode.value }}
+    route-target both {{ fd.evpn_rd_rt_mode.value }} evpn
 {% endfor %}
 {% for vrf in vrfs %}
 
@@ -203,14 +283,22 @@ vlan {{ backup_vlan }}
 spanning-tree vlan {{ pair_vlan_list }} priority {{ stp_priority }}
 
 vpc domain {{ pair.domain_id.value }}
+{% if fd.mlag_peer_switch.value %}
   peer-switch
+{% endif %}
   role priority {{ my_priority }}
   peer-keepalive destination {{ peer_keepalive_ip }} source {{ keepalive_ip }} vrf {{ keepalive_vrf }} {{ keepalive_timers }}
   delay restore {{ delay_restore }}
   auto-recovery reload-delay {{ auto_recovery_delay }}
+{% if fd.mlag_peer_gateway.value %}
   peer-gateway
+{% endif %}
+{% if fd.mlag_layer3_peer_router.value %}
   layer3 peer-router
+{% endif %}
+{% if fd.mlag_arp_sync.value %}
   ip arp synchronize
+{% endif %}
 
 interface {{ mgmt.name.value }}
   description {{ mgmt.description.value }}
@@ -233,7 +321,9 @@ interface Vlan{{ vrf.l3_vni_vlan.value }}
   no shutdown
   mtu {{ svi_mtu }}
   vrf member {{ vrf.name.value }}
+{% if not fd.ip_redirects.value %}
   no ip redirects
+{% endif %}
   ip forward
 {% endfor %}
 {% for a in attachments %}
@@ -244,19 +334,27 @@ interface {{ svi.name.value }}
   no shutdown
   mtu {{ svi.mtu.value }}
   vrf member {{ a.vrf.node.name.value }}
+{% if not fd.ip_redirects.value %}
   no ip redirects
+{% endif %}
   ip address {{ svi.ip_addresses.edges[0].node.address.value }}
+{% if fd.attachment_bgp_bfd.value %}
+{% if not fd.bfd_echo.value %}
   no bfd echo
+{% endif %}
   bfd {{ bfd_timers }}
+{% endif %}
 {% endfor %}
 
 interface {{ backup.name.value }}
   description {{ backup.description.value }}
   no shutdown
   mtu {{ backup.mtu.value }}
+{% if not fd.ip_redirects.value %}
   no ip redirects
+{% endif %}
   ip address {{ backup.ip_addresses.edges[0].node.address.value }}
-  ip ospf network point-to-point
+  ip ospf network {{ fd.underlay_ospf_network_type.value }}
   ip router ospf {{ ospf_process }} area {{ ospf_area }}
 
 interface {{ keepalive.name.value }}
@@ -273,7 +371,7 @@ interface {{ intf.name.value }}
   no switchport
   mtu {{ intf.mtu.value }}
   ip address {{ intf.ip_addresses.edges[0].node.address.value }}
-  ip ospf network point-to-point
+  ip ospf network {{ fd.underlay_ospf_network_type.value }}
   ip router ospf {{ ospf_process }} area {{ ospf_area }}
   no shutdown
 {% endfor %}
@@ -284,7 +382,7 @@ interface {{ intf.name.value }}
   switchport
   switchport mode trunk
   switchport trunk allowed vlan {{ pair_vlan_list }}
-  channel-group {{ peer_link_po }} mode active
+  channel-group {{ peer_link_po }} mode {{ fd.lacp_mode.value }}
   no shutdown
 {% endfor %}
 
@@ -293,7 +391,7 @@ interface {{ po.name.value }}
   switchport
   switchport mode trunk
   switchport trunk allowed vlan {{ pair_vlan_list }}
-  spanning-tree port type network
+  spanning-tree port type {{ fd.vpc_peer_link_stp_port_type.value }}
   vpc peer-link
 {% for name in fw_member_names %}{% set intf = fw_members | selectattr("name.value", "equalto", name) | list | first %}
 
@@ -303,7 +401,7 @@ interface {{ intf.name.value }}
   switchport mode trunk
   switchport trunk allowed vlan {{ far_vlans((fw_pos | selectattr("name.value", "equalto", intf.port_channel.node.name.value) | list | first).description.value, attachments) if cloud_atts else attach_vlan_list }}
   mtu {{ intf.mtu.value }}
-  channel-group {{ intf.port_channel.node.name.value | replace("port-channel", "") }} mode active
+  channel-group {{ intf.port_channel.node.name.value | replace("port-channel", "") }} mode {{ fd.lacp_mode.value }}
   no shutdown
 {% endfor %}
 {% for name in fw_po_names %}{% set intf = fw_pos | selectattr("name.value", "equalto", name) | list | first %}
@@ -313,8 +411,12 @@ interface {{ intf.name.value }}
   switchport
   switchport mode trunk
   switchport trunk allowed vlan {{ far_vlans(intf.description.value, attachments) if cloud_atts else attach_vlan_list }}
+{% if fd.attachment_port_stp_edge.value %}
   spanning-tree port type edge trunk
+{% endif %}
+{% if fd.attachment_port_bpdu_guard.value %}
   spanning-tree bpduguard enable
+{% endif %}
   mtu {{ intf.mtu.value }}
   vpc {{ intf.name.value | replace("port-channel", "") }}
 {% endfor %}
@@ -322,10 +424,14 @@ interface {{ intf.name.value }}
 interface nve1
   no shutdown
   host-reachability protocol bgp
+{% if fd.mlag_vtep_virtual_router_mac.value %}
   advertise virtual-rmac
+{% endif %}
   source-interface {{ lo1.name.value }}
+{% if fd.arp_suppression.value %}
   global suppress-arp
-  global ingress-replication protocol bgp
+{% endif %}
+  global {{ fd.evpn_bum_replication.value }}
 {% for vrf in vrfs %}
   member vni {{ vrf.l3_vni.value }} associate-vrf
 {% endfor %}
@@ -337,15 +443,21 @@ router bgp {{ asn }}
   router-id {{ router_id }}
   address-family l2vpn evpn
     maximum-paths ibgp {{ max_paths }}
+{% if fd.mlag_vtep_advertise_primary_ip.value %}
     advertise-pip
+{% endif %}
   template peer {{ rr_template }}
     remote-as {{ asn }}
     update-source loopback0
     password {{ bgp_password }}
+{% if fd.overlay_bgp_bfd.value %}
     bfd multihop
-    bfd multihop {{ bfd_timers }}
+    bfd multihop {{ overlay_bfd_timers }}
+{% endif %}
     address-family l2vpn evpn
+{% if fd.overlay_send_community_standard.value %}
       send-community
+{% endif %}
       send-community extended
 {% for name in spine_names %}{% set spine = spines_all | selectattr("name.value", "equalto", name) | list | first %}
   neighbor {{ spine.interfaces.edges[0].node.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }}
@@ -357,7 +469,7 @@ router bgp {{ asn }}
     address-family ipv4 unicast
       advertise l2vpn evpn
 {% if v == transit_vrf and cloud_atts %}
-      maximum-paths {{ cloud_atts | length }}
+      maximum-paths {{ fd.transit_cloud_maximum_paths.value }}
 {% endif %}
 {% if v != transit_vrf %}
 {% for p in summ_ns.pairs | selectattr("0", "equalto", v) | map(attribute="1") | list %}
@@ -376,8 +488,10 @@ router bgp {{ asn }}
     neighbor {{ net[:3] | join(".") }}.{{ net[3] | int + fw_host }}
       remote-as {{ fw.asn.node.asn.value }}
       description {{ a.name.value }}
-      password {{ bgp_password }}
+      password {{ attachment_bgp_password }}
+{% if fd.attachment_bgp_bfd.value %}
       bfd
+{% endif %}
       address-family ipv4 unicast
         route-map RM-{{ v }}-FROM-{{ peer_kind }} in
         route-map RM-{{ v }}-TO-{{ peer_kind }} out

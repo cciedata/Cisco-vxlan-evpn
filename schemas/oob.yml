@@ -1,13 +1,13 @@
 ---
-# Phase 4 PC6 (OOB management, row 62 B): cabling and OOB access VLANs. Loaded with the other files under schemas/.
+# OOB management: cabling and OOB access VLANs. Loaded with the other files under schemas/.
 # The base dcim schema has the generics DcimConnector / DcimEndpoint (InterfacePhysical inherits DcimEndpoint) but no
-# concrete connector node: DcimCable is that node (P4A-640). Written only by generator oob_site.
+# concrete connector node: DcimCable is that node. Written by generators oob_site and site_physical.
 version: "1.0"
 nodes:
   - name: Cable
     namespace: Dcim
     label: Cable
-    description: A physical cable between two ports (InterfacePhysical); OOB management and console cabling (Phase 4).
+    description: A physical cable between two ports (InterfacePhysical); OOB management and console cabling.
     icon: mdi:cable-data
     include_in_menu: true
     menu_placement: DcimDevice
@@ -20,7 +20,7 @@ nodes:
       - name__value
     attributes:
       - name: name
-        description: "<device A> <port A> <-> <device B> <port B>; A = the cabled device, B = the OOB side (P4A-641)."
+        description: "<device A> <port A> <-> <device B> <port B>; A = the cabled device, B = the OOB side."
         kind: Text
         unique: true
         optional: false
@@ -43,7 +43,7 @@ nodes:
             description: Passive DAC between adjacent switches (vPC peer-link, keepalive).
           - name: smf
             label: Single-mode fiber
-            description: Fabric optics across racks via the patch racks (diagrams P2-175, P2-177, P2-193, P2-233).
+            description: Fabric optics across racks via the patch racks.
       - name: description
         kind: Text
         optional: true
@@ -51,11 +51,11 @@ nodes:
         label: Length (m)
         kind: Number
         optional: true
-        description: Length in whole metres; set by site_physical on fabric cables (diagrams P2-168, P2-231).
+        description: Length in whole metres; set by site_physical on fabric cables.
 
 extensions:
   nodes:
-    # OOB access ports: the VLAN of an access port; OOB trunks: the VLANs a port-channel carries (P4A-643)
+    # OOB access ports: the VLAN of an access port; OOB trunks: the VLANs a port-channel carries
     - kind: InterfacePhysical
       relationships:
         - name: access_vlan

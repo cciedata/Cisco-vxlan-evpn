@@ -1,4 +1,4 @@
-# Phase 4 PC6: OOB FortiGate units (FG-120G). Shared A/P addresses sit on unit 1's interfaces only; the template reads
+# OOB FortiGate units (model: FabricDesign oob_fw_device_type). Shared A/P addresses sit on unit 1's interfaces only; the template reads
 # them from the site's unit 1 (OobFws), so both units render the same config. OobFws also gives the other DC's WAN
 # address and zone subnets (IPsec between the DCs). The VLAN ids come from the OOB VLANs (FabricL2Vlan).
 query OobFwConfig($device: String!) {
@@ -8,6 +8,7 @@ query OobFwConfig($device: String!) {
       node {
         name { value }
         role { value }
+        device_type { node { ha_ports { value } } }
         location { node { name { value } } }
         interfaces {
           edges {
@@ -17,7 +18,6 @@ query OobFwConfig($device: String!) {
               description { value }
               role { value }
               ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
-              ... on InterfacePhysical { port_channel { node { name { value } } } }
               ... on InterfacePortChannel { members { edges { node { name { value } } } } }
               ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
             }
@@ -49,7 +49,28 @@ query OobFwConfig($device: String!) {
         name { value }
         vlan_id { value }
         site { node { name { value } } }
-        switch_pair { node { name { value } } }
+      }
+    }
+  }
+  # Design values (FabricDesign) read by oob_fw_config.j2
+  FabricDesign {
+    count
+    edges {
+      node {
+        dc1_fw_ha_group_offset { value } dc2_fw_ha_group_offset { value }
+        dc1_oob_remote_access_psk { value } dc2_oob_remote_access_psk { value }
+        esp_keylife_s { value } esp_proposal { value } fw_ha_priority { value } fw_mgmt_allowed_access { value }
+        fw_zone_intrazone_allow { value } ha_heartbeat_priority { value } ha_mode { value } ha_monitor_aggregates { value }
+        ha_preempt { value } ha_reserved_mgmt_interface { value } ha_session_pickup { value } ike_dh_group { value }
+        ike_dpd_mode { value } ike_dpd_retry_interval_s { value } ike_keylife_s { value } ike_peer_type { value }
+        ike_proposal { value } ike_version { value } ipsec_add_route { value } ipsec_auto_negotiate { value }
+        ipsec_per_peer_interface { value } ipsec_phase2_selector { value } lacp_mode { value } oob_blackhole_distance { value }
+        oob_fw_ha_group_base { value } oob_gateway_host { value } oob_inter_site_ipsec_psk { value } oob_policy_log_traffic { value }
+        oob_policy_matrix { value } oob_policy_schedule { value } oob_policy_service { value } oob_ra_assign_ip_from { value }
+        oob_ra_eap { value } oob_ra_eap_identity { value } oob_ra_pool_end_host { value } oob_ra_pool_start_host { value }
+        oob_ra_remote_ip_host { value } oob_static_route_id_base { value } oob_zone_allowed_access { value }
+        esp_pfs_dh_group { value } oob_carrier_port_role { value } oob_ra_mode_cfg { value } oob_ra_split_tunnel { value }
+        oob_remote_blackhole { value } oob_vlans { value } oob_wan_carrier_host { value }
       }
     }
   }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 3 post-checks (Nornir + netmiko since 7 Oct): compare the running lab with the lab-expected artifact (P3-48).
+"""Post-checks (Nornir + netmiko): compare the running lab with the lab-expected artifact.
 
   postcheck.py <site>          run every check, write lab/build/<site>/reports/postcheck-<time>.{txt,json}, exit 0 only if all pass
   postcheck.py <site> --plan   list every check and the command that will answer it; touches no device
@@ -9,10 +9,10 @@ Checks (all from expected.json, nothing typed by hand):
   bfd    every session marked bfd: a BFD session to the peer is Up (NX-OS, FRR; IOS XR read from 'show bfd session')
   route  every route: present in the node's VRF table
   ping   every ping from a test host: at least PING_MIN_OK of PING_COUNT replies
-Runner (Open-Phase3-Lab row 11 B, confirmed 7 Oct): Nornir runs one task per node in parallel; the inventory is the
+Runner: Nornir runs one task per node in parallel; the inventory is the
 lab-topology artifact (lab/build/<site>/topology.yml: node, kind, mgmt-ipv4). Drivers: NX-OS over SSH with netmiko
 ('show ... | json'), FRR via 'docker exec vtysh ... json', IOS XR via 'docker exec xr_cli' text (no SSH in the stand-ins).
-P3D-08 (NX-API reads) is replaced by netmiko; failtests.py keeps NX-API only for its break/restore actions.
+NX-API reads are replaced by netmiko; failtests.py keeps NX-API only for its break/restore actions.
 """
 import argparse
 import ipaddress
@@ -35,9 +35,9 @@ from nornir.plugins.runners import ThreadedRunner
 warnings.filterwarnings("ignore")
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUILD = os.path.join(HERE, "build")
-NXOS_USER, NXOS_PASS = "admin", "admin"         # P3D-07
-PING_COUNT, PING_MIN_OK, PING_WAIT_S = 3, 2, 2  # P3D-09: 2 of 3 (the first may be lost to ARP)
-XR_CLI = "/pkg/bin/xr_cli.sh"                   # P3D-08 ❓ path inside XRd, confirm on first run
+NXOS_USER, NXOS_PASS = "admin", "admin"         # vrnetlab N9Kv default login
+PING_COUNT, PING_MIN_OK, PING_WAIT_S = 3, 2, 2  # 2 of 3 (the first may be lost to ARP)
+XR_CLI = "/pkg/bin/xr_cli.sh"                   # ❓ path inside XRd, confirm on first run
 NORNIR_WORKERS = 10                             # FU-11: parallel node tasks (laptop: 1-2 nodes; AWS lab: 18)
 SSH_READ_TIMEOUT = 120                          # FU-11: seconds per NX-OS show over SSH
 NETMIKO_PLATFORM = {"cisco_n9kv": "cisco_nxos"}  # FU-11: netmiko device_type per containerlab kind

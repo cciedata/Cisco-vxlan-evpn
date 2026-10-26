@@ -37,7 +37,6 @@ service integrated-vtysh-config
 ip prefix-list PS-GUARDRAIL seq 10 permit 10.19.0.0/16 le 32
 ip prefix-list PS-GUARDRAIL seq 20 permit 10.23.0.0/16 le 32
 ip prefix-list PS-GUARDRAIL seq 30 permit 10.0.0.0/16 le 32
-ip prefix-list PS-DEFAULT seq 10 permit 0.0.0.0/0
 ip prefix-list PS-AWS seq 10 permit 172.16.0.0/13 le 24
 ip prefix-list PS-AZURE seq 10 permit 172.30.0.0/15 le 24
 ip prefix-list PS-TO-CLOUD seq 10 permit 0.0.0.0/0

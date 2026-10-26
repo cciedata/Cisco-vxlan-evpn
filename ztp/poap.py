@@ -1,6 +1,6 @@
 #!/bin/env python3
 #md5sum="__MD5__"
-# vamd Phase 3b POAP script (Z-03 HTTP, Z-04 serial as identity, Z-05 config live from Infrahub through the ZTP server).
+# vamd POAP script (HTTP, serial number as identity, config live from Infrahub through the ZTP server).
 # Served by ztp/ztp_server.py, which fills __SRV__ and the md5 line. Steps: read the serial, set the boot variable (8 Oct finding:
 # without it POAP's reload stops at 'loader >'), download the config by serial, make it the scheduled-config, call back.
 # Any error is reported to /callback/<serial>/failed (ztp_state = failed) and POAP is aborted.

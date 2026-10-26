@@ -1,4 +1,4 @@
-# Phase 4 PC1: DCI switch (routed; eBGP to the local BGW, iBGP to the DCI pair peer, eBGP across the vendor circuit).
+# DCI switch (routed; eBGP to the local BGW, iBGP to the DCI pair peer, eBGP across the vendor circuit).
 # Every BGW and DCI switch is listed so the template can name the far end and its ASN of each link.
 query DciConfig($device: String!) {
   DcimDevice(name__value: $device) {
@@ -7,6 +7,7 @@ query DciConfig($device: String!) {
       node {
         name { value }
         role { value }
+        location { node { name { value } } }
         asn { node { asn { value } } }
         interfaces {
           edges {
@@ -46,6 +47,41 @@ query DciConfig($device: String!) {
             }
           }
         }
+      }
+    }
+  }
+  # design values used by dci_config.j2 (one FabricDesign object)
+  FabricDesign {
+    count
+    edges {
+      node {
+        dci_circuit_bgp_password { value }
+        bfd_interval_ms { value }
+        bfd_multiplier { value }
+        bfd_min_rx_ms { value }
+        dci_macsec_key_id { value }
+        dci_macsec_key { value }
+        dci_macsec_key_algorithm { value }
+        dci_macsec_cipher_suite { value }
+        route_policy_seq_step { value }
+        local_admin_username { value }
+        local_admin_role { value }
+        dns_lookup { value }
+        oob_gateway_host { value }
+        bfd_echo { value }
+        lacp_mode { value }
+        dci_pair_next_hop_self { value }
+        ip_redirects { value }
+        dci_macsec { value }
+        dci_loopback0_advertise_method { value }
+        dci_ebgp_bfd { value }
+        dc1_bgw_dci_bgp_password { value }
+        dc2_bgw_dci_bgp_password { value }
+        dc1_dci_pair_bgp_password { value }
+        dc2_dci_pair_bgp_password { value }
+        # lab stand-in frr_dci_lab.j2
+        p2p_link_prefix_length { value }
+    nxos_scp_server { value }
       }
     }
   }

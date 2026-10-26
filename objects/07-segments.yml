@@ -4,15 +4,6 @@ kind: Object
 spec:
   kind: IpamPrefix
   data:
-    # VRF blocks (design-decisions.md > IP plan > Tenant VRF blocks)
-    - {prefix: 10.16.0.0/18, description: "PROD VRF block", status: active, member_type: prefix, site: DC1}
-    - {prefix: 10.16.64.0/18, description: "DEV VRF block", status: active, member_type: prefix, site: DC1}
-    - {prefix: 10.16.144.0/20, description: "CITRIX VRF block (DC1)", status: active, member_type: prefix, site: DC1}
-    - {prefix: 10.16.160.0/21, description: "PARTNER VRF block, NAT /28s (DC1)", status: active, member_type: prefix, site: DC1}
-    - {prefix: 10.20.0.0/18, description: "DC2-PROD VRF block", status: active, member_type: prefix, site: DC2}
-    - {prefix: 10.20.64.0/18, description: "DC2-DEV VRF block", status: active, member_type: prefix, site: DC2}
-    - {prefix: 10.20.144.0/20, description: "CITRIX VRF block (DC2)", status: active, member_type: prefix, site: DC2}
-    - {prefix: 10.20.160.0/21, description: "PARTNER VRF block, NAT /28s (DC2)", status: active, member_type: prefix, site: DC2}
     # Segment subnets: one /24 per segment, gateway .1
     - {prefix: 10.16.10.0/24, description: "PROD VLAN 1010 (stretched)", status: active, member_type: address, site: DC1}
     - {prefix: 10.16.11.0/24, description: "PROD VLAN 1011 (stretched)", status: active, member_type: address, site: DC1}

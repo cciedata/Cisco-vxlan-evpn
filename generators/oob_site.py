@@ -1,99 +1,217 @@
-"""Phase 4 PC6: out-of-band management per datacenter (design-decisions.md "Out-of-band management", decisions
-P2-114..P2-119, decisions.xlsx Open-Phase4 rows 62-67; every other value: p4-files/oob/auto_approved.md P4A-6xx).
+"""Out-of-band management per datacenter.
 
-Generator oob_site (target group oob-sites). It builds the OOB devices of one site (FortiGate A/P pair, 2 aggregation
-switches as a vPC pair, 2 network-device access switches, 1 server-BMC access switch per leaf pair / single leaf,
-2 console servers), their interfaces and addresses, the OOB VLANs, and every OOB cable: the management port and the
+Generator oob_site (target group oob-sites). It builds the OOB devices of one site (FortiGate A/P pair, oob_agg_count
+aggregation switches as a vPC pair, oob_access_count network-device access switches, 1 server-BMC access switch per leaf
+pair / single leaf, console_server_count console servers), their interfaces and addresses, the OOB VLANs, and every OOB cable: the management port and the
 console port of every device of the site to an OOB access port / console-server port (DcimCable).
 
-One writer per object (P4A-601): fabric_site keeps every production device and its management interface (mgmt0,
+One writer per object: fabric_site keeps every production device and its management interface (mgmt0,
 mgmt1, MgmtEth: description "OOB management", address from <site>-MGMT0); this generator never saves them, it only
 reads them and points a cable at them. It owns: the OOB devices and all their interfaces, the `console` port of every
 production device (role console, a role fabric_site neither creates nor reconciles), the cables, the OOB VLANs, the OOB
 vPC domain, the keepalive /31 and the OOB WAN /30. The zone gateways (.1) belong to the IP plan (objects/03-ip-plan.yml):
 fetched, never saved. fabric_site's outputs are untouched (this file does not import or change it).
 """
+import contextvars
 import ipaddress
 import os
 import re
 
 from infrahub_sdk.generator import InfrahubGenerator
 
-# Decided (design, rows 62-67) ------------------------------------------------------------------------------------
-DEVICE_TYPE = {"oob_fw": "FG-120G", "oob_agg": "N9K-C93180YC-FX3", "oob_access": "N9K-C9348GC-FX3",
-               "console_server": "OM2248-10G-L"}                     # P2-115, P2-117, row 63 B
-PLATFORM_BY_ROLE = {"oob_fw": "Fortinet FortiOS", "oob_agg": "Cisco NX-OS", "oob_access": "Cisco NX-OS",
-                    "console_server": "Opengear Operations Manager"}
-OS_VERSION_BY_PLATFORM = {"Cisco NX-OS": "10.6(1)F", "Fortinet FortiOS": "7.6.7"}   # same releases as fabric_site; Opengear: open (notes.md)
-OOB_BASE = {"DC1": 0, "DC2": 16}                 # 10.250.<base>.0/20 per DC (decided; P4A-680)
-OOB_VLANS = (                                    # VLAN id (row 65 B), zone, third-octet offset in the /20, length (decided carving)
-    (100, "NETMGMT", 0, 24, "network-device management"),
-    (101, "OOBINFRA", 1, 24, "OOB infrastructure"),
-    (102, "BMC", 4, 22, "server BMCs"),
-)
-GW_HOST = 1                                      # OOB FortiGate = .1 of every zone (decided for mgmt0, P4A-620 for the others)
+# Design values live in Infrahub: FabricDesign (global, per-site dc1_/dc2_, per-role fields),
+# DcimDeviceType (port defaults of the OOB models) and DcimPlatform (os_version). load_values() / load_type_values()
+# fill D at the start of generate(); a missing or empty value stops the generator with the field name.
+class _RunValues:
+    """Per-run design values. Infrahub runs the generator for DC1 and DC2 concurrently in one worker process
+    (asyncio tasks), so a plain module-level dict would be shared between the two sites (PC validator, 24 Oct).
+    Each asyncio task gets its own dict through a ContextVar; code keeps using D[...] as before."""
+    _var = contextvars.ContextVar("design_run_values")
 
-# Auto-approved (P4A-6xx) ----------------------------------------------------------------------------------------
-STATUS = "provisioning"                          # P4A-602: same values as fabric_site
-INTERFACE_STATUS = "provisioning"
-ADDRESS_STATUS = "active"
-LINK_STATUS = "active"
-VLAN_NAME = "{site}-OOB-{zone}"                  # P4A-621
-FW_SUBIF = "{zone}-{vlan}"                       # P4A-622: FortiOS <role>-<VLAN> rule (Phase 2), <= 15 characters
-MGMT_IF = {"oob_fw": "mgmt", "oob_agg": "mgmt0", "oob_access": "mgmt0", "console_server": "eth2"}   # P4A-611
-CONSOLE_IF = "console"                           # P4A-612: every device that is not a console server
-CS_PORT = "port{n}"                              # P4A-613: console-server serial ports port1..port48
-NET_PORT = "Ethernet1/{n}"                       # 9348GC-FX3: 48 x 1G RJ45 = Ethernet1/1-48 (P4A-614, ❓)
-ACCESS_PORTS, CS_PORTS = 48, 48
+    def _d(self) -> dict:
+        try:
+            return self._var.get()
+        except LookupError:
+            d = {}
+            self._var.set(d)
+            return d
+
+    def reset(self) -> None:
+        self._var.set({})
+
+    def __getitem__(self, k):
+        return self._d()[k]
+
+    def __setitem__(self, k, v):
+        self._d()[k] = v
+
+    def __contains__(self, k):
+        return k in self._d()
+
+    def get(self, k, default=None):
+        return self._d().get(k, default)
+
+    def clear(self) -> None:
+        self.reset()
+
+
+D = _RunValues()
+OOB_ROLE_LIST = ("oob_fw", "oob_agg", "oob_access", "console_server")
+ARTIFACT_ROLES = ("oob_agg", "oob_access", "oob_fw")                       # roles with an artifact group
+OOB_VLAN_PURPOSE = {"NETMGMT": "network-device management", "OOBINFRA": "OOB infrastructure", "BMC": "server BMCs"}
+
+VLAN_NAME = "{site}-OOB-{zone}"
+FW_SUBIF = "{zone}-{vlan}"                       # FortiOS <role>-<VLAN> rule, <= 15 characters
 ROLE_MGMT, ROLE_CONSOLE, ROLE_ACCESS = "management", "console", "access"
 ROLE_CORE, ROLE_PEERING, ROLE_UPSTREAM = "core", "peering", "upstream"
 ROLE_KEEPALIVE, ROLE_PEER_LINK = "vpc_keepalive", "vpc_peer_link"
 
-# Port slots (P4A-630): the same slot number on the OOB access switch (Ethernet1/<slot>) and on the console server
-# (port<slot>); odd unit -> switch 1 / console server 1, even unit -> 2, so both members of a pair never share one.
-LEAF_PREFIX = "L"                                # server leaf L<n>: slot ceil(n / 2) = 1..10
-PROD_SLOT = {"S": 11, "BL": 12, "SL": 13, "BGW": 14, "EDGE": 15, "DCI": 16, "DMZ": 17, "INETFW": 18, "INTFW": 19,
-             "ISP": 20, "CLOUD": 21, "SDWANFW": 22, "VPNFW": 23}          # 24-30 free (load balancers)
-OOB_SLOT = {"OOBCS": 31, "OOBFW": 32, "OOBAGG": 33, "OOBNET": 34}         # OOBBMC<k>: 34 + ceil(k / 2) = 35..42
-CROSS_MGMT = {"OOBCS", "OOBNET"}                 # P4A-631: mgmt on the OTHER access switch (console server n -> switch 3-n)
+# Port slots (FabricDesign.oob_port_slots): the same slot number on the OOB access switch and on the console
+# server. Unit k of a slot goes to switch k / console server k (FabricDesign.oob_units_per_port_slot units per slot), so
+# both members of a pair never share one.
+LEAF_PREFIX = "L"                                # server leaf L<n>: slot ceil(n / oob_units_per_port_slot)
 
-# OOB devices (P4A-603): (name prefix, role, count, description)
+# OOB devices: (name prefix, role, description); the count is FabricDesign.<role>_count
 OOB_FIXED = (
-    ("OOBFW", "oob_fw", 2, "OOB firewall unit {n} (active/passive pair)"),
-    ("OOBAGG", "oob_agg", 2, "OOB aggregation switch {n}"),
-    ("OOBNET", "oob_access", 2, "OOB access switch {n}, network-device management ports"),
+    ("OOBFW", "oob_fw", "OOB firewall unit {n} (active/passive pair)"),
+    ("OOBAGG", "oob_agg", "OOB aggregation switch {n}"),
+    ("OOBNET", "oob_access", "OOB access switch {n}, network-device management ports"),
 )
 CS_DESCRIPTION = "Console server {n}"
 
-# Switch-to-switch links (P4A-632..635)
-AGG_DOWNLINK = "Ethernet1/{i}"                   # access switch index i (OOBNET1 = 1, OOBNET2 = 2, OOBBMC<k> = 2 + k): Po i, vPC i
-AGG_FW_PORT = {1: "Ethernet1/21", 2: "Ethernet1/22"}   # OOBFW<u>: Po 20 + u, vPC 20 + u
-MAX_ACCESS_SWITCHES = 20                          # downlinks Ethernet1/1-20 (1/21-22 FW, 1/48 keepalive)
-AGG_KEEPALIVE = "Ethernet1/48"
-AGG_PEER_LINK = ("Ethernet1/53", "Ethernet1/54")
-PEER_LINK_PO = "port-channel1000"                # same number as every fabric vPC pair
-OOB_VPC_DOMAIN = {"DC1": 199, "DC2": 299}        # P4A-634: top of the site range (fabric uses base + 1..15)
 PAIR_NAME = "{site}-OOB-VPC-OOBAGG1-OOBAGG2"      # does not start with <site>-VPC-: fabric_site's reconcile never sees it
-KEEPALIVE_THIRD = 3                              # P4A-635: <oob>.3.0/31, AGG1 .0, AGG2 .1
-ACCESS_UPLINKS = ("Ethernet1/49", "Ethernet1/50")    # 25G SFP28 -> AGG1, AGG2 (P4A-632)
-ACCESS_UPLINK_PO = "port-channel1"
-FW_UPLINKS = ("x1", "x2")                        # 10G SFP+ -> AGG1, AGG2 (P4A-650)
 FW_AGG = "agg-oob"
-FW_HA = ("ha", "port16")                         # P4A-651: heartbeat, direct cables between the units
-FW_WAN = "port1"                                 # P4A-652: 1G RJ45 toward the OOB carrier
-OOB_WAN = {"DC1": "192.0.2.64/30", "DC2": "192.0.2.68/30"}   # P4A-653: placeholder (documentation range)
-WAN_CARRIER_HOST, WAN_OUR_HOST = 1, 2            # same rule as the ISP carrier /30s
-WAN_PROVIDER = "OOB-ISP"                         # P4A-653: third carrier, no provider object yet
-RA_THIRD, RA_IF = 2, "RA-DIALUP"                 # P4A-660: remote-access pool <oob>.2.0/24, tunnel address .1 on unit 1
+# OOB WAN carrier (third carrier, no provider object yet): FabricDesign.oob_carrier_name (D["wan_provider"])
+RA_IF = "RA-DIALUP"                              # remote-access interface on the OOB FortiGate
 
-ARTIFACT_GROUPS = {"oob_agg": "oob-switches", "oob_access": "oob-switches", "oob_fw": "oob-fws"}   # P4A-604
-OOB_ROLES = set(DEVICE_TYPE)
+OOB_ROLES = set(OOB_ROLE_LIST)
 
-DRY_RUN = os.environ.get("FABRIC_DRY_RUN", "0") == "1"            # same switches as fabric_site (decided Phase 2)
+DRY_RUN = os.environ.get("FABRIC_DRY_RUN", "0") == "1"            # same switches as fabric_site
 RECONCILE = os.environ.get("FABRIC_RECONCILE", "delete")
 if RECONCILE not in ("delete", "report"):
     raise ValueError(f"FABRIC_RECONCILE must be 'delete' or 'report', got {RECONCILE!r}")
 PREFIX_ROLES = {ROLE_KEEPALIVE, ROLE_UPSTREAM}   # interfaces whose link prefix this generator owns
+
+
+async def load_design(client):
+    nodes = await client.all(kind="FabricDesign")
+    if len(nodes) != 1:
+        raise ValueError(f"FabricDesign: expected exactly 1 object, found {len(nodes)}; fix it in Infrahub")
+    return nodes[0]
+
+
+def need(design, field):
+    try:
+        value = getattr(design, field).value
+    except AttributeError:
+        value = None                                              # no such field (e.g. a site not in the schema yet)
+    if value is None:
+        raise ValueError(f"FabricDesign.{field} is empty; fix it in Infrahub")
+    return value
+
+
+def need_pair(design, role: str) -> int:
+    count = need(design, f"{role}_count")
+    if count != 2:
+        raise ValueError(f"{role}_count must be 2 (pair logic)")
+    return count
+
+
+def need_type(dtype, field):
+    try:
+        value = getattr(dtype, field).value
+    except AttributeError:
+        value = None
+    if value is None:
+        raise ValueError(f"DcimDeviceType {dtype.name.value}.{field} is empty; fix it in Infrahub")
+    return value
+
+
+def load_values(design, site: str) -> None:
+    """FabricDesign values of this generator for one site (fills D)."""
+    D.clear()
+    s = site.lower()
+    D["device_type"] = {r: need(design, f"{r}_device_type") for r in OOB_ROLE_LIST}
+    D["platform"] = {r: need(design, f"{r}_platform") for r in OOB_ROLE_LIST}
+    D["mgmt"] = {r: need(design, f"{r}_mgmt_interface") for r in OOB_ROLE_LIST}
+    D["count"] = {r: need_pair(design, r) for r in OOB_ROLE_LIST}
+    D["artifact_groups"] = {r: need(design, f"{r}_artifact_group") for r in ARTIFACT_ROLES}
+    D["oob_base"] = need(design, f"{s}_oob_block_base")
+    D["oob_wan"] = str(need(design, f"{s}_oob_wan_prefix"))
+    D["vpc_domain"] = need(design, f"{s}_oob_vpc_domain")
+    D["supernet"] = ipaddress.ip_network(str(need(design, "oob_supernet")))
+    vlans = []
+    for v in need(design, "oob_vlans"):
+        if v["zone"] not in OOB_VLAN_PURPOSE:
+            raise ValueError(f"FabricDesign.oob_vlans: zone {v['zone']} has no VLAN description in OOB_VLAN_PURPOSE")
+        vlans.append((v["vlan"], v["zone"], v["third_offset"], v["prefix_length"], OOB_VLAN_PURPOSE[v["zone"]]))
+    D["vlans"] = tuple(vlans)
+    D["vlan_by_zone"] = {v[1]: v[0] for v in vlans}
+    if set(D["vlan_by_zone"]) != set(OOB_VLAN_PURPOSE):
+        raise ValueError(f"FabricDesign.oob_vlans: zones {sorted(D['vlan_by_zone'])}, expected {sorted(OOB_VLAN_PURPOSE)}")
+    D["gw_host"] = need(design, "oob_gateway_host")
+    D["status_device"] = need(design, "status_device")
+    D["status_interface"] = need(design, "status_interface")
+    D["status_address"] = need(design, "status_address")
+    D["status_link"] = need(design, "status_link")
+    D["slots"] = dict(need(design, "oob_port_slots"))
+    D["cross_mgmt"] = set(need(design, "oob_cross_mgmt_prefixes"))
+    D["agg_fw_port"] = {int(k): v for k, v in need(design, "oob_agg_fw_ports").items()}
+    D["max_access"] = need(design, "oob_max_access_switches")
+    D["peer_link_po"] = f"port-channel{need(design, 'vpc_peer_link_port_channel')}"
+    D["access_uplink_po"] = f"port-channel{need(design, 'oob_access_uplink_port_channel')}"
+    D["fw_po_base"] = need(design, "oob_fw_port_channel_base")
+    D["keepalive_third"] = need(design, "oob_keepalive_third_octet")
+    D["p2p_len"] = need(design, "p2p_link_prefix_length")
+    D["wan_carrier_host"] = need(design, "oob_wan_carrier_host")
+    D["wan_our_host"] = need(design, "oob_wan_our_host")
+    D["ra_third"] = need(design, "oob_ra_pool_third_octet")
+    D["ra_len"] = need(design, "oob_ra_pool_prefix_length")
+    D["ra_host"] = need(design, "oob_ra_tunnel_host")
+    D["cable_mgmt"] = need(design, "oob_cable_type_mgmt")
+    D["cable_console"] = need(design, "oob_cable_type_console")
+    D["cable_uplink"] = need(design, "oob_cable_type_uplink")
+    D["cable_peer"] = need(design, "oob_cable_type_peer")
+    D["cable_ha"] = need(design, "oob_cable_type_ha")
+    D["wan_provider"] = need(design, "oob_carrier_name")
+    D["slot_units"] = need(design, "oob_units_per_port_slot")
+    if not 1 <= D["slot_units"] <= min(D["count"]["oob_access"], D["count"]["console_server"]):
+        raise ValueError(f"FabricDesign.oob_units_per_port_slot = {D['slot_units']}: needs one OOB access switch and one console "
+                         "server per unit of a slot; fix it in Infrahub")
+    D["mgmt_zone"] = dict(need(design, "oob_mgmt_zone_by_class"))           # "oob" / "production" -> oob_vlans zone
+    for k in ("oob", "production"):
+        if D["mgmt_zone"].get(k) not in D["vlan_by_zone"]:
+            raise ValueError(f"FabricDesign.oob_mgmt_zone_by_class['{k}'] = {D['mgmt_zone'].get(k)!r} is not an oob_vlans zone; fix it in Infrahub")
+    D["uplink_zones"] = {k: list(v) for k, v in need(design, "oob_access_uplink_zones").items()}   # access switch prefix -> zones
+    for k, zones in D["uplink_zones"].items():
+        bad = [z for z in zones if z not in D["vlan_by_zone"]]
+        if bad:
+            raise ValueError(f"FabricDesign.oob_access_uplink_zones['{k}']: {bad} are not oob_vlans zones; fix it in Infrahub")
+    D["agg_po_base"] = need(design, "oob_agg_downlink_port_channel_base")
+    D["ka_host"] = {int(k): v for k, v in need(design, "oob_keepalive_member_hosts").items()}
+    missing = [n for n in range(1, D["count"]["oob_agg"] + 1) if n not in D["ka_host"]]
+    if missing:
+        raise ValueError(f"FabricDesign.oob_keepalive_member_hosts has no entry for unit(s) {missing}; fix it in Infrahub")
+    D["no_os_platforms"] = set(need(design, "oob_platforms_without_os_version"))
+
+
+def load_type_values(types: dict) -> None:
+    """Port defaults of the OOB models (DcimDeviceType, keyed by type name) (fills D)."""
+    t = {r: types[D["device_type"][r]] for r in OOB_ROLE_LIST}
+    D["console_port"] = {r: need_type(t[r], "console_port") for r in OOB_ROLE_LIST if r != "console_server"}
+    D["cs_port"] = need_type(t["console_server"], "port_name_format")       # console-server serial ports
+    D["net_port"] = need_type(t["oob_access"], "port_name_format")          # access-switch front-panel ports
+    D["access_ports"] = need_type(t["oob_access"], "access_port_count")
+    D["agg_downlink"] = need_type(t["oob_agg"], "port_name_format")         # access switch index i: Po i, vPC i
+    D["agg_keepalive"] = need_type(t["oob_agg"], "vpc_keepalive_port")
+    D["agg_peer_link"] = tuple(need_type(t["oob_agg"], "vpc_peer_link_ports"))
+    D["access_uplinks"] = tuple(need_type(t["oob_access"], "uplink_ports"))  # -> AGG1, AGG2
+    D["fw_uplinks"] = tuple(need_type(t["oob_fw"], "uplink_ports"))          # -> AGG1, AGG2
+    D["fw_ha"] = tuple(need_type(t["oob_fw"], "ha_ports"))
+    D["fw_wan"] = need_type(t["oob_fw"], "wan_port")
+    for key in ("access_uplinks", "fw_uplinks"):
+        if len(D[key]) != D["count"]["oob_agg"]:
+            raise ValueError(f"{key}: {len(D[key])} uplink ports for {D['count']['oob_agg']} aggregation switches")
 
 
 def split_name(site: str, name: str) -> tuple[str, int]:
@@ -105,19 +223,25 @@ def split_name(site: str, name: str) -> tuple[str, int]:
 
 def slot_of(site: str, name: str) -> int:
     prefix, n = split_name(site, name)
+    units = D["slot_units"]
     if prefix == LEAF_PREFIX:
-        return (n + 1) // 2
+        return (n + units - 1) // units                               # ceil(n / units)
     if prefix == "OOBBMC":
-        return OOB_SLOT["OOBNET"] + (n + 1) // 2
-    slot = PROD_SLOT.get(prefix, OOB_SLOT.get(prefix))
+        return D["slots"]["OOBNET"] + (n + units - 1) // units
+    slot = D["slots"].get(prefix)
     if slot is None:
-        raise ValueError(f"{name}: prefix {prefix} has no OOB port slot (PROD_SLOT / OOB_SLOT); decide it first")
+        raise ValueError(f"{name}: prefix {prefix} has no OOB port slot (FabricDesign.oob_port_slots); decide it first")
     return slot
 
 
+def third_octet_net(third: int, plen: int) -> ipaddress.IPv4Network:
+    """<oob_supernet>.<third>.0/<plen> (the OOB block is carved by third octet)."""
+    return ipaddress.ip_network(f"{D['supernet'].network_address + (third << 8)}/{plen}")
+
+
 def zone_net(site: str, vlan: int) -> ipaddress.IPv4Network:
-    v = next(x for x in OOB_VLANS if x[0] == vlan)
-    return ipaddress.ip_network(f"10.250.{OOB_BASE[site] + v[2]}.0/{v[3]}")
+    v = next(x for x in D["vlans"] if x[0] == vlan)
+    return third_octet_net(D["oob_base"] + v[2], v[3])
 
 
 def leaf_groups(vpc: int, esi: int, single: int) -> list[str]:
@@ -134,32 +258,32 @@ def build_oob(site: str, counts: dict, prod: list[dict]) -> dict:
     """The whole OOB plan of a site. `prod`: [{"name", "role", "mgmt"}] = every production device with its management
     interface name (read from Infrahub). Returns devices, interfaces (device -> name -> spec), console ports on the
     production devices, cables, VLANs, the vPC pair, fixed prefixes."""
-    if site not in OOB_BASE:
-        raise ValueError(f"{site}: no OOB block in OOB_BASE")
-    base = OOB_BASE[site]
+    base = D["oob_base"]
+    cnt = D["count"]
     groups = leaf_groups(counts["vpc_leaf_pairs"], counts["esi_leaf_pairs"], counts["single_leaves"])
     devices = []
-    for prefix, role, count, desc in OOB_FIXED:
-        for n in range(1, count + 1):
+    for prefix, role, desc in OOB_FIXED:
+        for n in range(1, cnt[role] + 1):
             devices.append({"name": f"{site}-{prefix}{n}", "role": role, "description": desc.format(n=n)})
     for k, g in enumerate(groups, start=1):
         devices.append({"name": f"{site}-OOBBMC{k}", "role": "oob_access",
                         "description": f"OOB access switch, server BMCs of {site}-{g}"})
-    for n in (1, 2):
+    for n in range(1, cnt["console_server"] + 1):
         devices.append({"name": f"{site}-OOBCS{n}", "role": "console_server", "description": CS_DESCRIPTION.format(n=n)})
     for d in devices:
-        d["platform"] = PLATFORM_BY_ROLE[d["role"]]
-        d["mgmt"] = MGMT_IF[d["role"]]
+        d["platform"] = D["platform"][d["role"]]
+        d["mgmt"] = D["mgmt"][d["role"]]
+        d["console"] = D["console_port"].get(d["role"])                  # None for a console server (no console port)
     oob_names = [d["name"] for d in devices]
     access = [d["name"] for d in devices if d["role"] == "oob_access"]          # OOBNET1, OOBNET2, OOBBMC1..
-    if len(access) > MAX_ACCESS_SWITCHES:
-        raise ValueError(f"{site}: {len(access)} OOB access switches exceed the aggregation port map ({MAX_ACCESS_SWITCHES})")
-    net = {1: f"{site}-OOBNET1", 2: f"{site}-OOBNET2"}
-    cs = {1: f"{site}-OOBCS1", 2: f"{site}-OOBCS2"}
-    agg = {1: f"{site}-OOBAGG1", 2: f"{site}-OOBAGG2"}
-    fw = {1: f"{site}-OOBFW1", 2: f"{site}-OOBFW2"}
+    if len(access) > D["max_access"]:
+        raise ValueError(f"{site}: {len(access)} OOB access switches exceed the aggregation port map ({D['max_access']})")
+    net = {n: f"{site}-OOBNET{n}" for n in range(1, cnt["oob_access"] + 1)}
+    cs = {n: f"{site}-OOBCS{n}" for n in range(1, cnt["console_server"] + 1)}
+    agg = {n: f"{site}-OOBAGG{n}" for n in range(1, cnt["oob_agg"] + 1)}
+    fw = {n: f"{site}-OOBFW{n}" for n in range(1, cnt["oob_fw"] + 1)}
     vlans = []
-    for vid, zone, third, plen, purpose in OOB_VLANS:
+    for vid, zone, third, plen, purpose in D["vlans"]:
         vlans.append({"name": VLAN_NAME.format(site=site, zone=zone.removeprefix("OOB")), "vlan": vid, "zone": zone,
                       "prefix": str(zone_net(site, vid)), "description": f"OOB VLAN: {purpose}"})
     vlan_name = {v["vlan"]: v["name"] for v in vlans}
@@ -184,89 +308,101 @@ def build_oob(site: str, counts: dict, prod: list[dict]) -> dict:
     def cable(a_dev, a_port, b_dev, b_port, ctype):
         cables.append({"name": f"{a_dev} {a_port} <-> {b_dev} {b_port}", "a": (a_dev, a_port), "b": (b_dev, b_port), "type": ctype})
 
-    # ---- management ports: every device of the site -> an OOB access port (VLAN 100 production, 101 OOB infrastructure)
+    # ---- management ports: every device of the site -> an OOB access port (VLANs from oob_vlans: production, OOB infrastructure)
     consoles = {}                                                     # production device -> console spec
     mgmt_sw, console_cs = {}, {}                                      # for the pair-split guard
-    all_devs = [(p["name"], p["mgmt"], False) for p in prod] + [(d["name"], d["mgmt"], True) for d in devices]
-    for name, mgmt_if, is_oob in all_devs:
+    all_devs = [(p["name"], p["mgmt"], p["console"], False) for p in prod] + [(d["name"], d["mgmt"], d["console"], True) for d in devices]
+    zv = D["vlan_by_zone"]
+    all_vids = [v[0] for v in D["vlans"]]
+    for name, mgmt_if, console_if, is_oob in all_devs:
         prefix, n = split_name(site, name)
         slot = slot_of(site, name)
-        side = 1 if n % 2 else 2
-        mside = 3 - side if prefix in CROSS_MGMT else side
-        port = NET_PORT.format(n=slot)
-        if slot > ACCESS_PORTS:
-            raise ValueError(f"{name}: slot {slot} beyond {ACCESS_PORTS} ports")
-        vid = 101 if is_oob else 100
+        side = (n - 1) % D["slot_units"] + 1                          # unit k of its slot -> switch / console server k
+        mside = 3 - side if prefix in D["cross_mgmt"] else side
+        port = D["net_port"].format(n=slot)
+        if slot > D["access_ports"]:
+            raise ValueError(f"{name}: slot {slot} beyond {D['access_ports']} ports")
+        vid = zv[D["mgmt_zone"]["oob" if is_oob else "production"]]
         phys(net[mside], port, f"{name} {mgmt_if}", ROLE_ACCESS, l2_mode="access", access_vlan=vid, mgmt_of=name)
         if is_oob:
             phys(name, mgmt_if, f"{net[mside]} {port}", ROLE_MGMT, addr=("pool", f"{name}-{mgmt_if}"))
-        cable(name, mgmt_if, net[mside], port, "copper")
+        cable(name, mgmt_if, net[mside], port, D["cable_mgmt"])
         mgmt_sw[name] = net[mside]
         # console: every device except the console servers -> console server <side> port<slot>
         if prefix != "OOBCS":
-            cport = CS_PORT.format(n=slot)
-            phys(cs[side], cport, f"{name} {CONSOLE_IF}", ROLE_CONSOLE, console_of=name)
+            if console_if is None:
+                raise ValueError(f"{name}: device type has no console_port; fix DcimDeviceType in Infrahub")
+            cport = D["cs_port"].format(n=slot)
+            phys(cs[side], cport, f"{name} {console_if}", ROLE_CONSOLE, console_of=name)
             if is_oob:
-                phys(name, CONSOLE_IF, f"{cs[side]} {cport}", ROLE_CONSOLE)
+                phys(name, console_if, f"{cs[side]} {cport}", ROLE_CONSOLE)
             else:
-                if (name, CONSOLE_IF) in used:
-                    raise ValueError(f"port used twice: {name} {CONSOLE_IF}")
-                used.append((name, CONSOLE_IF))
-                consoles[name] = {"kind": "InterfacePhysical", "name": CONSOLE_IF, "desc": f"{cs[side]} {cport}", "role": ROLE_CONSOLE}
-            cable(name, CONSOLE_IF, cs[side], cport, "console")
+                if (name, console_if) in used:
+                    raise ValueError(f"port used twice: {name} {console_if}")
+                used.append((name, console_if))
+                consoles[name] = {"kind": "InterfacePhysical", "name": console_if, "desc": f"{cs[side]} {cport}", "role": ROLE_CONSOLE}
+            cable(name, console_if, cs[side], cport, D["cable_console"])
             console_cs[name] = cs[side]
 
-    # ---- access switch uplinks: 1 x 25G to each aggregation switch, LACP port-channel (vPC on the aggregation pair)
+    # ---- access switch uplinks: one port (DcimDeviceType uplink_ports) to each aggregation switch, LACP port-channel (vPC on the aggregation pair)
+    access_po = D["access_uplink_po"]
     for i, sw in enumerate(access, start=1):
-        tagged = [100, 101] if sw in net.values() else [102]
+        kind = split_name(site, sw)[0]                                # OOBNET / OOBBMC
+        if kind not in D["uplink_zones"]:
+            raise ValueError(f"{sw}: FabricDesign.oob_access_uplink_zones has no entry for {kind}; fix it in Infrahub")
+        tagged = [zv[z] for z in D["uplink_zones"][kind]]
+        po_n = D["agg_po_base"] + i                                   # aggregation downlink port-channel / vPC number
         members = []
-        for a, up in enumerate(ACCESS_UPLINKS, start=1):
-            dport = AGG_DOWNLINK.format(i=i)
+        for a, up in enumerate(D["access_uplinks"], start=1):
+            dport = D["agg_downlink"].format(n=i)
             phys(sw, up, f"{agg[a]} {dport}", ROLE_CORE)
             phys(agg[a], dport, f"{sw} {up}", ROLE_CORE)
-            cable(sw, up, agg[a], dport, "fiber")
+            cable(sw, up, agg[a], dport, D["cable_uplink"])
             members.append(up)
-        pch(sw, ACCESS_UPLINK_PO, f"{agg[1]}/OOBAGG2 port-channel{i}", ROLE_CORE, members, tagged=tagged)
-        for a in (1, 2):
-            pch(agg[a], f"port-channel{i}", f"{sw} {ACCESS_UPLINK_PO}", ROLE_CORE, [AGG_DOWNLINK.format(i=i)], tagged=tagged, vpc=i)
+        pch(sw, access_po, f"{agg[1]}/OOBAGG2 port-channel{po_n}", ROLE_CORE, members, tagged=tagged)
+        for a in agg:
+            pch(agg[a], f"port-channel{po_n}", f"{sw} {access_po}", ROLE_CORE, [D["agg_downlink"].format(n=i)], tagged=tagged, vpc=po_n)
 
     # ---- aggregation pair: vPC peer-link and keepalive
-    ka = ipaddress.ip_network(f"10.250.{base + KEEPALIVE_THIRD}.0/31")
-    for a in (1, 2):
+    ka = third_octet_net(base + D["keepalive_third"], D["p2p_len"])
+    peer_link_po, keepalive_if, peer_links = D["peer_link_po"], D["agg_keepalive"], D["agg_peer_link"]
+    for a in agg:
         peer = agg[3 - a]
-        for p in AGG_PEER_LINK:
+        for p in peer_links:
             phys(agg[a], p, f"{peer} {p}", ROLE_PEER_LINK)
-        pch(agg[a], PEER_LINK_PO, f"{peer} {PEER_LINK_PO}", ROLE_PEER_LINK, AGG_PEER_LINK, tagged=[100, 101, 102])
-        phys(agg[a], AGG_KEEPALIVE, f"{peer} {AGG_KEEPALIVE}", ROLE_KEEPALIVE, addr=("fixed", str(ka[a - 1]), 31),
+        pch(agg[a], peer_link_po, f"{peer} {peer_link_po}", ROLE_PEER_LINK, peer_links, tagged=list(all_vids))
+        phys(agg[a], keepalive_if, f"{peer} {keepalive_if}", ROLE_KEEPALIVE, addr=("fixed", str(ka[D["ka_host"][a]]), ka.prefixlen),
              prefix=str(ka) if a == 1 else None)                      # the /31 is written once (AGG1)
-    for p in AGG_PEER_LINK:
-        cable(agg[1], p, agg[2], p, "dac")
-    cable(agg[1], AGG_KEEPALIVE, agg[2], AGG_KEEPALIVE, "dac")
+    for p in peer_links:
+        cable(agg[1], p, agg[2], p, D["cable_peer"])
+    cable(agg[1], keepalive_if, agg[2], keepalive_if, D["cable_peer"])
 
-    # ---- OOB FortiGate pair: x1/x2 -> AGG1/AGG2 (aggregate agg-oob), HA, WAN, zone sub-interfaces (addresses on unit 1)
-    wan = ipaddress.ip_network(OOB_WAN[site])
-    ra = ipaddress.ip_network(f"10.250.{base + RA_THIRD}.0/24")
-    for u in (1, 2):
+    # ---- OOB FortiGate pair: uplink_ports (DcimDeviceType) -> AGG1/AGG2 (aggregate agg-oob), HA, WAN, zone sub-interfaces (addresses on unit 1)
+    wan = ipaddress.ip_network(D["oob_wan"])
+    ra = third_octet_net(base + D["ra_third"], D["ra_len"])
+    fw_uplinks, fw_ha, fw_wan, po_base = D["fw_uplinks"], D["fw_ha"], D["fw_wan"], D["fw_po_base"]
+    for u in fw:
         peer = fw[3 - u]
-        for a, x in enumerate(FW_UPLINKS, start=1):
-            phys(fw[u], x, f"{agg[a]} {AGG_FW_PORT[u]}", ROLE_PEERING)
-            phys(agg[a], AGG_FW_PORT[u], f"{fw[u]} {x}", ROLE_PEERING)
-            cable(fw[u], x, agg[a], AGG_FW_PORT[u], "fiber")
-            pch(agg[a], f"port-channel{20 + u}", f"{fw[u]} {FW_AGG}", ROLE_PEERING, [AGG_FW_PORT[u]],
-                tagged=[100, 101, 102], vpc=20 + u)
-        pch(fw[u], FW_AGG, f"{agg[1]}/OOBAGG2 port-channel{20 + u}", ROLE_PEERING, FW_UPLINKS)
-        for h in FW_HA:
+        agg_fw_port = D["agg_fw_port"][u]
+        for a, x in enumerate(fw_uplinks, start=1):
+            phys(fw[u], x, f"{agg[a]} {agg_fw_port}", ROLE_PEERING)
+            phys(agg[a], agg_fw_port, f"{fw[u]} {x}", ROLE_PEERING)
+            cable(fw[u], x, agg[a], agg_fw_port, D["cable_uplink"])   # same field as the access uplink
+            pch(agg[a], f"port-channel{po_base + u}", f"{fw[u]} {FW_AGG}", ROLE_PEERING, [agg_fw_port],
+                tagged=list(all_vids), vpc=po_base + u)
+        pch(fw[u], FW_AGG, f"{agg[1]}/OOBAGG2 port-channel{po_base + u}", ROLE_PEERING, fw_uplinks)
+        for h in fw_ha:
             phys(fw[u], h, f"{peer} {h}", ROLE_CORE)
-        phys(fw[u], FW_WAN, f"{WAN_PROVIDER} carrier handoff", ROLE_UPSTREAM,
-             addr=("fixed", str(wan[WAN_OUR_HOST]), wan.prefixlen) if u == 1 else None, prefix=str(wan) if u == 1 else None)
-        for vid, zone, third, plen, purpose in OOB_VLANS:
-            gw = zone_net(site, vid)[GW_HOST]
+        phys(fw[u], fw_wan, f"{D['wan_provider']} carrier handoff", ROLE_UPSTREAM,
+             addr=("fixed", str(wan[D["wan_our_host"]]), wan.prefixlen) if u == 1 else None, prefix=str(wan) if u == 1 else None)
+        for vid, zone, third, plen, purpose in D["vlans"]:
+            gw = zone_net(site, vid)[D["gw_host"]]
             virt(fw[u], FW_SUBIF.format(zone=zone, vlan=vid), vlan_name[vid], ROLE_PEERING, parent=FW_AGG,
                  addr=("plan", f"{gw}/{plen}") if u == 1 else None)
         virt(fw[u], RA_IF, "Remote-access VPN (dial-up IKEv2, MFA)", ROLE_ACCESS,
-             addr=("fixed", str(ra[1]), 24) if u == 1 else None)
-    for h in FW_HA:
-        cable(fw[1], h, fw[2], h, "copper")
+             addr=("fixed", str(ra[D["ra_host"]]), ra.prefixlen) if u == 1 else None)
+    for h in fw_ha:
+        cable(fw[1], h, fw[2], h, D["cable_ha"])
 
     for name in oob_names:
         for spec in ifs[name].values():
@@ -275,7 +411,7 @@ def build_oob(site: str, counts: dict, prod: list[dict]) -> dict:
 
     # ---- design-check data guards: pair members on different OOB switches and console servers
     pairs: dict = {}
-    for name, _, _ in all_devs:
+    for name, _, _, _ in all_devs:
         prefix, n = split_name(site, name)
         pairs.setdefault((prefix, (n + 1) // 2), []).append(name)
     for members in pairs.values():
@@ -287,8 +423,8 @@ def build_oob(site: str, counts: dict, prod: list[dict]) -> dict:
     if len(names) != len(set(names)):
         raise ValueError("duplicate cable name")
     return {"devices": devices, "ifs": ifs, "consoles": consoles, "cables": cables, "vlans": vlans,
-            "pair": {"name": PAIR_NAME.format(site=site), "members": (agg[1], agg[2]), "domain_id": OOB_VPC_DOMAIN[site]},
-            "keepalive": str(ka), "wan": {"prefix": str(wan), "ours": str(wan[WAN_OUR_HOST]), "theirs": str(wan[WAN_CARRIER_HOST])},
+            "pair": {"name": PAIR_NAME.format(site=site), "members": (agg[1], agg[2]), "domain_id": D["vpc_domain"]},
+            "keepalive": str(ka), "wan": {"prefix": str(wan), "ours": str(wan[D["wan_our_host"]]), "theirs": str(wan[D["wan_carrier_host"]])},
             "ra": str(ra)}
 
 
@@ -297,7 +433,7 @@ def print_plan(site: str, plan: dict) -> None:
           f"production console ports {len(plan['consoles'])}")
     print("--- devices: name | role | platform | device type | mgmt interface (pool)")
     for d in plan["devices"]:
-        print(f"  {d['name']:<15} {d['role']:<15} {d['platform']:<28} {DEVICE_TYPE[d['role']]:<17} {d['mgmt']} ({site}-OOB-INFRA)")
+        print(f"  {d['name']:<15} {d['role']:<15} {d['platform']:<28} {D['device_type'][d['role']]:<17} {d['mgmt']} ({site}-OOB-INFRA)")
     print(f"--- vPC {plan['pair']['name']} domain {plan['pair']['domain_id']} keepalive {plan['keepalive']}; WAN {plan['wan']}; RA pool {plan['ra']}")
     print("--- VLANs: " + ", ".join(f"{v['vlan']} {v['name']} {v['prefix']}" for v in plan["vlans"]))
     print("--- interfaces per OOB device")
@@ -322,17 +458,17 @@ class OobSiteGenerator(InfrahubGenerator):
         return address
 
     async def fixed_prefix(self, prefix: str, description: str, site, namespace):
-        """Get-or-create, saved on every run (fabric_site rule, job 032)."""
+        """Get-or-create, saved on every run (fabric_site rule: an unsaved prefix is deleted as unused)."""
         existing = await self.client.get(kind="IpamPrefix", prefix__value=prefix, raise_when_missing=False)
         if existing is not None:
-            for attr, value in (("description", description), ("status", LINK_STATUS), ("member_type", "address"), ("role", "link")):
+            for attr, value in (("description", description), ("status", D["status_link"]), ("member_type", "address"), ("role", "link")):
                 if getattr(existing, attr).value != value:
                     getattr(existing, attr).value = value
             if existing.site.id != site.id:
                 existing.site = site
             await existing.save()
             return existing
-        obj = await self.client.create(kind="IpamPrefix", data={"prefix": prefix, "description": description, "status": LINK_STATUS,
+        obj = await self.client.create(kind="IpamPrefix", data={"prefix": prefix, "description": description, "status": D["status_link"],
                                                                  "member_type": "address", "role": "link", "ip_namespace": namespace.id, "site": site.id})
         await obj.save()
         return obj
@@ -341,16 +477,22 @@ class OobSiteGenerator(InfrahubGenerator):
         """Every device of the site that is not an OOB device, with its management interface (fabric_site writes them)."""
         r = await self.client.execute_graphql(query=(
             'query { DcimDevice(location__name__value: "%s") { edges { node { id name { value } role { value } '
+            'device_type { node { name { value } console_port { value } } } '
             'interfaces(role__value: "management") { edges { node { id name { value } } } } } } } }' % site_name))
         out = []
         for e in r["DcimDevice"]["edges"]:
             n = e["node"]
-            if n["role"]["value"] in OOB_ROLES or n["role"]["value"] == "pdu" or not n["name"]["value"].startswith(f"{site_name}-"):  # pdu: diagrams P2-239
-                continue                                                  # P4A-680: only this DC's own devices
+            if n["role"]["value"] in OOB_ROLES or n["role"]["value"] == "pdu" or not n["name"]["value"].startswith(f"{site_name}-"):  # pdu: placed by site_physical
+                continue                                                  # only this DC's own devices
             mg = [x["node"] for x in n["interfaces"]["edges"]]
             if len(mg) != 1:
                 raise ValueError(f"{n['name']['value']}: expected 1 management interface, got {len(mg)} (run fabric_site first)")
-            out.append({"id": n["id"], "name": n["name"]["value"], "role": n["role"]["value"], "mgmt": mg[0]["name"]["value"], "mgmt_id": mg[0]["id"]})
+            dt = (n.get("device_type") or {}).get("node")
+            if dt is None or dt["console_port"]["value"] is None:   # console port name = DcimDeviceType.console_port
+                raise ValueError(f"{n['name']['value']}: DcimDeviceType "
+                                 f"{dt['name']['value'] if dt else '(none)'}.console_port is empty; fix it in Infrahub")
+            out.append({"id": n["id"], "name": n["name"]["value"], "role": n["role"]["value"], "mgmt": mg[0]["name"]["value"], "mgmt_id": mg[0]["id"],
+                        "console": dt["console_port"]["value"]})
         return sorted(out, key=lambda d: d["name"])
 
     # ---------------------------------------------------------------- reconciliation
@@ -388,7 +530,7 @@ class OobSiteGenerator(InfrahubGenerator):
             if pair.name.value.startswith(f"{site_name}-OOB-") and pair.name.value != plan["pair"]["name"]:
                 await self.remove(f"Pair          {pair.name.value}", pair)
         for c in await self.client.filters(kind="DcimCable"):
-            if c.name.value.startswith(f"{site_name}-") and " <-> " in c.name.value and c.name.value not in exp_cables:  # own cables only (diagrams P2-238)
+            if c.name.value.startswith(f"{site_name}-") and " <-> " in c.name.value and c.name.value not in exp_cables:  # own cables only
                 await self.remove(f"Cable         {c.name.value}", c)
         for v in await self.client.filters(kind="FabricL2Vlan", site__name__value=site_name):
             if v.name.value.startswith(f"{site_name}-OOB-") and v.name.value not in exp_vlans:
@@ -418,10 +560,10 @@ class OobSiteGenerator(InfrahubGenerator):
             raise ValueError(f"expected exactly 1 site, got {len(edges)}")
         node = edges[0]["node"]
         site_name = node["name"]["value"]
-        if site_name not in OOB_BASE:
-            # P4A-680: OOB is per DC (design); a site without an OOB_BASE entry gets nothing
-            print(f"{site_name}: no OOB in this site (OOB_BASE has {sorted(OOB_BASE)}); nothing written")
-            return
+        # OOB is per DC; the per-site FabricDesign fields (dc1_/dc2_) must exist and be set for this site
+        load_values(await load_design(self.client), site_name)
+        types = {t: await self.client.get(kind="DcimDeviceType", name__value=t) for t in set(D["device_type"].values())}
+        load_type_values(types)
         counts = {k: node[k].get("value") if isinstance(node.get(k), dict) else None for k in ("vpc_leaf_pairs", "esi_leaf_pairs", "single_leaves")}
         if any(v is None for v in counts.values()):
             raise ValueError(f"{site_name}: leaf counts not set: {counts}")
@@ -434,10 +576,14 @@ class OobSiteGenerator(InfrahubGenerator):
 
         site = await self.client.get(kind="LocationSite", name__value=site_name)
         namespace = await self.client.get(kind="IpamNamespace", name__value="default")
-        platforms = {p: await self.client.get(kind="DcimPlatform", name__value=p) for p in set(PLATFORM_BY_ROLE.values())}
-        types = {t: await self.client.get(kind="DcimDeviceType", name__value=t) for t in set(DEVICE_TYPE.values())}
+        platforms = {p: await self.client.get(kind="DcimPlatform", name__value=p) for p in set(D["platform"].values())}
+        os_version = {p: obj.os_version.value for p, obj in platforms.items()}     # DcimPlatform.os_version
+        for p, ver in sorted(os_version.items()):    # empty only where FabricDesign.oob_platforms_without_os_version allows it
+            if not ver and p not in D["no_os_platforms"]:
+                raise ValueError(f"DcimPlatform {p}.os_version is empty and {p} is not in FabricDesign.oob_platforms_without_os_version; "
+                                 "fix it in Infrahub")
         pool = await self.client.get(kind="CoreIPAddressPool", name__value=f"{site_name}-OOB-INFRA")
-        groups = {g: await self.client.get(kind="CoreStandardGroup", name__value=g) for g in set(ARTIFACT_GROUPS.values())}
+        groups = {g: await self.client.get(kind="CoreStandardGroup", name__value=g) for g in set(D["artifact_groups"].values())}
         # IP-plan owned objects: fetched, never saved (they never join this generator's tracking group)
         plan_addr = {}
         for specs in plan["ifs"].values():
@@ -451,12 +597,12 @@ class OobSiteGenerator(InfrahubGenerator):
         mgmt_addr = {}
         for d in plan["devices"]:
             ident = f"{d['name']}-{d['mgmt']}"
-            addr = await self.allocate(pool, ident, {"description": f"{d['name']} {d['mgmt']}", "status": ADDRESS_STATUS})
+            addr = await self.allocate(pool, ident, {"description": f"{d['name']} {d['mgmt']}", "status": D["status_address"]})
             mgmt_addr[d["name"]] = addr
-            payload = {"name": d["name"], "description": d["description"], "status": STATUS, "role": d["role"], "location": site.id,
-                       "platform": platforms[d["platform"]].id, "device_type": types[DEVICE_TYPE[d["role"]]].id, "primary_address": addr.id}
-            if OS_VERSION_BY_PLATFORM.get(d["platform"]):
-                payload["os_version"] = OS_VERSION_BY_PLATFORM[d["platform"]]
+            payload = {"name": d["name"], "description": d["description"], "status": D["status_device"], "role": d["role"], "location": site.id,
+                       "platform": platforms[d["platform"]].id, "device_type": types[D["device_type"][d["role"]]].id, "primary_address": addr.id}
+            if os_version.get(d["platform"]):
+                payload["os_version"] = os_version[d["platform"]]
             devices[d["name"]] = await self.upsert("DcimDevice", payload)
             print(f"{d['name']:<15} {d['role']:<15} {d['mgmt']}={addr.address.value}")
 
@@ -476,7 +622,7 @@ class OobSiteGenerator(InfrahubGenerator):
                 for s in specs.values():
                     if s["kind"] != kind:
                         continue
-                    data_ = {"name": s["name"], "device": devices[dev].id, "description": s["desc"], "role": s["role"], "status": INTERFACE_STATUS}
+                    data_ = {"name": s["name"], "device": devices[dev].id, "description": s["desc"], "role": s["role"], "status": D["status_interface"]}
                     addr = s.get("addr")
                     if addr:
                         if addr[0] == "pool":
@@ -486,14 +632,14 @@ class OobSiteGenerator(InfrahubGenerator):
                         else:
                             if s.get("prefix"):
                                 desc = (f"{plan['pair']['name']} vPC peer-keepalive" if s["role"] == ROLE_KEEPALIVE
-                                        else f"{dev[:-1]} <-> {WAN_PROVIDER} handoff (placeholder)")
+                                        else f"{dev[:-1]} <-> {D['wan_provider']} handoff (placeholder)")
                                 await self.fixed_prefix(s["prefix"], desc, site, namespace)
                                 if s["role"] == ROLE_UPSTREAM:
-                                    await self.upsert("IpamIPAddress", {"address": f"{plan['wan']['theirs']}/{addr[2]}", "status": LINK_STATUS,
-                                                                        "description": f"{WAN_PROVIDER} side of the {dev[:-1]} handoff (placeholder)",
+                                    await self.upsert("IpamIPAddress", {"address": f"{plan['wan']['theirs']}/{addr[2]}", "status": D["status_link"],
+                                                                        "description": f"{D['wan_provider']} side of the {dev[:-1]} handoff (placeholder)",
                                                                         "ip_namespace": namespace.id})
                             shared = " (shared by both units)" if dev.startswith(f"{site_name}-OOBFW") else ""
-                            a = await self.upsert("IpamIPAddress", {"address": f"{addr[1]}/{addr[2]}", "status": LINK_STATUS,
+                            a = await self.upsert("IpamIPAddress", {"address": f"{addr[1]}/{addr[2]}", "status": D["status_link"],
                                                                     "description": f"{dev[:-1] if shared else dev} {s['name']}{shared}", "ip_namespace": namespace.id})
                         data_["ip_addresses"] = [a.id]
                     if s.get("l2_mode"):
@@ -514,13 +660,13 @@ class OobSiteGenerator(InfrahubGenerator):
         console_objs = {}
         for name, s in plan["consoles"].items():
             console_objs[name] = await self.upsert("InterfacePhysical", {"name": s["name"], "device": prod_by_name[name]["id"], "description": s["desc"],
-                                                                         "role": s["role"], "status": INTERFACE_STATUS})
+                                                                         "role": s["role"], "status": D["status_interface"]})
 
         # ---- cables (endpoint A = the cabled device, B = the OOB side)
         def endpoint(dev: str, port: str):
             if dev in objs:
                 return objs[dev][port].id
-            if port == CONSOLE_IF:
+            if port == prod_by_name[dev]["console"]:
                 return console_objs[dev].id
             if prod_by_name[dev]["mgmt"] == port:
                 return prod_by_name[dev]["mgmt_id"]                      # fabric_site's interface: referenced, never saved
@@ -534,7 +680,7 @@ class OobSiteGenerator(InfrahubGenerator):
         for g in groups.values():
             await g.members.fetch()
             have = {p.id for p in g.members.peers}
-            new = [devices[d["name"]].id for d in plan["devices"] if ARTIFACT_GROUPS.get(d["role"]) == g.name.value and devices[d["name"]].id not in have]
+            new = [devices[d["name"]].id for d in plan["devices"] if D["artifact_groups"].get(d["role"]) == g.name.value and devices[d["name"]].id not in have]
             for i in new:
                 g.members.add(i)
             if new:

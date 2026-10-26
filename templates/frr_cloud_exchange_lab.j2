@@ -1,17 +1,36 @@
-{# Option 5 (D5-34): lab stand-in for the cloud exchange behind one cloud router, rendered from the router's data (same query as
+{# Option 5 lab: stand-in for the cloud exchange behind one cloud router, rendered from the router's data (same query as
    cloud_router_config.j2): one FRR container on the router's cloud-exchange port, with the AWS side (Direct Connect Gateway) in
    VRF aws and the Microsoft side (ExpressRoute MSEE) in VRF azure. VLANs, addresses, peer hosts and ASNs come from the graph and
-   the same rules as the router's template; the announced cloud prefixes are lab-only (P5), inside the blocks the router accepts; their .1 answers pings (a dummy
-   interface in the VRF), so a PROD host can ping 172.16.1.1 (AWS) and 172.30.1.1 (Azure) end to end. #}
-{% set aws_provider = "AWS" -%}{% set azure_provider = "Microsoft" -%}
-{% set aws_peer_host = 1 -%}
-{% set ms_peer_host = 2 -%}
-{% set aws_md5_key = "cisco123" -%}{% set azure_md5_key = "cisco123" -%}
-{% set cloud_bfd_interval = 300 -%}{% set cloud_bfd_mult = 3 -%}
-{% set mtu = 9216 -%}
+   the same rules as the router's template; the announced cloud prefixes are lab-only (lab_aws_test_prefix, lab_azure_test_prefix),
+   inside cloud_aws_block / cloud_azure_block; the first host of each answers pings (a dummy interface in the VRF), so a PROD host
+   can ping both clouds end to end. Port MTU: the router's cloud-exchange port; handoff VLAN MTU: the router's handoff. #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.cloud_aws_provider.value is none %}{{ missing_FabricDesign_cloud_aws_provider() }}{% endif -%}
+{%- if fd.cloud_azure_provider.value is none %}{{ missing_FabricDesign_cloud_azure_provider() }}{% endif -%}
+{%- if fd.cloud_bgp_bfd.value is none %}{{ missing_FabricDesign_cloud_bgp_bfd() }}{% endif -%}
+{%- if fd.cloud_aws_block.value is none %}{{ missing_FabricDesign_cloud_aws_block() }}{% endif -%}
+{%- if fd.cloud_azure_block.value is none %}{{ missing_FabricDesign_cloud_azure_block() }}{% endif -%}
+{%- if fd.lab_aws_test_prefix.value is none %}{{ missing_FabricDesign_lab_aws_test_prefix() }}{% endif -%}
+{%- if fd.lab_azure_test_prefix.value is none %}{{ missing_FabricDesign_lab_azure_test_prefix() }}{% endif -%}
+{% macro inside(p, b) %}{{ ((p.split("/")[0] ~ "/" ~ b.split("/")[1]) | ipaddress_interface("network") | string) == b and (p.split("/")[1] | int) >= (b.split("/")[1] | int) }}{% endmacro -%}
+{%- if inside(fd.lab_aws_test_prefix.value, fd.cloud_aws_block.value) != "True" %}{{ FabricDesign_lab_aws_test_prefix_not_inside_cloud_aws_block() }}{% endif -%}
+{%- if inside(fd.lab_azure_test_prefix.value, fd.cloud_azure_block.value) != "True" %}{{ FabricDesign_lab_azure_test_prefix_not_inside_cloud_azure_block() }}{% endif -%}
+{% set aws_provider = fd.cloud_aws_provider.value -%}{% set azure_provider = fd.cloud_azure_provider.value -%}
+{%- if fd.aws_peer_host.value is none %}{{ missing_FabricDesign_aws_peer_host() }}{% endif -%}
+{%- if fd.er_provider_host.value is none %}{{ missing_FabricDesign_er_provider_host() }}{% endif -%}
+{%- if fd.aws_bgp_password.value is none %}{{ missing_FabricDesign_aws_bgp_password() }}{% endif -%}
+{%- if fd.azure_bgp_password.value is none %}{{ missing_FabricDesign_azure_bgp_password() }}{% endif -%}
+{%- if fd.cloud_bfd_interval_ms.value is none %}{{ missing_FabricDesign_cloud_bfd_interval_ms() }}{% endif -%}
+{%- if fd.cloud_bfd_multiplier.value is none %}{{ missing_FabricDesign_cloud_bfd_multiplier() }}{% endif -%}
+{%- if fd.bfd_echo.value is none %}{{ missing_FabricDesign_bfd_echo() }}{% endif -%}
+{% set aws_peer_host = fd.aws_peer_host.value -%}
+{% set ms_peer_host = fd.er_provider_host.value -%}
+{% set aws_md5_key = fd.aws_bgp_password.value -%}{% set azure_md5_key = fd.azure_bgp_password.value -%}
+{% set cloud_bfd_interval = fd.cloud_bfd_interval_ms.value -%}{% set cloud_bfd_mult = fd.cloud_bfd_multiplier.value -%}
 {% set table_base = 1000 -%}
-{% set aws_test_net = "172.16.1.0/24" -%}{# P5 (D5-34): inside the AWS block 172.16.0.0/13 le 24 #}
-{% set azure_test_net = "172.30.1.0/24" -%}{# P5 (D5-34): inside the Azure block 172.30.0.0/15 le 24 #}
+{% set aws_test_net = fd.lab_aws_test_prefix.value -%}{# lab-only; checked above to sit inside cloud_aws_block #}
+{% set azure_test_net = fd.lab_azure_test_prefix.value -%}{# lab-only; checked above to sit inside cloud_azure_block #}
 {% set port = "cr" -%}{# P5: this node's port toward the cloud router #}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
@@ -20,6 +39,8 @@
 {% set site_name = device.location.node.name.value -%}
 {% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
 {% set virtual = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
+{% set xc = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | selectattr("role.value", "equalto", "cloud_handoff") | list | first -%}
+{% set mtu = xc.mtu.value -%}{# MTU of the router's cloud-exchange port this port faces #}
 {% set handoffs = virtual | selectattr("role.value", "equalto", "cloud_handoff") | list | sort(attribute="name.value") -%}
 {% set hs = namespace(aws=none, azure=none, aws_asn=none, azure_asn=none) -%}
 {% for h in handoffs %}{% if h.description.value.startswith(aws_provider ~ " ") %}{% set hs.aws = h %}{% elif h.description.value.startswith(azure_provider ~ " ") %}{% set hs.azure = h %}{% endif %}{% endfor -%}
@@ -45,7 +66,7 @@ ip link set {{ vrf }} up
 ip link add link {{ port }} name {{ port }}.{{ vid }} type vlan id {{ vid }} 2>/dev/null || true
 ip link set {{ port }}.{{ vid }} master {{ vrf }}
 ip addr replace {{ peer }}/{{ ours.split("/")[1] }} dev {{ port }}.{{ vid }}
-ip link set {{ port }}.{{ vid }} up
+ip link set {{ port }}.{{ vid }} mtu {{ h.mtu.value }} up
 ip link add {{ vrf }}-net type dummy 2>/dev/null || true
 ip link set {{ vrf }}-net master {{ vrf }}
 ip addr replace {{ test | ipaddress_interface("network") | string | get_first_usable }}/{{ test.split("/")[1] }} dev {{ vrf }}-net
@@ -63,7 +84,11 @@ bfd
   transmit-interval {{ cloud_bfd_interval }}
   receive-interval {{ cloud_bfd_interval }}
   detect-multiplier {{ cloud_bfd_mult }}
+{% if fd.bfd_echo.value %}
+  echo-mode
+{% else %}
   no echo-mode
+{% endif %}
  exit
 exit
 !
@@ -75,7 +100,9 @@ router bgp {{ pasn }} vrf {{ vrf }}
  neighbor {{ rtr }} remote-as {{ asn }}
  neighbor {{ rtr }} description {{ name }} {{ h.name.value }}
  neighbor {{ rtr }} password {{ key }}
+{% if fd.cloud_bgp_bfd.value %}
  neighbor {{ rtr }} bfd profile CLOUD-BFD
+{% endif %}
  address-family ipv4 unicast
   network {{ test }}
  exit-address-family

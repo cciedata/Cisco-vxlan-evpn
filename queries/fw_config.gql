@@ -1,4 +1,4 @@
-# Phase 2 PC3: FortiGate units (Internal FW and Internet FW). Shared A/P addresses sit on unit 1's interfaces only,
+# FortiGate units (Internal FW and Internet FW). Shared A/P addresses sit on unit 1's interfaces only,
 # so the templates derive every interface address from the attachments and L2-only VLANs (identical config on both units).
 query FwConfig($device: String!) {
   DcimDevice(name__value: $device) {
@@ -8,18 +8,19 @@ query FwConfig($device: String!) {
         name { value }
         role { value }
         asn { node { asn { value } } }
-        primary_address { node { address { value } } }
+        device_type { node { ha_ports { value } vrf_leak_link_ports { value } } }
         location {
           node {
             ... on LocationSite {
               name { value }
               fabric_asn { node { asn { value } } }
-              owned_prefixes { edges { node { prefix { value } } } }
+              owned_prefixes { edges { node { prefix { value } role { value } } } }
               vrfs {
                 edges {
                   node {
                     name { value }
                     multisite { value }
+                    fw_prepend { value }
                     summaries { edges { node { prefix { value } site { node { name { value } } } } } }
                   }
                 }
@@ -36,7 +37,6 @@ query FwConfig($device: String!) {
               role { value }
               mtu { value }
               ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
-              ... on InterfacePhysical { port_channel { node { name { value } } } }
               ... on InterfacePortChannel { members { edges { node { name { value } } } } }
               ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
             }
@@ -51,7 +51,7 @@ query FwConfig($device: String!) {
         name { value }
         vlan_id { value }
         prefix { node { prefix { value } } }
-        vrf { node { name { value } } }
+        vrf { node { name { value } fortios_vrf_id { value } } }
         switch_pair { node { name { value } members { edges { node { name { value } } } } } }
       }
     }
@@ -67,15 +67,42 @@ query FwConfig($device: String!) {
       }
     }
   }
+  # ISP routers with all their interfaces: the templates pick the edge-VLAN sub-interface by name from FabricDesign
+  # (isp_bundle_id, edge_vlan), so no design value is written in this query
   IspRouters: DcimDevice(role__value: "isp_router") {
     edges {
       node {
         name { value }
         location { node { name { value } } }
         asn { node { asn { value } } }
-        interfaces(name__value: "Bundle-Ether21.3200") {
+        interfaces {
           edges { node { name { value } ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } }
         }
+      }
+    }
+  }
+  # Design values (FabricDesign) read by internal_fw_config.j2 and internet_fw_config.j2
+  FabricDesign {
+    count
+    edges {
+      node {
+        attachment_device_host { value } attachment_leaf_hosts { value } bfd_interval_ms { value } bfd_multiplier { value }
+        bfd_min_rx_ms { value }
+        dc1_attachment_bgp_password { value } dc2_attachment_bgp_password { value }
+        dc1_fw_ha_group_offset { value } dc2_fw_ha_group_offset { value }
+        dc1_internet_edge_bgp_password { value } dc2_internet_edge_bgp_password { value }
+        dmz_gateway_host { value } edge_vlan_hosts { value } fw_allow_subnet_overlap { value } fw_aspath_action { value }
+        fw_bgp_graceful_restart { value } fw_ha_priority { value } fw_leak_fourth_octet_base { value } fw_prepend_count { value }
+        fw_prepend_home_site { value } ha_heartbeat_priority { value } ha_mode { value } ha_monitor_aggregates { value }
+        ha_preempt { value } ha_reserved_mgmt_interface { value } ha_session_pickup { value } internal_fw_block_third_octet { value }
+        internal_fw_ha_group_base { value } internet_fw_ha_group_base { value } lacp_mode { value } mtu_fw_subinterface { value }
+        oob_gateway_host { value } route_policy_seq_step { value } transit_vrf { value }
+    fw_mgmt_allowed_access { value }
+        attachment_bgp_bfd { value } bfd_echo { value } edge_vlan { value } fw_bfd { value } fw_mtu_override { value }
+        fw_router_id_source { value } internal_fw_npu_vlink { value } internal_fw_vlink_prefix_length { value }
+        internal_fw_vlink_tenant_host { value } internal_fw_vlink_transit_host { value } internal_fw_vlink_vlan_rule { value }
+        internet_edge_bgp_bfd { value } internet_fw_originate_public { value } internet_fw_outside_vrf { value }
+        internet_fw_static_route_id_base { value } isp_bundle_id { value }
       }
     }
   }

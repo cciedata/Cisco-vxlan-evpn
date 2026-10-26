@@ -17,31 +17,25 @@ queries:
     file_path: queries/l2_pair_config.gql
   - name: fw_config
     file_path: queries/fw_config.gql
-  # Phase 4 PC3
   - name: sdwan_fw_config
     file_path: queries/sdwan_fw_config.gql
-  # Phase 4 PC4
   - name: vpn_fw_config
     file_path: queries/vpn_fw_config.gql
-  # Phase 4 PC5
   - name: isp_router_config
     file_path: queries/isp_router_config.gql
-  # Phase 4 PC6
   - name: oob_site
     file_path: queries/oob_site.gql
   - name: oob_switch_config
     file_path: queries/oob_switch_config.gql
   - name: oob_fw_config
     file_path: queries/oob_fw_config.gql
-  # Phase 3 (lab)
+  # Lab
   - name: lab_site
     file_path: queries/lab_site.gql
-  # Phase 4 PC1
   - name: bgw_config
     file_path: queries/bgw_config.gql
   - name: dci_config
     file_path: queries/dci_config.gql
-  # Phase 4 PC2
   - name: cloud_router_config
     file_path: queries/cloud_router_config.gql
   - name: site_physical
@@ -56,6 +50,14 @@ queries:
     file_path: queries/site_cable_schedule.gql
   - name: lab_site_full
     file_path: queries/lab_site_full.gql
+  # FabricDesign checks
+  - name: design_overlap_check
+    file_path: queries/design_overlap_check.gql
+  - name: design_copy_check
+    file_path: queries/design_copy_check.gql
+  # ESI pair members run at least their device type's esi_min_release
+  - name: esi_release_check
+    file_path: queries/esi_release_check.gql
 
 jinja2_transforms:
   - name: spine_config
@@ -86,12 +88,10 @@ jinja2_transforms:
     description: Internet FortiGate FortiOS config (routing only)
     query: fw_config
     template_path: templates/internet_fw_config.j2
-  # Phase 4 PC3
   - name: sdwan_fw_config
     description: SD-WAN hub FortiGate FortiOS config (routing only, ADVPN 2.0 hub)
     query: sdwan_fw_config
     template_path: templates/sdwan_fw_config.j2
-  # Phase 4 PC4
   - name: vpn_fw_config
     description: VPN-partner FortiGate FortiOS config (routing only, route-based IKEv2 per partner)
     query: vpn_fw_config
@@ -100,7 +100,6 @@ jinja2_transforms:
     description: ISP router IOS XR config
     query: isp_router_config
     template_path: templates/isp_router_config.j2
-  # Phase 4 PC6
   - name: oob_switch_config
     description: OOB aggregation and access switch NX-OS config (L2, OOB VLANs)
     query: oob_switch_config
@@ -109,7 +108,7 @@ jinja2_transforms:
     description: OOB FortiGate FortiOS config (zones, policies, routes, IPsec to the other DC, remote access)
     query: oob_fw_config
     template_path: templates/oob_fw_config.j2
-  # Phase 3 (lab): stand-in scripts (FRR: FWs and, since 8 Oct, ISP routers) and the XRd variant of the ISP router config
+  # Lab: stand-in scripts (FRR: FWs and ISP routers) and the XRd variant of the ISP router config
   - name: internal_fw_lab
     description: Internal FW lab stand-in (FRR init script)
     query: fw_config
@@ -130,7 +129,6 @@ jinja2_transforms:
     description: ISP router lab stand-in (FRR init script)
     query: isp_router_config
     template_path: templates/frr_isp_router_lab.j2
-  # Phase 4 PC1
   - name: bgw_config
     description: Border gateway NX-OS config (anycast BGW, EVPN Multi-Site)
     query: bgw_config
@@ -139,7 +137,6 @@ jinja2_transforms:
     description: DCI switch NX-OS config (routed, inter-site circuits)
     query: dci_config
     template_path: templates/dci_config.j2
-  # Phase 4 PC2
   - name: cloud_router_config
     description: Cloud router IOS XR config (AWS Direct Connect, Azure ExpressRoute, TRANSIT)
     query: cloud_router_config
@@ -234,7 +231,6 @@ artifact_definitions:
     content_type: text/plain
     targets: fabric-internet-fws
     transformation: internet_fw_config
-  # Phase 4 PC3
   - name: sdwan_fw_fortios_config
     artifact_name: fortios-config
     parameters:
@@ -242,7 +238,6 @@ artifact_definitions:
     content_type: text/plain
     targets: fabric-sdwan-fws
     transformation: sdwan_fw_config
-  # Phase 4 PC4
   - name: vpn_fw_fortios_config
     artifact_name: fortios-config
     parameters:
@@ -257,7 +252,6 @@ artifact_definitions:
     content_type: text/plain
     targets: fabric-isp-routers
     transformation: isp_router_config
-  # Phase 4 PC6
   - name: oob_switch_startup_config
     artifact_name: startup-config
     parameters:
@@ -272,7 +266,6 @@ artifact_definitions:
     content_type: text/plain
     targets: oob-fws
     transformation: oob_fw_config
-  # Phase 4 PC1
   - name: bgw_startup_config
     artifact_name: startup-config
     parameters:
@@ -287,7 +280,6 @@ artifact_definitions:
     content_type: text/plain
     targets: fabric-dci-switches
     transformation: dci_config
-  # Phase 4 PC2
   - name: cloud_router_iosxr_config
     artifact_name: iosxr-config
     parameters:
@@ -295,7 +287,7 @@ artifact_definitions:
     content_type: text/plain
     targets: fabric-cloud-routers
     transformation: cloud_router_config
-  # Phase 3 (lab)
+  # Lab
   - name: internal_fw_lab_init
     artifact_name: frr-lab-init
     parameters:
@@ -446,7 +438,7 @@ generator_definitions:
     convert_query_response: false
     parameters:
       site: name__value
-  # Phase 4 PC6: OOB devices and cabling (runs after fabric_site: it cables the production management ports)
+  # OOB devices and cabling (runs after fabric_site: it cables the production management ports)
   - name: oob_site
     file_path: generators/oob_site.py
     targets: oob-sites
@@ -471,9 +463,20 @@ check_definitions:
     targets: fabric-sites
     parameters:
       name: name__value
+  # Global checks (no targets): they read the single FabricDesign object
+  - name: design_overlap_check
+    file_path: checks/design_overlap_check.py
+    class_name: DesignOverlapCheck
+  - name: design_copy_check
+    file_path: checks/design_copy_check.py
+    class_name: DesignCopyCheck
+  # Global check (no targets): every FabricEsiPair member's platform os_version >= its device type's esi_min_release
+  - name: esi_release_check
+    file_path: checks/esi_release_check.py
+    class_name: EsiReleaseCheck
 
 python_transforms:
-  # Phase 3 (lab)
+  # Lab
   - name: lab_topology
     class_name: LabTopology
     file_path: transforms/lab.py

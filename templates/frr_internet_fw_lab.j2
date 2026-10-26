@@ -1,45 +1,74 @@
-{# Phase 3 (P3-44, P3-62..P3-65, P3-67): lab stand-in for an Internet FortiGate, as one POSIX shell script run in an FRR container
+{# Lab stand-in for an Internet FortiGate, as one POSIX shell script run in an FRR container
    (containerlab exec). Linux side: LACP aggregates, VLAN sub-interfaces, one kernel VRF for FortiOS VRF 1. FRR side mirrors
    internet_fw_config.j2: blackhole + network for the public /24, prefix-lists, route-maps, eBGP to the border leaves (TRANSIT)
-   and to both ISP routers (edge VLAN), BFD 1000 x 3, graceful restart, password. Lab-only (P3-67): source NAT of the site's
+   and to both ISP routers (edge VLAN), BFD (bfd_interval_ms x bfd_multiplier), graceful restart, password. Lab-only: source NAT of the site's
    tenant summaries to the Internet FW NAT pool /25, so return traffic from the carriers reaches the tenant test host. #}
-{# Approved constants: FortiOS values (PC3) reused; lab-only values (Phase 3, auto-approved) marked P3 #}
-{% set table_vrf = 1 -%}
-{% set transit_vrf = "TRANSIT" -%}
-{% set bgp_password = "cisco123" -%}
-{% set bfd_tx = 999 -%}{% set bfd_rx = 999 -%}{% set bfd_mult = 3 -%}
-{% set seq_step = 10 -%}
-{% set fw_host = 3 -%}
-{% set edge_fw_host = 10 -%}
-{% set dmz_gw_host = 1 -%}
-{% set mtu = 9216 -%}
-{% set table_base = 1000 -%}{# P3-63 #}
-{% set bfd_profile = "FW-BFD" -%}{# P3-64 #}
-{% set bond_mode = "802.3ad" -%}{# P3-65 #}
+{# Constants: the FortiOS config's values reused, plus lab-only values #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.transit_vrf.value is none %}{{ missing_FabricDesign_transit_vrf() }}{% endif -%}
+{%- if fd.bfd_interval_ms.value is none %}{{ missing_FabricDesign_bfd_interval_ms() }}{% endif -%}
+{%- if fd.bfd_multiplier.value is none %}{{ missing_FabricDesign_bfd_multiplier() }}{% endif -%}
+{%- if fd.bfd_min_rx_ms.value is none %}{{ missing_FabricDesign_bfd_min_rx_ms() }}{% endif -%}
+{%- if fd.route_policy_seq_step.value is none %}{{ missing_FabricDesign_route_policy_seq_step() }}{% endif -%}
+{%- if fd.attachment_device_host.value is none %}{{ missing_FabricDesign_attachment_device_host() }}{% endif -%}
+{%- if fd.edge_vlan_hosts.value is none %}{{ missing_FabricDesign_edge_vlan_hosts() }}{% endif -%}
+{%- if fd.dmz_gateway_host.value is none %}{{ missing_FabricDesign_dmz_gateway_host() }}{% endif -%}
+{%- if fd.mtu_fw_subinterface.value is none %}{{ missing_FabricDesign_mtu_fw_subinterface() }}{% endif -%}
+{%- if fd.fw_bgp_graceful_restart.value is none %}{{ missing_FabricDesign_fw_bgp_graceful_restart() }}{% endif -%}
+{%- if fd.attachment_leaf_hosts.value is none %}{{ missing_FabricDesign_attachment_leaf_hosts() }}{% endif -%}
+{%- if fd.bfd_echo.value is none %}{{ missing_FabricDesign_bfd_echo() }}{% endif -%}
+{%- if fd.attachment_bgp_bfd.value is none %}{{ missing_FabricDesign_attachment_bgp_bfd() }}{% endif -%}
+{%- if fd.internet_edge_bgp_bfd.value is none %}{{ missing_FabricDesign_internet_edge_bgp_bfd() }}{% endif -%}
+{%- if fd.isp_bundle_id.value is none %}{{ missing_FabricDesign_isp_bundle_id() }}{% endif -%}
+{%- if fd.edge_vlan.value is none %}{{ missing_FabricDesign_edge_vlan() }}{% endif -%}
+{# table_vrf: FabricVRF.fortios_vrf_id of the TRANSIT attachment (read below from the graph) #}
+{% set transit_vrf = fd.transit_vrf.value -%}
+{% set bfd_tx = fd.bfd_interval_ms.value -%}{% set bfd_rx = fd.bfd_min_rx_ms.value -%}{% set bfd_mult = fd.bfd_multiplier.value -%}
+{% set seq_step = fd.route_policy_seq_step.value -%}
+{% set fw_host = fd.attachment_device_host.value -%}
+{% set edge_fw_host = fd.edge_vlan_hosts.value["INETFW"] -%}
+{% set dmz_gw_host = fd.dmz_gateway_host.value -%}
+{% set mtu = fd.mtu_fw_subinterface.value -%}
+{% set table_base = 1000 -%}{# kernel table = 1000 + FortiOS VRF id #}
+{% set bfd_profile = "FW-BFD" -%}{# BFD profile name used in this lab script #}
+{% set bond_mode = "802.3ad" -%}{# LACP like FortiOS lacp-mode active #}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set name = device.name.value -%}
 {% set asn = device.asn.node.asn.value -%}
 {% set site = device.location.node -%}
 {% set site_name = site.name.value -%}
+{% set pw_key = site_name | lower ~ "_attachment_bgp_password" -%}
+{% set edge_key = site_name | lower ~ "_internet_edge_bgp_password" -%}
+{%- if fd[pw_key] is not defined or fd[pw_key].value is none %}{{ fd["missing_FabricDesign_" ~ pw_key].value() }}{% endif -%}
+{%- if fd[edge_key] is not defined or fd[edge_key].value is none %}{{ fd["missing_FabricDesign_" ~ edge_key].value() }}{% endif -%}
 {% set fabric_asn = site.fabric_asn.node.asn.value -%}
 {% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
 {% set aggs = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | sort(attribute="name.value") -%}
 {% set transit_att = data.FabricAttachment.edges | map(attribute="node") | list | selectattr("vrf.node.name.value", "equalto", transit_vrf) | list | first -%}
+{%- if transit_att.vrf.node.fortios_vrf_id.value is none %}{{ missing_FabricVRF_fortios_vrf_id() }}{% endif -%}
+{% set table_vrf = transit_att.vrf.node.fortios_vrf_id.value -%}
 {% set l2_site = data.FabricL2Vlan.edges | map(attribute="node") | list | selectattr("site.node.name.value", "equalto", site_name) | list | sort(attribute="vlan_id.value") -%}
 {% set edge_vlan = l2_site | selectattr("switch_pair.node.name.value", "equalto", site_name ~ "-VPC-EDGE1-EDGE2") | list | first -%}
 {% set dmz_vlans = l2_site | selectattr("switch_pair.node.name.value", "equalto", site_name ~ "-VPC-DMZ1-DMZ2") | list -%}
 {% set isps = data.IspRouters.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list | sort(attribute="name.value") -%}
-{% set pub_ns = namespace(p24=none, p25=none) -%}
-{% for p in site.owned_prefixes.edges | map(attribute="node.prefix.value") | list %}{% if not p.startswith("10.") %}{% if p.split("/")[1] == "24" %}{% set pub_ns.p24 = p %}{% elif p.split("/")[1] == "25" %}{% set pub_ns.p25 = p %}{% endif %}{% endif %}{% endfor -%}
+{# The ISP router's edge-VLAN sub-interface (same name rule as generators/fabric_site.py: Bundle-Ether<isp_bundle_id>.<edge_vlan>) #}
+{% set isp_edge_if = "Bundle-Ether" ~ fd.isp_bundle_id.value ~ "." ~ fd.edge_vlan.value -%}
+{% macro isp_addr(r) %}{% set i = r.interfaces.edges | map(attribute="node") | selectattr("name.value", "equalto", isp_edge_if) | list | first %}{% if i is not defined or not i.ip_addresses.edges %}{{ missing_IspRouter_edge_subinterface_address() }}{% else %}{{ i.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") }}{% endif %}{% endmacro -%}
+{% set pub_ns = namespace(p24=none, p25=none) -%}   {#- found by IpamPrefix.role: public_block, public_nat_pool -#}
+{% for o in site.owned_prefixes.edges | map(attribute="node") | list %}{% if o.role.value == "public_block" %}{% set pub_ns.p24 = o.prefix.value %}{% elif o.role.value == "public_nat_pool" %}{% set pub_ns.p25 = o.prefix.value %}{% endif %}{% endfor -%}
 {% set summ_ns = namespace(pairs=[]) -%}
 {% for v in site.vrfs.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for s in v.summaries.edges | map(attribute="node") | list | sort(attribute="prefix.value") %}{% if v.multisite.value or (s.site.node is not none and s.site.node.name.value == site_name) %}{% set summ_ns.pairs = summ_ns.pairs + [(v.name.value, s.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
 {% set site_summaries = summ_ns.pairs | rejectattr("0", "equalto", transit_vrf) | map(attribute="1") | unique | list -%}
+{% macro obj_mtu(n) %}{% set i = interfaces | selectattr("name.value", "equalto", n) | list | first %}{% if i is not defined or i.mtu.value is none %}{{ missing_Interface_mtu() }}{% else %}{{ i.mtu.value }}{% endif %}{% endmacro -%}   {#- physical members and aggregates: the interface object's MTU, as the FortiOS config -#}
 {% macro host(p, n) %}{% set o = p.split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + n }}/{{ p.split("/")[1] }}{% endmacro -%}
 {% set router_id = host(transit_att.prefix.node.prefix.value, fw_host) | ipaddress_interface("ip") -%}
 {% set inside_if = transit_vrf ~ "-" ~ transit_att.vlan_id.value -%}
 {% set outside_if = "OUTSIDE-" ~ edge_vlan.vlan_id.value -%}
 {% set nat_first = host(pub_ns.p25, 1) | ipaddress_interface("ip") -%}
+{% macro parent_of(n) %}{{ (interfaces | selectattr("name.value", "equalto", n) | list | first).parent_interface.node.name.value }}{% endmacro -%}   {#- template_name_reads: the aggregate a FortiOS sub-interface sits on -#}
+{% macro bgp_password(src) %}{% if src == outside_if %}{{ fd[edge_key].value }}{% else %}{{ fd[pw_key].value }}{% endif %}{% endmacro -%}   {#- ISP routers on the outside leg, leaves on the inside leg -#}
 {% set nat_last = host(pub_ns.p25, (2 ** (32 - (pub_ns.p25.split("/")[1] | int))) - 2) | ipaddress_interface("ip") -%}
 #!/bin/sh
 # {{ name }}: lab stand-in for the Internet FortiGate (FRR in a Linux container). Rendered by Infrahub, do not edit.
@@ -55,21 +84,21 @@ ip link set vrf{{ table_vrf }} up
 {% for a in aggs %}
 ip link add {{ a.name.value }} type bond mode {{ bond_mode }} 2>/dev/null || true
 {% for m in a.members.edges | map(attribute="node.name.value") | list | sort %}
-if [ -e /sys/class/net/{{ m }} ]; then ip link set {{ m }} down; ip link set {{ m }} mtu {{ mtu }}; ip link set {{ m }} master {{ a.name.value }}; ip link set {{ m }} up; fi
+if [ -e /sys/class/net/{{ m }} ]; then ip link set {{ m }} down; ip link set {{ m }} mtu {{ obj_mtu(m) }}; ip link set {{ m }} master {{ a.name.value }}; ip link set {{ m }} up; fi
 {% endfor %}
-ip link set {{ a.name.value }} mtu {{ mtu }} up
+ip link set {{ a.name.value }} mtu {{ obj_mtu(a.name.value) }} up
 {% endfor %}
 # --- VLAN sub-interfaces: inside (TRANSIT), outside (edge VLAN), DMZ
-{% set sub_ns = namespace(items=[(inside_if, "agg-inside", transit_att.vlan_id.value, host(transit_att.prefix.node.prefix.value, fw_host)),
-                                  (outside_if, "agg-outside", edge_vlan.vlan_id.value, host(edge_vlan.prefix.node.prefix.value, edge_fw_host))]) -%}
-{% for v in dmz_vlans %}{% set sub_ns.items = sub_ns.items + [("DMZ-" ~ v.vlan_id.value, "agg-dmz", v.vlan_id.value, host(v.prefix.node.prefix.value, dmz_gw_host))] %}{% endfor -%}
+{% set sub_ns = namespace(items=[(inside_if, parent_of(inside_if), transit_att.vlan_id.value, host(transit_att.prefix.node.prefix.value, fw_host)),
+                                  (outside_if, parent_of(outside_if), edge_vlan.vlan_id.value, host(edge_vlan.prefix.node.prefix.value, edge_fw_host))]) -%}
+{% for v in dmz_vlans %}{% set sub_ns.items = sub_ns.items + [("DMZ-" ~ v.vlan_id.value, parent_of("DMZ-" ~ v.vlan_id.value), v.vlan_id.value, host(v.prefix.node.prefix.value, dmz_gw_host))] %}{% endfor -%}
 {% for ifn, parent, vid, addr in sub_ns.items %}
 ip link add link {{ parent }} name {{ ifn }} type vlan id {{ vid }} 2>/dev/null || true
 ip link set {{ ifn }} master vrf{{ table_vrf }}
 ip addr replace {{ addr }} dev {{ ifn }}
 ip link set {{ ifn }} mtu {{ mtu }} up
 {% endfor %}
-# --- lab-only source NAT toward the ISP routers (P3-67)
+# --- lab-only source NAT toward the ISP routers
 command -v iptables >/dev/null || apk add --no-cache iptables >/dev/null
 {% for p in site_summaries %}
 iptables -t nat -C POSTROUTING -s {{ p }} -o {{ outside_if }} -j SNAT --to-source {{ nat_first }}-{{ nat_last }} 2>/dev/null || iptables -t nat -A POSTROUTING -s {{ p }} -o {{ outside_if }} -j SNAT --to-source {{ nat_first }}-{{ nat_last }}
@@ -106,27 +135,35 @@ bfd
   transmit-interval {{ bfd_tx }}
   receive-interval {{ bfd_rx }}
   detect-multiplier {{ bfd_mult }}
+{% if fd.bfd_echo.value %}
+  echo-mode
+{% else %}
   no echo-mode
+{% endif %}
  exit
 exit
 !
 {% set leaves = transit_att.switch_pair.node.members.edges | map(attribute="node.name.value") | list | sort_interface_list -%}
 {% set nb_ns = namespace(items=[]) -%}
-{% for k in [1, 2] %}{% set nb_ns.items = nb_ns.items + [(host(transit_att.prefix.node.prefix.value, k) | ipaddress_interface("ip"), fabric_asn, leaves[k - 1], inside_if, transit_vrf ~ "-FROM-LEAF", transit_vrf ~ "-TO-LEAF")] %}{% endfor -%}
-{% for r in isps %}{% set nb_ns.items = nb_ns.items + [(r.interfaces.edges[0].node.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip"), r.asn.node.asn.value, r.name.value, outside_if, "FROM-ISP", "TO-ISP")] %}{% endfor -%}
+{% for k in fd.attachment_leaf_hosts.value %}{% set nb_ns.items = nb_ns.items + [(host(transit_att.prefix.node.prefix.value, k) | ipaddress_interface("ip"), fabric_asn, leaves[loop.index0], inside_if, transit_vrf ~ "-FROM-LEAF", transit_vrf ~ "-TO-LEAF", fd.attachment_bgp_bfd.value)] %}{% endfor -%}
+{% for r in isps %}{% set nb_ns.items = nb_ns.items + [(isp_addr(r), r.asn.node.asn.value, r.name.value, outside_if, "FROM-ISP", "TO-ISP", fd.internet_edge_bgp_bfd.value)] %}{% endfor -%}
 router bgp {{ asn }} vrf vrf{{ table_vrf }}
  bgp router-id {{ router_id }}
+{% if fd.fw_bgp_graceful_restart.value %}
  bgp graceful-restart
-{% for peer, ras, desc, src, rin, rout in nb_ns.items %}
+{% endif %}
+{% for peer, ras, desc, src, rin, rout, bfd in nb_ns.items %}
  neighbor {{ peer }} remote-as {{ ras }}
  neighbor {{ peer }} description {{ desc }}
- neighbor {{ peer }} password {{ bgp_password }}
+ neighbor {{ peer }} password {{ bgp_password(src) }}
  neighbor {{ peer }} update-source {{ src }}
+{% if bfd %}
  neighbor {{ peer }} bfd profile {{ bfd_profile }}
+{% endif %}
 {% endfor %}
  address-family ipv4 unicast
   network {{ pub_ns.p24 }}
-{% for peer, ras, desc, src, rin, rout in nb_ns.items %}
+{% for peer, ras, desc, src, rin, rout, bfd in nb_ns.items %}
   neighbor {{ peer }} route-map RM-{{ rin }} in
   neighbor {{ peer }} route-map RM-{{ rout }} out
 {% endfor %}

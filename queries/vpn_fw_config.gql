@@ -1,6 +1,6 @@
-# Phase 4 PC4: VPN-partner FortiGate units (FG-1800F). Shared A/P addresses sit on unit 1's interfaces only; the outside
+# VPN-partner FortiGate units (model: FabricDesign vpn_fw_device_type). Shared A/P addresses sit on unit 1's interfaces only; the outside
 # and inside addresses are derived from the edge VLAN and the PARTNER attachment, the WAN loopback address is read
-# from the pair (VpnUnits), so both units render the same config. Partners: FabricPartner (row 49 B).
+# from the pair (VpnUnits), so both units render the same config. Partners: FabricPartner.
 query VpnFwConfig($device: String!) {
   DcimDevice(name__value: $device) {
     count
@@ -9,20 +9,12 @@ query VpnFwConfig($device: String!) {
         name { value }
         role { value }
         asn { node { asn { value } } }
+        device_type { node { ha_ports { value } } }
         location {
           node {
             ... on LocationSite {
               name { value }
               fabric_asn { node { asn { value } } }
-              vrfs {
-                edges {
-                  node {
-                    name { value }
-                    multisite { value }
-                    summaries { edges { node { prefix { value } site { node { name { value } } } } } }
-                  }
-                }
-              }
             }
           }
         }
@@ -35,7 +27,6 @@ query VpnFwConfig($device: String!) {
               role { value }
               mtu { value }
               ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
-              ... on InterfacePhysical { port_channel { node { name { value } } } }
               ... on InterfacePortChannel { members { edges { node { name { value } } } } }
               ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
             }
@@ -50,7 +41,7 @@ query VpnFwConfig($device: String!) {
         name { value }
         vlan_id { value }
         prefix { node { prefix { value } } }
-        vrf { node { name { value } } }
+        vrf { node { name { value } fortios_vrf_id { value } } }
         switch_pair { node { name { value } members { edges { node { name { value } } } } } }
       }
     }
@@ -90,6 +81,31 @@ query VpnFwConfig($device: String!) {
         peer_ip { value }
         protected_prefixes { value }
         translated_prefixes { edges { node { prefix { value } site { node { name { value } } } } } }
+      }
+    }
+  }
+  # Design values (FabricDesign) read by vpn_fw_config.j2
+  FabricDesign {
+    count
+    edges {
+      node {
+        mtu_external { value }
+        attachment_device_host { value } attachment_leaf_hosts { value } bfd_interval_ms { value } bfd_multiplier { value }
+        bfd_min_rx_ms { value }
+        dc1_attachment_bgp_password { value } dc2_attachment_bgp_password { value }
+        dc1_fw_ha_group_offset { value } dc2_fw_ha_group_offset { value }
+        dc1_vpn_fw_wan_endpoint { value } dc2_vpn_fw_wan_endpoint { value }
+        edge_vlan_hosts { value } esp_keylife_s { value } esp_proposal { value } fw_bgp_graceful_restart { value } fw_ha_priority { value }
+        fw_wan_vrf_id { value } ha_heartbeat_priority { value } ha_mode { value } ha_monitor_aggregates { value } ha_preempt { value }
+        ha_reserved_mgmt_interface { value } ha_session_pickup { value } ike_dh_group { value } ike_dpd_mode { value }
+        ike_dpd_retry_interval_s { value } ike_keylife_s { value } ike_peer_type { value } ike_proposal { value } ike_version { value }
+        ipsec_add_route { value } ipsec_auto_negotiate { value } ipsec_per_peer_interface { value } lacp_mode { value }
+        mtu_fw_subinterface { value } oob_gateway_host { value } partner_vrf { value } route_policy_seq_step { value }
+        vpn_fw_ha_group_base { value } vpn_partner_ipsec_psk { value } vpn_partner_local_selector { value }
+        vpn_partner_snat_type { value } vpn_static_route_id_base { value }
+    fw_mgmt_allowed_access { value } vpn_partner_snat_range { value }
+        attachment_bgp_bfd { value } bfd_echo { value } esp_pfs_dh_group { value } fw_bfd { value } fw_mtu_override { value }
+        fw_router_id_source { value } vpn_fw_originate_partner_nat { value } wan_default_static_route_id { value }
       }
     }
   }

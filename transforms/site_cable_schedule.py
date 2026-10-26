@@ -1,26 +1,40 @@
-"""site_cable_schedule: vendor cable schedule per site (P2-183), Markdown (P2-223).
+"""site_cable_schedule: vendor cable schedule per site, Markdown.
 
 Every cross-rack cable runs: device -> jumper -> rack-local panel -> trunk -> patch rack block -> cross-connect jumper
--> patch rack block -> trunk -> rack-local panel -> jumper -> device. Same-rack cables are direct DAC (P2-174).
-Rules: blocks per rack (P2-214, P2-217, P2-218), panel names <rack>-PP<U> (P2-219), patch rack layout (P2-220),
-same port number at both ends of a trunk (P2-221), label order (P2-222), lengths (P2-224, P2-225), BOM (P2-226),
-rack-local panel U42 (P2-145, P2-227). Patch rack per cable: nearest of B05-B07 by tray distance (P2-182), ties to B06 (P2-229).
+-> patch rack block -> trunk -> rack-local panel -> jumper -> device. Same-rack cables are direct DAC.
+Rules: blocks per rack, panel names <rack>-PP<U>, patch rack layout,
+same port number at both ends of a trunk, label order, lengths, BOM,
+rack-local panel at rack_local_panel_u. Patch rack per cable: nearest of network_patch_racks by tray distance,
+ties to patch_rack_tie_break.
 """
 import re
 from collections import Counter
 
 from infrahub_sdk.transforms import InfrahubTransform
 
-RACK_WIDTH_M, ROW_PITCH_M, VERTICAL_PER_END_M = 0.8, 3.0, 3.0      # P2-178, P2-179, P2-180
-ROW_INDEX = {"A": 0, "B": 1, "C": 2, "D": 3}
-U_HEIGHT_M, SLACK_M = 0.04445, 1.0                                    # P2-196, P2-224
-STOCK_M = (1, 2, 3, 5, 7, 10, 15, 20, 30)                             # P2-181
-PATCH_RACKS = ("B05", "B06", "B07")                                   # P2-182
-TIE_BREAK = "B06"                                                     # P2-229: centre rack, no carrier
-LOCAL_PANEL_U = 42                                                    # P2-145, P2-227
-SERVER_BLOCK, NET_BLOCK = 12, 144                                     # P2-217, P2-218
-PATCH_PANEL_U = {"net1": 42, "net2": 41, "A": 40, "C": 39}            # P2-220
+U_HEIGHT_M = 0.04445                                                  # EIA-310 rack unit (physical constant)
 SHORT = (("Ethernet", "Eth"), ("FourHundredGigE", "FH"))
+# Physical / cabling design values: read from FabricDesign at the start of transform() (configure)
+DECIMAL_FIELDS = ("rack_width_m", "row_pitch_m", "vertical_per_end_m", "cable_slack_m")
+DESIGN_FIELDS = ("rack_width_m", "row_pitch_m", "vertical_per_end_m", "row_index", "cable_slack_m", "cable_stock_lengths_m",
+                 "network_patch_racks", "patch_rack_tie_break", "rack_local_panel_u", "patch_block_ports_network_rack",
+                 "patch_block_ports_server_rack", "patch_panel_u", "network_racks", "server_rows", "patch_block_first_port")
+DESIGN: dict = {}
+
+
+def configure(data: dict) -> None:
+    fd = data.get("FabricDesign") or {}
+    edges = fd.get("edges") or []
+    if fd.get("count") != 1 or len(edges) != 1:
+        raise ValueError(f"FabricDesign: expected exactly 1 object, found {fd.get('count', len(edges))}; fix it in Infrahub "
+                         "(and check that the query asks for FabricDesign)")
+    node = edges[0]["node"]
+    DESIGN.clear()
+    for f in DESIGN_FIELDS:
+        value = (node.get(f) or {}).get("value")
+        if value is None:
+            raise ValueError(f"FabricDesign.{f} is empty; fix it in Infrahub")
+        DESIGN[f] = float(value) if f in DECIMAL_FIELDS else value  # decimals stored as Text
 
 
 def short(n):
@@ -35,28 +49,36 @@ def natural(s):
 
 
 def stock(m, what):
-    for s in STOCK_M:
+    for s in DESIGN["cable_stock_lengths_m"]:
         if m <= s:
             return s
-    raise ValueError(f"{what}: {m:.1f} m exceeds {STOCK_M[-1]} m")
+    raise ValueError(f"{what}: {m:.1f} m exceeds {DESIGN['cable_stock_lengths_m'][-1]} m")
 
 
 def jumper(u1, u2, what):
-    return stock(abs(u1 - u2) * U_HEIGHT_M + SLACK_M, what)
+    return stock(abs(u1 - u2) * U_HEIGHT_M + DESIGN["cable_slack_m"], what)
 
 
 class SiteCableSchedule(InfrahubTransform):
     query = "site_cable_schedule"
 
     async def transform(self, data: dict) -> str:
+        configure(data)
+        RACK_WIDTH_M, ROW_PITCH_M, VERTICAL_PER_END_M = DESIGN["rack_width_m"], DESIGN["row_pitch_m"], DESIGN["vertical_per_end_m"]
+        ROW_INDEX, PATCH_PANEL_U = DESIGN["row_index"], DESIGN["patch_panel_u"]
+        PATCH_RACKS, TIE_BREAK, LOCAL_PANEL_U = DESIGN["network_patch_racks"], DESIGN["patch_rack_tie_break"], DESIGN["rack_local_panel_u"]
+        SERVER_BLOCK, NET_BLOCK = DESIGN["patch_block_ports_server_rack"], DESIGN["patch_block_ports_network_rack"]
+        SERVER_ROWS, FIRST_PORT = tuple(DESIGN["server_rows"]), DESIGN["patch_block_first_port"]
         racks = {}
         for e in data["LocationRack"]["edges"]:
             r = e["node"]
             racks[r["name"]["value"]] = {"row": r["row"]["value"], "pos": r["row_position"]["value"], "purpose": r["purpose"]["value"]}
         site = next(iter(racks)).split("-")[0]
-        net = sorted(n for n, r in racks.items() if r["purpose"] == "network")          # NET-A (B04) then NET-B (B08)
-        if len(net) != 2:
-            raise ValueError(f"expected 2 network racks, found {net}")
+        # network rack 1, 2 (net1 / net2 patch panels) from FabricDesign.network_racks, as generators/site_physical.py
+        net = [f"{site}-{DESIGN['network_racks'][k]}" for k in sorted(DESIGN["network_racks"], key=int)]
+        found = sorted(n for n, r in racks.items() if r["purpose"] == "network")
+        if sorted(net) != found:
+            raise ValueError(f"FabricDesign.network_racks gives {net}, the site's network racks are {found}")
 
         def xy(n):
             return (racks[n]["pos"] - 1) * RACK_WIDTH_M, ROW_INDEX[racks[n]["row"]] * ROW_PITCH_M
@@ -66,13 +88,13 @@ class SiteCableSchedule(InfrahubTransform):
             return abs(ax - bx) + abs(ay - by)
 
         def block(rack):
-            """(patch panel U, first port, block size) of this rack's block in every patch rack (P2-220)."""
+            """(patch panel U, first port, block size) of this rack's block in every patch rack."""
             r = racks[rack]
             if rack in net:
-                return PATCH_PANEL_U["net1" if rack == net[0] else "net2"], 1, NET_BLOCK
-            if r["purpose"] == "server" and r["row"] in ("A", "C"):
-                return PATCH_PANEL_U[r["row"]], (r["pos"] - 1) * SERVER_BLOCK + 1, SERVER_BLOCK
-            raise ValueError(f"{rack}: purpose {r['purpose']} has no patch block (P2-220)")
+                return PATCH_PANEL_U["net1" if rack == net[0] else "net2"], FIRST_PORT, NET_BLOCK
+            if r["purpose"] == "server" and r["row"] in SERVER_ROWS:
+                return PATCH_PANEL_U[r["row"]], FIRST_PORT + (r["pos"] - 1) * SERVER_BLOCK, SERVER_BLOCK
+            raise ValueError(f"{rack}: purpose {r['purpose']} has no patch block")
 
         owner = {}
         for e in data["DcimDevice"]["edges"]:
@@ -87,12 +109,12 @@ class SiteCableSchedule(InfrahubTransform):
             ends = [owner.get(x["node"]["id"]) for x in c["connected_endpoints"]["edges"]]
             if len(ends) != 2 or None in ends:
                 continue
-            if c["length_m"]["value"] is None:                                    # fabric cables only (P2-237)
+            if c["length_m"]["value"] is None:                                    # fabric cables only
                 continue
             label = c["name"]["value"]
-            a, b = ends if label.startswith(ends[0][0] + ":") else ends[::-1]       # upstream end first, as in the label (P2-171)
+            a, b = ends if label.startswith(ends[0][0] + ":") else ends[::-1]       # upstream end first, as in the label
             cables.append({"label": label, "type": c["cable_type"]["value"], "length": c["length_m"]["value"], "a": a, "b": b})
-        cables.sort(key=lambda c: natural(c["label"]))                               # P2-222
+        cables.sort(key=lambda c: natural(c["label"]))
 
         local_index = {}
         for c in cables:

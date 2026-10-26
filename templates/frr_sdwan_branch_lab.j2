@@ -1,21 +1,37 @@
-{# Option 5 (D5-32): lab stand-in for one SD-WAN branch behind carrier B, rendered from the hub's data (same query as
-   sdwan_fw_config.j2): the hub's WAN loopback and overlay /21 come from the graph; the branch's own values are lab-only (P5).
-   GRE stands in for the ADVPN 2.0 IPsec spoke; iBGP AS 65400 to the hub's overlay address; one branch LAN announced. #}
-{% set overlay_asn = 65400 -%}
-{% set bgp_password = "cisco123" -%}
-{% set wan_lo = "LO-WAN" -%}
-{% set tunnel = "ADVPN-HUB" -%}
-{% set mtu = 9216 -%}
-{% set branch_wan = "198.18.3.10/24" -%}{# P5 (D5-31/D5-32): carrier B's branch subnet 198.18.3.0/24, branch .10 #}
-{% set branch_wan_gw = "198.18.3.254" -%}{# P5 (D5-31): carrier side .254 #}
-{% set branch_lan = "10.64.1.1/24" -%}{# P5 (D5-32): inside the branch range 10.64.0.0/12 le 24 #}
-{% set spoke_offset = 1 -%}{# P5 (D5-32): first address of the hub's mode-cfg pool = hub tunnel + 1 #}
+{# Option 5 lab: stand-in for one SD-WAN branch behind carrier B, rendered from the hub's data (same query as
+   sdwan_fw_config.j2): the hub's WAN loopback and overlay /21 come from the graph; the branch's own values are lab-only.
+   GRE stands in for the ADVPN 2.0 IPsec spoke; iBGP in sdwan_overlay_asn to the hub's overlay address; one branch LAN announced.
+   WAN MTU: mtu_external. #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.sdwan_overlay_asn.value is none %}{{ missing_FabricDesign_sdwan_overlay_asn() }}{% endif -%}
+{%- if fd.sdwan_branch_bgp_password.value is none %}{{ missing_FabricDesign_sdwan_branch_bgp_password() }}{% endif -%}
+{%- if fd.sdwan_overlay_pool_start_offset.value is none %}{{ missing_FabricDesign_sdwan_overlay_pool_start_offset() }}{% endif -%}
+{%- if fd.mtu_external.value is none %}{{ missing_FabricDesign_mtu_external() }}{% endif -%}
+{# wan_lo / tunnel: the hub's interfaces whose addresses lie in dc*_sdwan_fw_wan_endpoint / dc*_sdwan_overlay (read below) #}
+{% set overlay_asn = fd.sdwan_overlay_asn.value -%}
+{% set bgp_password = fd.sdwan_branch_bgp_password.value -%}
+{% set mtu = fd.mtu_external.value -%}
+{% set branch_wan = "198.18.3.10/24" -%}{# lab-only: carrier B's branch subnet 198.18.3.0/24, branch .10 #}
+{% set branch_wan_gw = "198.18.3.254" -%}{# lab-only: carrier side .254 #}
+{% set branch_lan = "10.64.1.1/24" -%}{# lab-only: inside the branch range 10.64.0.0/12 le 24 #}
+{% set spoke_offset = fd.sdwan_overlay_pool_start_offset.value -%}{# lab-only: first address of the hub's mode-cfg pool = hub tunnel + 1 #}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set name = device.name.value -%}
 {% set site_name = device.location.node.name.value -%}
-{% set unit_ns = namespace(wan=none, tun=none) -%}
-{% for u in data.SdwanUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges %}{% if i.name.value == wan_lo %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% elif i.name.value == tunnel %}{% set unit_ns.tun = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endif %}{% endfor %}{% endfor -%}
+{% set wep_key = site_name | lower ~ "_sdwan_fw_wan_endpoint" -%}
+{% set ovl_key = site_name | lower ~ "_sdwan_overlay" -%}
+{%- if fd[wep_key] is not defined or fd[wep_key].value is none %}{{ fd["missing_FabricDesign_" ~ wep_key].value() }}{% endif -%}
+{%- if fd[ovl_key] is not defined or fd[ovl_key].value is none %}{{ fd["missing_FabricDesign_" ~ ovl_key].value() }}{% endif -%}
+{% set wep = fd[wep_key].value -%}
+{% set ovl = fd[ovl_key].value -%}
+{% set unit_ns = namespace(wan=none, tun=none, wan_name=none, tun_name=none) -%}
+{% for u in data.SdwanUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges %}{% set a = i.ip_addresses.edges[0].node.address.value %}{% if ((a.split("/")[0] ~ "/" ~ wep.split("/")[1]) | ipaddress_interface("network") | string) == wep %}{% set unit_ns.wan = a %}{% set unit_ns.wan_name = i.name.value %}{% elif ((a.split("/")[0] ~ "/" ~ ovl.split("/")[1]) | ipaddress_interface("network") | string) == ovl %}{% set unit_ns.tun = a %}{% set unit_ns.tun_name = i.name.value %}{% endif %}{% endif %}{% endfor %}{% endfor -%}
+{%- if unit_ns.wan_name is none %}{{ fd["missing_interface_in_" ~ wep_key].value() }}{% endif -%}
+{%- if unit_ns.tun_name is none %}{{ fd["missing_interface_in_" ~ ovl_key].value() }}{% endif -%}
+{% set wan_lo = unit_ns.wan_name -%}
+{% set tunnel = unit_ns.tun_name -%}
 {% set hub_wan = unit_ns.wan | ipaddress_interface("ip") | string -%}
 {% set hub_tun = unit_ns.tun | ipaddress_interface("ip") | string -%}
 {% set plen = unit_ns.tun | ipaddress_interface("network") | string -%}

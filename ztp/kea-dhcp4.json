@@ -11,11 +11,11 @@
     "subnet4": [
       {
         "id": 1,
-        "subnet": "10.250.99.0/24",
-        "pools": [{"pool": "10.250.99.100 - 10.250.99.150"}],
+        "subnet": "__ZTP_SUBNET__",
+        "pools": [{"pool": "__ZTP_POOL__"}],
         "option-data": [
-          {"name": "routers", "data": "10.250.99.1"},
-          {"name": "tftp-server-name", "data": "http://10.250.99.1:8080"},
+          {"name": "routers", "data": "__ZTP_SERVER_IP__"},
+          {"name": "tftp-server-name", "data": "http://__ZTP_SERVER_IP__:8080"},
           {"name": "boot-file-name", "data": "poap.py"}
         ]
       }

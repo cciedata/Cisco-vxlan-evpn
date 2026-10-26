@@ -94,7 +94,7 @@ ip link add link agg-dmz name DMZ-1415 type vlan id 1415 2>/dev/null || true
 ip link set DMZ-1415 master vrf1
 ip addr replace 10.20.143.1/24 dev DMZ-1415
 ip link set DMZ-1415 mtu 9216 up
-# --- lab-only source NAT toward the ISP routers (P3-67)
+# --- lab-only source NAT toward the ISP routers
 command -v iptables >/dev/null || apk add --no-cache iptables >/dev/null
 iptables -t nat -C POSTROUTING -s 10.20.144.0/20 -o OUTSIDE-3200 -j SNAT --to-source 203.0.113.1-203.0.113.126 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.20.144.0/20 -o OUTSIDE-3200 -j SNAT --to-source 203.0.113.1-203.0.113.126
 iptables -t nat -C POSTROUTING -s 10.20.64.0/18 -o OUTSIDE-3200 -j SNAT --to-source 203.0.113.1-203.0.113.126 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.20.64.0/18 -o OUTSIDE-3200 -j SNAT --to-source 203.0.113.1-203.0.113.126

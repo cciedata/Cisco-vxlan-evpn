@@ -1,4 +1,4 @@
-# Phase 4 PC3: SD-WAN hub FortiGate units (FG-1800F). Shared A/P addresses sit on unit 1's interfaces only; the outside
+# SD-WAN hub FortiGate units (model: FabricDesign sdwan_fw_device_type). Shared A/P addresses sit on unit 1's interfaces only; the outside
 # and inside addresses are derived from the edge VLAN and the TRANSIT attachment, the WAN loopback and hub tunnel
 # addresses are read from the pair (SdwanUnits), so both units render the same config.
 query SdwanFwConfig($device: String!) {
@@ -9,6 +9,7 @@ query SdwanFwConfig($device: String!) {
         name { value }
         role { value }
         asn { node { asn { value } } }
+        device_type { node { ha_ports { value } } }
         location {
           node {
             ... on LocationSite {
@@ -19,6 +20,7 @@ query SdwanFwConfig($device: String!) {
                   node {
                     name { value }
                     multisite { value }
+                    sdwan_excluded { value }
                     summaries { edges { node { prefix { value } site { node { name { value } } } } } }
                   }
                 }
@@ -35,7 +37,6 @@ query SdwanFwConfig($device: String!) {
               role { value }
               mtu { value }
               ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
-              ... on InterfacePhysical { port_channel { node { name { value } } } }
               ... on InterfacePortChannel { members { edges { node { name { value } } } } }
               ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
             }
@@ -50,7 +51,7 @@ query SdwanFwConfig($device: String!) {
         name { value }
         vlan_id { value }
         prefix { node { prefix { value } } }
-        vrf { node { name { value } } }
+        vrf { node { name { value } fortios_vrf_id { value } } }
         switch_pair { node { name { value } members { edges { node { name { value } } } } } }
       }
     }
@@ -79,6 +80,36 @@ query SdwanFwConfig($device: String!) {
             }
           }
         }
+      }
+    }
+  }
+  # Design values (FabricDesign) read by sdwan_fw_config.j2
+  FabricDesign {
+    count
+    edges {
+      node {
+        mtu_external { value }
+        attachment_device_host { value } attachment_leaf_hosts { value } bfd_interval_ms { value } bfd_multiplier { value }
+        bfd_min_rx_ms { value }
+        cloud_aws_block { value } cloud_azure_block { value } cloud_prefix_max_length { value }
+        dc1_attachment_bgp_password { value } dc2_attachment_bgp_password { value }
+        dc1_fw_ha_group_offset { value } dc2_fw_ha_group_offset { value }
+        dc1_sdwan_fw_wan_endpoint { value } dc2_sdwan_fw_wan_endpoint { value } dc1_sdwan_overlay { value } dc2_sdwan_overlay { value }
+        edge_vlan_hosts { value } esp_keylife_s { value } esp_proposal { value } fw_bgp_graceful_restart { value } fw_ha_priority { value }
+        fw_wan_vrf_id { value } ha_heartbeat_priority { value } ha_mode { value } ha_monitor_aggregates { value } ha_preempt { value }
+        ha_reserved_mgmt_interface { value } ha_session_pickup { value } ike_dh_group { value } ike_dpd_mode { value }
+        ike_dpd_retry_interval_s { value } ike_keylife_s { value } ike_peer_type { value } ike_proposal { value } ike_version { value }
+        ipsec_add_route { value } ipsec_per_peer_interface { value } ipsec_phase2_selector { value } lacp_mode { value }
+        mtu_fw_subinterface { value } oob_gateway_host { value } route_policy_seq_step { value } sdwan_aggregate_summary_only { value }
+        sdwan_branch_bgp_password { value } sdwan_branch_ipsec_psk { value } sdwan_branch_lan_max_length { value }
+        sdwan_branch_next_hop_self { value } sdwan_branch_next_hop_self_rr { value } sdwan_branch_summary { value }
+        sdwan_fw_ha_group_base { value } sdwan_local_as_no_prepend { value } sdwan_local_as_replace_as { value } sdwan_overlay_asn { value }
+        sdwan_overlay_pool_end_offset { value } sdwan_overlay_pool_start_offset { value } sdwan_overlay_remote_ip_offset { value }
+        sdwan_reflect_branches { value } sdwan_shortcut_discovery { value } transit_vrf { value }
+    fw_mgmt_allowed_access { value }
+        attachment_bgp_bfd { value } bfd_echo { value } esp_pfs_dh_group { value } fw_bfd { value } fw_mtu_override { value }
+        fw_router_id_source { value } sdwan_hub_aggregates { value } sdwan_hub_mode_cfg { value } sdwan_overlay_vrf { value }
+        wan_default_static_route_id { value }
       }
     }
   }

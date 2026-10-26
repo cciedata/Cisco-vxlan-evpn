@@ -1,18 +1,45 @@
-{# Phase 3 (I-04..I-20, decisions.xlsx sheet Auto-approved-ISPFRR): lab stand-in for an IOS XR ISP router, as one POSIX shell
+{# Lab stand-in for an IOS XR ISP router, as one POSIX shell
    script run in an FRR container (containerlab exec), same pattern as frr_internet_fw_lab.j2. Rendered from the same query as
    isp_router_config.j2 and mirrors its routing: eBGP to the carrier and to the Internet FW, iBGP over the cross-link, BFD
-   999 x 3, the prefix-sets and route-policies, the conditional default, the static routes. Keep in step with isp_router_config.j2. #}
-{# Approved constants: same values as isp_router_config.j2 (PC2/PC3 decisions); lab-only values (I-xx) marked #}
-{% set bgp_password = "cisco123" -%}
-{% set bfd_interval = 999 -%}{% set bfd_mult = 3 -%}
-{% set max_prefix = 1200000 -%}{% set max_prefix_pct = 90 -%}
-{% set inetfw_host = 10 -%}
-{% set wan_fw_host = {"sdwan_fw": 11, "vpn_fw": 12} -%}
-{% set carrier_host = 1 -%}
-{% set seq_step = 10 -%}
+   bfd_interval_ms x bfd_multiplier (each session gated by the same field as the router), the prefix-sets and route-policies, the
+   default to the Internet FW (isp_default_to_inetfw), the static routes (isp_static_next_hop_by_role). Keep in step with
+   isp_router_config.j2. #}
+{# Constants: the same values as isp_router_config.j2, plus lab-only values #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.isp_carrier_bgp_password.value is none %}{{ missing_FabricDesign_isp_carrier_bgp_password() }}{% endif -%}
+{%- if fd.bfd_interval_ms.value is none %}{{ missing_FabricDesign_bfd_interval_ms() }}{% endif -%}
+{%- if fd.bfd_multiplier.value is none %}{{ missing_FabricDesign_bfd_multiplier() }}{% endif -%}
+{%- if fd.bfd_min_rx_ms.value is none %}{{ missing_FabricDesign_bfd_min_rx_ms() }}{% endif -%}
+{%- if fd.isp_max_prefix.value is none %}{{ missing_FabricDesign_isp_max_prefix() }}{% endif -%}
+{%- if fd.isp_max_prefix_threshold_pct.value is none %}{{ missing_FabricDesign_isp_max_prefix_threshold_pct() }}{% endif -%}
+{%- if fd.isp_max_prefix_action.value is none %}{{ missing_FabricDesign_isp_max_prefix_action() }}{% endif -%}
+{%- if fd.isp_bgp_graceful_restart.value is none %}{{ missing_FabricDesign_isp_bgp_graceful_restart() }}{% endif -%}
+{%- if fd.edge_vlan_hosts.value is none %}{{ missing_FabricDesign_edge_vlan_hosts() }}{% endif -%}
+{%- if fd.carrier_side_host.value is none %}{{ missing_FabricDesign_carrier_side_host() }}{% endif -%}
+{%- if fd.route_policy_seq_step.value is none %}{{ missing_FabricDesign_route_policy_seq_step() }}{% endif -%}
+{%- if fd.lacp_mode.value is none %}{{ missing_FabricDesign_lacp_mode() }}{% endif -%}
+{%- if fd.isp_carrier_bgp_bfd.value is none %}{{ missing_FabricDesign_isp_carrier_bgp_bfd() }}{% endif -%}
+{%- if fd.isp_pair_bgp_bfd.value is none %}{{ missing_FabricDesign_isp_pair_bgp_bfd() }}{% endif -%}
+{%- if fd.isp_inetfw_bgp_bfd.value is none %}{{ missing_FabricDesign_isp_inetfw_bgp_bfd() }}{% endif -%}
+{%- if fd.isp_pair_next_hop_self.value is none %}{{ missing_FabricDesign_isp_pair_next_hop_self() }}{% endif -%}
+{%- if fd.isp_default_to_inetfw.value is none %}{{ missing_FabricDesign_isp_default_to_inetfw() }}{% endif -%}
+{%- if fd.isp_static_next_hop_by_role.value is none %}{{ missing_FabricDesign_isp_static_next_hop_by_role() }}{% endif -%}
+{% set snh = fd.isp_static_next_hop_by_role.value -%}{# next hop per public prefix role #}
+{%- for k in ["public_24", "nat_pool_25", "services_27", "wan_fw_endpoint"] %}{% if k not in snh %}{{ fd["missing_FabricDesign_isp_static_next_hop_by_role_" ~ k].value() }}{% endif %}{% endfor -%}
+{% macro static_nh(kind, fw_ip, edge_ip) %}{% if kind == "null0" %}blackhole{% elif kind == "internet_fw" %}{{ fw_ip }}{% elif kind == "edge_host" and edge_ip is not none %}{{ edge_ip }}{% else %}{{ unsupported_FabricDesign_isp_static_next_hop_by_role() }}{% endif %}{% endmacro -%}
+{% set carrier_bgp_password = fd.isp_carrier_bgp_password.value -%}
+{% set bfd_interval = fd.bfd_interval_ms.value -%}{% set bfd_mult = fd.bfd_multiplier.value -%}
+{% set max_prefix = fd.isp_max_prefix.value -%}{% set max_prefix_pct = fd.isp_max_prefix_threshold_pct.value -%}
+{% set inetfw_host = fd.edge_vlan_hosts.value["INETFW"] -%}
+{% set wan_fw_host = {"sdwan_fw": fd.edge_vlan_hosts.value["SDWANFW"], "vpn_fw": fd.edge_vlan_hosts.value["VPNFW"]} -%}
+{% set carrier_host = fd.carrier_side_host.value -%}
+{% set seq_step = fd.route_policy_seq_step.value -%}
 {% set bfd_profile = "ISP-BFD" -%}{# I-18 #}
-{% set bond_mode = "802.3ad" -%}{# I-10: IOS XR 'bundle id .. mode active' is LACP #}
-{% set lab_port_from = "FourHundredGigE0/0/0/" -%}{# I-08: P3-70 rule, FH0/0/0/<2k> -> Gi0-0-0-<k> (the containerlab port name) #}
+{% set lab_bond_mode = {"active": "802.3ad"} -%}{# Linux bond mode for each lacp_mode the lab supports #}
+{%- if fd.lacp_mode.value not in lab_bond_mode %}{{ unsupported_FabricDesign_lacp_mode_in_lab() }}{% endif -%}
+{% set bond_mode = lab_bond_mode[fd.lacp_mode.value] -%}
+{% set lab_port_from = "FourHundredGigE0/0/0/" -%}{# port rule: FH0/0/0/<2k> -> Gi0-0-0-<k> (the containerlab port name) #}
 {% macro lx(n) %}{% if n.startswith(lab_port_from) %}Gi0-0-0-{{ (n.split("/")[-1] | int) // 2 }}{% else %}{{ n }}{% endif %}{% endmacro -%}
 {% macro be(n) %}{{ n | replace("Bundle-Ether", "BE") }}{% endmacro -%}{# I-09: Linux names are at most 15 characters #}
 {# Values from the graph #}
@@ -21,6 +48,9 @@
 {% set asn = device.asn.node.asn.value -%}
 {% set site = device.location.node -%}
 {% set site_name = site.name.value -%}
+{% set edge_key = site_name | lower ~ "_internet_edge_bgp_password" -%}
+{%- if fd[edge_key] is not defined or fd[edge_key].value is none %}{{ fd["missing_FabricDesign_" ~ edge_key].value() }}{% endif -%}
+{% set edge_bgp_password = fd[edge_key].value -%}
 {% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
 {% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
 {% set virtual = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
@@ -33,10 +63,8 @@
 {% set pns = namespace(asn=none, name=none) -%}
 {% for a in data.ProviderAsns.edges | map(attribute="node") | list %}{% if a.provider.node is not none and carrier.description.value.startswith(a.provider.node.name.value ~ " ") %}{% set pns.asn = a.asn.value %}{% set pns.name = a.provider.node.name.value %}{% endif %}{% endfor -%}
 {% set inetfw = data.InternetFws.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list | first -%}
-{% set pub_ns = namespace(items=[]) -%}
-{% for p in site.owned_prefixes.edges | map(attribute="node.prefix.value") | list %}{% if not p.startswith("10.") and (p.split("/")[1] | int) <= 27 %}{% set pub_ns.items = pub_ns.items + [p] %}{% endif %}{% endfor -%}
-{% set pfx = namespace(p24=none, p25=none, p27=none) -%}
-{% for p in pub_ns.items %}{% set l = p.split("/")[1] %}{% if l == "24" %}{% set pfx.p24 = p %}{% elif l == "25" %}{% set pfx.p25 = p %}{% elif l == "27" %}{% set pfx.p27 = p %}{% endif %}{% endfor -%}
+{% set pfx = namespace(p24=none, p25=none, p27=none) -%}   {#- found by IpamPrefix.role: public_block, public_nat_pool, public_services -#}
+{% for o in site.owned_prefixes.edges | map(attribute="node") | list %}{% set r = o.role.value %}{% if r == "public_block" %}{% set pfx.p24 = o.prefix.value %}{% elif r == "public_nat_pool" %}{% set pfx.p25 = o.prefix.value %}{% elif r == "public_services" %}{% set pfx.p27 = o.prefix.value %}{% endif %}{% endfor -%}
 {# Values derived by rule (same rules as isp_router_config.j2) #}
 {% macro host(addr, h) %}{% set o = (addr | ipaddress_interface("network") | string).split("/")[0].split(".") %}{{ o[:3] | join(".") }}.{{ o[3] | int + h }}{% endmacro -%}
 {% set sub_addr = subif.ip_addresses.edges[0].node.address.value -%}
@@ -52,7 +80,8 @@
 {% set inetfw_ip = host(sub_addr, inetfw_host) -%}
 {% set wan_fws = (data.SdwanFws.edges + data.VpnFws.edges) | map(attribute="node") | list -%}
 {% set wan_ns = namespace(routes=[]) -%}
-{% for f in wan_fws | selectattr("location.node.name.value", "equalto", site_name) | list | sort(attribute="name.value") %}{% for i in f.interfaces.edges | map(attribute="node") | list %}{% for a in i.ip_addresses.edges | map(attribute="node.address.value") | list %}{% set wan_ns.routes = wan_ns.routes + [(a | ipaddress_interface("network") | string, host(sub_addr, wan_fw_host[f.role.value]))] %}{% endfor %}{% endfor %}{% endfor -%}
+{# Each WAN FW's WAN loopback = its address inside dc*_<role>_wan_endpoint #}
+{% for f in wan_fws | selectattr("location.node.name.value", "equalto", site_name) | list | sort(attribute="name.value") %}{% set wep_key = site_name | lower ~ "_" ~ f.role.value ~ "_wan_endpoint" %}{% if fd[wep_key] is not defined or fd[wep_key].value is none %}{{ fd["missing_FabricDesign_" ~ wep_key].value() }}{% endif %}{% set wep = fd[wep_key].value %}{% for i in f.interfaces.edges | map(attribute="node") | list %}{% for a in (i.ip_addresses.edges if i.ip_addresses is defined else []) | map(attribute="node.address.value") | list %}{% if ((a.split("/")[0] ~ "/" ~ wep.split("/")[1]) | ipaddress_interface("network") | string) == wep %}{% set wan_ns.routes = wan_ns.routes + [(a | ipaddress_interface("network") | string, host(sub_addr, wan_fw_host[f.role.value]))] %}{% endif %}{% endfor %}{% endfor %}{% endfor -%}
 {% set router_id = lo0.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
 #!/bin/sh
 # {{ name }}: lab stand-in for the IOS XR ISP router (FRR in a Linux container). Rendered by Infrahub, do not edit.
@@ -63,7 +92,7 @@ set -eu
 sysctl -qw net.ipv4.ip_forward=1
 ip route del default dev eth0 2>/dev/null || true
 # --- Loopback0
-ip addr replace {{ router_id }}/32 dev lo
+ip addr replace {{ lo0.ip_addresses.edges[0].node.address.value }} dev lo
 # --- {{ bundle.name.value }} (LACP; members that exist in the lab) and its sub-interface {{ subif.name.value }}
 ip link add {{ bond }} type bond mode {{ bond_mode }} 2>/dev/null || true
 {% for m in members %}
@@ -85,11 +114,11 @@ cat > /etc/frr/frr.conf <<'FRREOF'
 hostname {{ name }}
 service integrated-vtysh-config
 !
-ip route {{ pfx.p24 }} blackhole
-ip route {{ pfx.p25 }} {{ inetfw_ip }}
-ip route {{ pfx.p27 }} {{ inetfw_ip }}
+ip route {{ pfx.p24 }} {{ static_nh(snh["public_24"], inetfw_ip, none) }}
+ip route {{ pfx.p25 }} {{ static_nh(snh["nat_pool_25"], inetfw_ip, none) }}
+ip route {{ pfx.p27 }} {{ static_nh(snh["services_27"], inetfw_ip, none) }}
 {% for net, nh in wan_ns.routes %}
-ip route {{ net }} {{ nh }}
+ip route {{ net }} {{ static_nh(snh["wan_fw_endpoint"], inetfw_ip, nh) }}
 {% endfor %}
 !
 ip prefix-list PL-OWN-PUBLIC seq {{ seq_step }} permit {{ pfx.p24 }}
@@ -110,7 +139,7 @@ route-map RM-COND-DEFAULT permit {{ seq_step }}
 bfd
  profile {{ bfd_profile }}
   transmit-interval {{ bfd_interval }}
-  receive-interval {{ bfd_interval }}
+  receive-interval {{ fd.bfd_min_rx_ms.value }}
   detect-multiplier {{ bfd_mult }}
   no echo-mode
  exit
@@ -118,26 +147,38 @@ exit
 !
 router bgp {{ asn }}
  bgp router-id {{ router_id }}
+{% if fd.isp_bgp_graceful_restart.value %}
  bgp graceful-restart
+{% endif %}
  neighbor {{ carrier_peer }} remote-as {{ pns.asn }}
  neighbor {{ carrier_peer }} description {{ pns.name }}
- neighbor {{ carrier_peer }} password {{ bgp_password }}
+ neighbor {{ carrier_peer }} password {{ carrier_bgp_password }}
+{% if fd.isp_carrier_bgp_bfd.value %}
  neighbor {{ carrier_peer }} bfd profile {{ bfd_profile }}
+{% endif %}
  neighbor {{ ibgp_peer }} remote-as {{ asn }}
  neighbor {{ ibgp_peer }} description {{ xlink.description.value.split(" ")[0] }}
+{% if fd.isp_pair_bgp_bfd.value %}
  neighbor {{ ibgp_peer }} bfd profile {{ bfd_profile }}
+{% endif %}
  neighbor {{ inetfw_ip }} remote-as {{ inetfw.asn.node.asn.value }}
  neighbor {{ inetfw_ip }} description {{ inetfw.name.value[:-1] }}
- neighbor {{ inetfw_ip }} password {{ bgp_password }}
+ neighbor {{ inetfw_ip }} password {{ edge_bgp_password }}
+{% if fd.isp_inetfw_bgp_bfd.value %}
  neighbor {{ inetfw_ip }} bfd profile {{ bfd_profile }}
+{% endif %}
  address-family ipv4 unicast
   network {{ pfx.p24 }}
   neighbor {{ carrier_peer }} route-map RM-CARRIER-IN in
-  neighbor {{ carrier_peer }} maximum-prefix {{ max_prefix }} {{ max_prefix_pct }} warning-only
+  neighbor {{ carrier_peer }} maximum-prefix {{ max_prefix }} {{ max_prefix_pct }} {{ fd.isp_max_prefix_action.value }}
   neighbor {{ carrier_peer }} route-map RM-CARRIER-OUT out
+{% if fd.isp_pair_next_hop_self.value %}
   neighbor {{ ibgp_peer }} next-hop-self
+{% endif %}
   neighbor {{ inetfw_ip }} route-map RM-INETFW-IN in
+{% if fd.isp_default_to_inetfw.value == "conditional" %}
   neighbor {{ inetfw_ip }} default-originate route-map RM-COND-DEFAULT
+{% endif %}
   neighbor {{ inetfw_ip }} route-map RM-INETFW-OUT out
  exit-address-family
 exit

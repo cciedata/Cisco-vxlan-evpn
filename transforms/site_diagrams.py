@@ -1,14 +1,14 @@
-"""site_diagrams: one .drawio file per site, one tab per view (P2-101, P2-108).
+"""site_diagrams: one .drawio file per site, one tab per view.
 
-Tabs: Physical, Underlay, Overlay, VRF, Path, Racks (P2-103 to P2-105, P2-108, P2-111, P2-208, P2-209).
-Layout and labels: P2-147 to P2-150, P2-200. Every value comes from the query.
+Tabs: Physical, Underlay, Overlay, VRF, Path, Racks.
+Every value comes from the query.
 """
 from html import escape
 import ipaddress
 
 from infrahub_sdk.transforms import InfrahubTransform
 
-# draw.io built-in fill/stroke pairs per role (P2-150, P2-200)
+# draw.io built-in fill/stroke pairs per role
 COLOURS = {
     "spine": ("#1ba1e2", "#006eaf"),
     "border_leaf": ("#dae8fc", "#6c8ebf"), "service_leaf": ("#dae8fc", "#6c8ebf"),
@@ -16,7 +16,7 @@ COLOURS = {
     "leaf": ("#d5e8d4", "#82b366"),
     "edge": ("#fff2cc", "#d6b656"), "dmz": ("#fff2cc", "#d6b656"),
     "internal_fw": ("#f8cecc", "#b85450"), "internet_fw": ("#f8cecc", "#b85450"),
-    "isp_router": ("#e1d5e7", "#9673a6"), "cloud_router": ("#e1d5e7", "#9673a6"),           # P2-242
+    "isp_router": ("#e1d5e7", "#9673a6"), "cloud_router": ("#e1d5e7", "#9673a6"),
     "sdwan_fw": ("#f8cecc", "#b85450"), "vpn_fw": ("#f8cecc", "#b85450"),
     "oob_fw": ("#ffe6cc", "#d79b00"), "oob_agg": ("#ffe6cc", "#d79b00"),
     "oob_access": ("#ffe6cc", "#d79b00"), "console_server": ("#ffe6cc", "#d79b00"),
@@ -28,9 +28,27 @@ ROLE_LABEL = {"spine": "Spine", "border_leaf": "Border leaf", "service_leaf": "S
               "cloud_router": "Cloud router", "sdwan_fw": "SD-WAN FW", "vpn_fw": "VPN-partner FW", "oob_fw": "OOB FW",
               "oob_agg": "OOB aggregation", "oob_access": "OOB access", "console_server": "Console server"}
 RIGHT_COLUMN = ("border_leaf", "service_leaf", "bgw", "dci", "edge", "dmz", "internal_fw", "internet_fw", "isp_router")
-OVERLAY_VTEP_ROLES = ("leaf", "border_leaf", "service_leaf", "bgw")
-LINE_WIDTH = {"dac": 2, "smf": 2}   # speed by thickness (P2-148): 400G 3, 100G 2, 10/25G 1, from device types below
-HUNDRED_G_TYPES = {"N9K-C93180YC-FX3"}
+LINE_WIDTH = {"dac": 2, "smf": 2}   # speed by thickness: 400G 3, 100G 2, 10/25G 1, from DcimDeviceType.uplink_speed_100g
+# Design values read at the start of transform() (FabricDesign: vtep_roles, transit_vrf, attachment hosts and length, console
+# cable type, routed link length, underlay area, PDU rack face; DcimDeviceType: height, uplink_speed_100g, vpc_keepalive_port).
+# Missing FabricDesign values stop the transform; a missing height / uplink_speed_100g stops it where it is used.
+DESIGN_FIELDS = ("vtep_roles", "transit_vrf", "attachment_leaf_hosts", "attachment_device_host", "attachment_prefix_length",
+                 "oob_cable_type_console", "p2p_link_prefix_length", "underlay_ospf_area", "pdu_rack_face")
+DESIGN: dict = {}
+
+
+def configure(data: dict) -> None:
+    fd = data.get("FabricDesign") or {}
+    edges = fd.get("edges") or []
+    if fd.get("count") != 1 or len(edges) != 1:
+        raise ValueError(f"FabricDesign: expected exactly 1 object, found {fd.get('count', len(edges))}; fix it in Infrahub "
+                         "(and check that the query asks for FabricDesign)")
+    DESIGN.clear()
+    for f in DESIGN_FIELDS:
+        value = (edges[0]["node"].get(f) or {}).get("value")
+        if value is None:
+            raise ValueError(f"FabricDesign.{f} is empty; fix it in Infrahub")
+        DESIGN[f] = value
 BOX_W, BOX_H, GAP = 120, 46, 24
 U_PX = 14                            # Racks tab: pixels per U
 RACK_W = 190
@@ -44,6 +62,18 @@ def short_port(name: str) -> str:
         if name.startswith(full):
             return short + name[len(full):]
     return name
+
+
+def type_value(devices: dict, name: str, key: str, field: str):
+    """A DcimDeviceType value of a device, failing loudly when it is missing (test is None: 0U PDUs keep 0)."""
+    value = devices[name][key]
+    if value is None:
+        raise ValueError(f"{name}: DcimDeviceType {devices[name]['type']}.{field} is empty; fix it in Infrahub")
+    return value
+
+
+def speed_100g(devices: dict, name: str) -> bool:
+    return type_value(devices, name, "100g", "uplink_speed_100g") is True
 
 
 def natural(name: str):
@@ -100,6 +130,7 @@ class SiteDiagrams(InfrahubTransform):
     query = "site_diagrams"
 
     async def transform(self, data: dict) -> str:
+        configure(data)
         devices = {}
         if_owner, if_name, if_addr = {}, {}, {}
         for e in data["DcimDevice"]["edges"]:
@@ -108,10 +139,12 @@ class SiteDiagrams(InfrahubTransform):
             role = d["role"]["value"]
             dt = (d.get("device_type") or {}).get("node") or {}
             devices[name] = {
-                "role": role, "type": (dt.get("name") or {}).get("value"), "height": (dt.get("height") or {}).get("value") or 1,
+                "role": role, "type": (dt.get("name") or {}).get("value"), "height": (dt.get("height") or {}).get("value"),
                 "rack": (((d.get("rack") or {}).get("node") or {}).get("name") or {}).get("value"),
                 "u": d["position"]["value"], "asn": (((d.get("asn") or {}).get("node") or {}).get("asn") or {}).get("value"),
                 "lo0": None, "lo1": None,
+                "100g": (dt.get("uplink_speed_100g") or {}).get("value"),
+                "keepalive": (dt.get("vpc_keepalive_port") or {}).get("value"),
             }
             for ie in d["interfaces"]["edges"]:
                 intf = ie["node"]
@@ -124,6 +157,7 @@ class SiteDiagrams(InfrahubTransform):
                 if iname == "loopback1" and addrs:
                     devices[name]["lo1"] = addrs[0]
         site = next(iter(devices)).split("-")[0] if devices else "SITE"
+        DESIGN["keepalive_ports"] = tuple(sorted({d["keepalive"] for d in devices.values() if d["keepalive"]}))
         cables = []
         for e in data["DcimCable"]["edges"]:
             c = e["node"]
@@ -140,12 +174,12 @@ class SiteDiagrams(InfrahubTransform):
                  self.oob(devices, cables, if_owner, if_name)]
         return '<mxfile host="infrahub">' + "".join(p.xml() for p in pages) + "</mxfile>"
 
-    # ------------------------------------------------------------ layout (P2-147, P2-210)
+    # ------------------------------------------------------------ layout
     # S1 is a wide bar ABOVE the spine-attached row, S2 a wide bar BELOW it; every spine link drops straight to its
     # device, so each port label has its own spot. Other roles (edge, DCI, DMZ, FW, ISP) sit in a block to the right.
     ROW_ROLES = ("leaf", "border_leaf", "service_leaf", "bgw")
     SLOT_W, ROW_Y, BAR_H = 200, 330, 34
-    RIGHT_ORDER = ("isp_router", "cloud_router", "edge", "internet_fw", "sdwan_fw", "vpn_fw", "dmz", "internal_fw", "dci")  # P2-212, P2-240
+    RIGHT_ORDER = ("isp_router", "cloud_router", "edge", "internet_fw", "sdwan_fw", "vpn_fw", "dmz", "internal_fw", "dci")
     RIGHT_W, RIGHT_GAP, RIGHT_ROW = 150, 170, 120
 
     def layout(self, page: Page, devices: dict, extra=lambda n, d: "") -> dict:
@@ -176,7 +210,7 @@ class SiteDiagrams(InfrahubTransform):
             box[n] = (x, y, self.RIGHT_W, BOX_H)
         self._box = box
         y = bar_y[1] + 80
-        for role, (fill, stroke) in COLOURS.items():          # legend on every tab (P2-150): roles drawn on this tab
+        for role, (fill, stroke) in COLOURS.items():          # legend on every tab: roles drawn on this tab
             if any(devices[n]["role"] == role for n in ids):
                 page.box(0, y, 18, 14, "", fill, stroke)
                 page.text(24, y - 3, 140, 20, ROLE_LABEL[role], size=10)
@@ -200,8 +234,7 @@ class SiteDiagrams(InfrahubTransform):
         return f"{name}\n{ROLE_LABEL[d['role']]}" + (f"\n{more}" if more else "")
 
     def width_for(self, devices, a, b) -> int:
-        types = {devices[a]["type"], devices[b]["type"]}
-        return 2 if types & HUNDRED_G_TYPES else 3
+        return 2 if speed_100g(devices, a) or speed_100g(devices, b) else 3
 
     def draw_links(self, page, ids, devices, links, width_of, label_of):
         """links: (end_a, end_b) interface ids. Spine links become straight drops; the rest plain edges."""
@@ -217,7 +250,7 @@ class SiteDiagrams(InfrahubTransform):
             for k, (s_end, d_end) in enumerate(ends):
                 self.spine_drop(page, ids, spine, dev, k, len(ends), width_of(s_end, d_end), *label_of(s_end, d_end))
                 done.add(frozenset((s_end, d_end)))
-        pairs = {}                                   # P2-211: every cable of a device pair as its own offset line
+        pairs = {}                                   # every cable of a device pair as its own offset line
         for a, b in links:
             if frozenset((a, b)) in done:
                 continue
@@ -251,7 +284,7 @@ class SiteDiagrams(InfrahubTransform):
                 else:
                     page.edge(ids[da], ids[db], width_of(a, b), src_label=la, dst_label=lb)
 
-    # ------------------------------------------------------------ Physical (P2-148, P2-210)
+    # ------------------------------------------------------------ Physical
     def physical(self, devices, cables, if_owner, if_name) -> Page:
         p = Page("Physical")
         p.text(0, 10, 900, 30, "Physical: every cable; port at each end (short names); line width = speed", 14, True)
@@ -259,19 +292,20 @@ class SiteDiagrams(InfrahubTransform):
         ids = self.layout(p, devices)
         def width_of(a, b):
             n = if_name[a]
-            return 1 if n.endswith(("1/48", "1/34")) else self.width_for(devices, if_owner[a], if_owner[b])
+            return 1 if DESIGN["keepalive_ports"] and n.endswith(DESIGN["keepalive_ports"]) else self.width_for(devices, if_owner[a], if_owner[b])
         self.draw_links(p, ids, devices, [tuple(c["ends"]) for c in cables], width_of,
                         lambda a, b: (short_port(if_name[a]), short_port(if_name[b])))
         return p
 
-    # ------------------------------------------------------------ Underlay (P2-149, P2-210)
+    # ------------------------------------------------------------ Underlay
     def underlay(self, devices, cables, if_owner, if_name, if_addr) -> Page:
         p = Page("Underlay")
-        p.text(0, 10, 900, 30, "Underlay: OSPF area 0, /31 on every routed link, loopback0 per device", 14, True)
+        area = int(ipaddress.ip_address(str(DESIGN["underlay_ospf_area"])))      # dotted area id -> number (0.0.0.0 -> 0)
+        p.text(0, 10, 900, 30, f"Underlay: OSPF area {area}, /{DESIGN['p2p_link_prefix_length']} on every routed link, loopback0 per device", 14, True)
         self.if_owner, self.if_name = if_owner, if_name
         ids = self.layout(p, devices, extra=lambda n, d: f"lo0 {d['lo0']}" if d["lo0"] else "")
         def p31(i):
-            return [x for x in if_addr.get(i, []) if ipaddress.ip_interface(x).network.prefixlen == 31]
+            return [x for x in if_addr.get(i, []) if ipaddress.ip_interface(x).network.prefixlen == DESIGN["p2p_link_prefix_length"]]
         links = [tuple(c["ends"]) for c in cables if p31(c["ends"][0]) and p31(c["ends"][1])]
         self.draw_links(p, ids, devices, links, lambda a, b: 1, lambda a, b: (p31(a)[0], p31(b)[0]))
         return p
@@ -280,7 +314,7 @@ class SiteDiagrams(InfrahubTransform):
     def overlay(self, devices) -> Page:
         p = Page("Overlay")
         p.text(0, 10, 900, 30, "Overlay: iBGP L2VPN EVPN to the spine route reflectors; VTEP = loopback1", 14, True)
-        vtep = {n: d for n, d in devices.items() if d["role"] in ("spine",) + OVERLAY_VTEP_ROLES}
+        vtep = {n: d for n, d in devices.items() if d["role"] in ("spine",) + tuple(DESIGN["vtep_roles"])}
         ids = self.layout(p, vtep, extra=lambda n, d: f"VTEP {d['lo1']}" if d["lo1"] else (f"RR {d['lo0']}" if d["role"] == "spine" else ""))
         for n, d in vtep.items():
             if d["role"] != "spine" and d["asn"] and n in self._geo:
@@ -289,7 +323,7 @@ class SiteDiagrams(InfrahubTransform):
                         self.spine_drop(p, ids, s, n, 0, 1, 1, "", "")
         return p
 
-    # ------------------------------------------------------------ VRF (P2-104, P2-208): one band per VRF
+    # ------------------------------------------------------------ VRF: one band per VRF
     @staticmethod
     def attachments(data):
         out = []
@@ -306,16 +340,17 @@ class SiteDiagrams(InfrahubTransform):
 
     def vrf(self, devices, data) -> Page:
         p = Page("VRF")
-        p.text(0, 10, 900, 30, "VRF: one band per VRF; attachments = leaf pair <-> firewall pair, /29, VLAN, eBGP peer ASN", 14, True)
+        p.text(0, 10, 900, 30, f"VRF: one band per VRF; attachments = leaf pair <-> firewall pair, /{DESIGN['attachment_prefix_length']}, VLAN, eBGP peer ASN", 14, True)
+        hosts = "/".join(f".{h}" for h in DESIGN["attachment_leaf_hosts"]) + f" leaves, .{DESIGN['attachment_device_host']} FW"
         vrfs = sorted(((e["node"]["name"]["value"], e["node"]["l3_vni"]["value"], e["node"]["segments"]["count"])
-                       for e in (data.get("FabricVRF") or {}).get("edges", [])), key=lambda v: (v[0] != "TRANSIT", v[0]))
+                       for e in (data.get("FabricVRF") or {}).get("edges", [])), key=lambda v: (v[0] != DESIGN["transit_vrf"], v[0]))
         att = self.attachments(data)
         y = 60
         for name, vni, nseg in vrfs:
             mine = [a for a in att if a["vrf"] == name]
             band_h = max(1, len(mine)) * (BOX_H + 16) + 50
             p.box(0, y, 1100, band_h, "", "#ffffff", "#cccccc", extra="rounded=0;")
-            p.text(10, y + 6, 600, 20, f"VRF {name} | L3VNI {vni} | segments {nseg}" + ("  (hub)" if name == "TRANSIT" else ""), 12, True)
+            p.text(10, y + 6, 600, 20, f"VRF {name} | L3VNI {vni} | segments {nseg}" + ("  (hub)" if name == DESIGN["transit_vrf"] else ""), 12, True)
             for i, a in enumerate(mine):
                 yy = y + 36 + i * (BOX_H + 16)
                 role = devices.get(a["members"][0], {}).get("role", "service_leaf") if a["members"] else "service_leaf"
@@ -324,18 +359,18 @@ class SiteDiagrams(InfrahubTransform):
                 fw_txt = ", ".join(n for n, _ in a["fws"]) + (f"\nAS {a['fws'][0][1]}" if a["fws"] and a["fws"][0][1] else "")
                 right = p.box(620, yy, 260, BOX_H, fw_txt, *COLOURS.get(fw_role, COLOURS["internal_fw"]))
                 net = ipaddress.ip_network(a["prefix"])
-                p.edge(left, right, 2, label=f"{a['name']} | VLAN {a['vlan']} | {net} (.1/.2 leaves, .3 FW) | eBGP")
+                p.edge(left, right, 2, label=f"{a['name']} | VLAN {a['vlan']} | {net} ({hosts}) | eBGP")
             if not mine:
                 p.text(20, y + 36, 600, 20, "No firewall attachment in this site (carried inside the fabric only)", 10)
             y += band_h + 20
         return p
 
-    # ------------------------------------------------------------ Path (P2-105, P2-209): internet left, server right
+    # ------------------------------------------------------------ Path: internet left, server right
     PATH_ORDER = ("isp_router", "edge", "internet_fw", "border_leaf", "service_leaf", "internal_fw", "leaf")
 
     def path(self, devices, cables, if_owner, if_name, if_addr, data) -> Page:
         p = Page("Path")
-        p.text(0, 10, 1200, 30, "Internet path: carrier > ISP router > edge > Internet FW > border leaf (TRANSIT) > service leaf > Internal FW > server leaves", 14, True)
+        p.text(0, 10, 1200, 30, f"Internet path: carrier > ISP router > edge > Internet FW > border leaf ({DESIGN['transit_vrf']}) > service leaf > Internal FW > server leaves", 14, True)
         att = self.attachments(data)
         ids, x = {}, 0
         carrier_box = p.box(x, 120, BOX_W, BOX_H, "Carriers\n(outside Infrahub)", "#ffffff", "#999999", extra="dashed=1;")
@@ -353,9 +388,9 @@ class SiteDiagrams(InfrahubTransform):
                 for a in att:
                     if n in a["members"]:
                         net = ipaddress.ip_network(a["prefix"])
-                        extra.append(f"{a['vrf']} {net[1 + a['members'].index(n)]}")
-                    elif any(n == f for f, _ in a["fws"]) and a["vrf"] == "TRANSIT":
-                        extra.append(f"TRANSIT {ipaddress.ip_network(a['prefix'])[3]}")
+                        extra.append(f"{a['vrf']} {net[DESIGN['attachment_leaf_hosts'][a['members'].index(n)]]}")
+                    elif any(n == f for f, _ in a["fws"]) and a["vrf"] == DESIGN["transit_vrf"]:
+                        extra.append(f"{DESIGN['transit_vrf']} {ipaddress.ip_network(a['prefix'])[DESIGN['attachment_device_host']]}")
                 ids[n] = p.box(x, 60 + k * 140, BOX_W + 40, BOX_H + 14 * len(extra), "\n".join([n] + extra), *COLOURS[role])
             x += BOX_W + 130
         for c in cables:                               # physical hops along the path, solid
@@ -369,7 +404,7 @@ class SiteDiagrams(InfrahubTransform):
         for a in att:                                  # logical eBGP over each attachment (dashed)
             for m in a["members"]:
                 for f, asn in a["fws"]:
-                    if m in ids and f in ids and a["vrf"] == "TRANSIT":
+                    if m in ids and f in ids and a["vrf"] == DESIGN["transit_vrf"]:
                         p.edge(ids[m], ids[f], 1, dashed=True, label=f"eBGP {a['vrf']} VLAN {a['vlan']}")
         sl = [n for n in ids if devices.get(n, {}).get("role") == "service_leaf"]
         if "leaf" in ids:
@@ -377,8 +412,8 @@ class SiteDiagrams(InfrahubTransform):
                 p.edge(ids[n], ids["leaf"], 1, dashed=True, label="EVPN (tenant VRFs)")
         return p
 
-    # ------------------------------------------------------------ Racks (P2-109 to P2-160)
-    # ------------------------------------------------------------ OOB (P2-241): OOB devices, their cables, home-run counts
+    # ------------------------------------------------------------ Racks
+    # ------------------------------------------------------------ OOB: OOB devices, their cables, home-run counts
     OOB_ROLES = ("oob_fw", "oob_agg", "oob_access", "console_server")
 
     def oob(self, devices, cables, if_owner, if_name) -> Page:
@@ -395,7 +430,8 @@ class SiteDiagrams(InfrahubTransform):
                 links.append((a, b, c["type"]))
             elif ia or ib:
                 o = da if ia else db
-                (cons if c["type"] == "console" else mgmt)[o] = (cons if c["type"] == "console" else mgmt).get(o, 0) + 1
+                console = c["type"] == DESIGN["oob_cable_type_console"]
+                (cons if console else mgmt)[o] = (cons if console else mgmt).get(o, 0) + 1
         rows = [[n for n in oob if oob[n]["role"] == "oob_fw"],
                 [n for n in oob if oob[n]["role"] == "oob_agg"],
                 [n for n in oob if oob[n]["role"] in ("console_server",) or (oob[n]["role"] == "oob_access" and "BMC" not in n)],
@@ -414,7 +450,7 @@ class SiteDiagrams(InfrahubTransform):
                 ids[n] = p.box(x0 + k * (w + 30), 70 + r * 170, w, h, "\n".join([n, ROLE_LABEL[d["role"]]] + extra),
                                *COLOURS[d["role"]])
         for a, b, t in sorted(links, key=lambda l: (natural(if_owner[l[0]]), natural(if_name[l[0]]))):
-            p.edge(ids[if_owner[a]], ids[if_owner[b]], 1, dashed=(t == "console"),
+            p.edge(ids[if_owner[a]], ids[if_owner[b]], 1, dashed=(t == DESIGN["oob_cable_type_console"]),
                    src_label=short_port(if_name[a]), dst_label=short_port(if_name[b]))
         p.text(0, 70 + 4 * 170, 900, 20, f"{len(links)} cables between OOB devices; {sum(mgmt.values())} management and "
                                          f"{sum(cons.values())} console home runs from the other devices of the site", 11)
@@ -422,7 +458,9 @@ class SiteDiagrams(InfrahubTransform):
 
     def racks(self, site, devices, data) -> Page:
         p = Page("Racks")
-        p.text(0, 10, 900, 30, f"{site} racks: front elevations; PDUs (0U, rear) listed under each rack", 14, True)
+        pdu_u = "/".join(f"{h}U" for h in sorted({type_value(devices, n, "height", "height") for n, d in devices.items() if d["role"] == "pdu"}))
+        pdu_note = f"{pdu_u}, {DESIGN['pdu_rack_face']}" if pdu_u else DESIGN["pdu_rack_face"]
+        p.text(0, 10, 900, 30, f"{site} racks: front elevations; PDUs ({pdu_note}) listed under each rack", 14, True)
         racks = sorted((e["node"] for e in data["LocationRack"]["edges"]),
                        key=lambda r: (r["row"]["value"], r["row_position"]["value"]))
         res = {}
@@ -453,7 +491,7 @@ class SiteDiagrams(InfrahubTransform):
                 if d["role"] == "pdu":
                     pdus.append(dn)
                 elif d["u"]:
-                    slot(d["u"], d["height"], dn, *COLOURS.get(d["role"], ("#ffffff", "#000000")))
+                    slot(d["u"], type_value(devices, dn, "height", "height"), dn, *COLOURS.get(d["role"], ("#ffffff", "#000000")))
             if pdus:
                 p.text(x, top + h * U_PX + 4, RACK_W, 18, "PDUs: " + ", ".join(sorted(x.split("-")[-1] for x in pdus)), 9)
         return p

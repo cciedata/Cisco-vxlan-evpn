@@ -1,4 +1,4 @@
-# Phase 2 PC3: ISP routers (Cisco 8201-24H8FH, IOS XR)
+# ISP routers (model and OS: FabricDesign isp_router_device_type / isp_router_platform)
 query IspRouterConfig($device: String!) {
   DcimDevice(name__value: $device) {
     count
@@ -6,7 +6,7 @@ query IspRouterConfig($device: String!) {
       node {
         name { value }
         asn { node { asn { value } } }
-        location { node { ... on LocationSite { name { value } owned_prefixes { edges { node { prefix { value } } } } } } }
+        location { node { ... on LocationSite { name { value } owned_prefixes { edges { node { prefix { value } role { value } } } } } } }
         interfaces {
           edges {
             node {
@@ -17,7 +17,6 @@ query IspRouterConfig($device: String!) {
               mtu { value }
               ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } }
               ... on InterfacePortChannel { members { edges { node { name { value } } } } }
-              ... on InterfaceVirtual { parent_interface { node { ... on DcimInterface { name { value } } } } }
             }
           }
         }
@@ -30,25 +29,44 @@ query IspRouterConfig($device: String!) {
   InternetFws: DcimDevice(role__value: "internet_fw") {
     edges { node { name { value } location { node { name { value } } } asn { node { asn { value } } } } }
   }
-  # Phase 4 PC4: WAN loopback of the VPN-partner FW (address on unit 1) -> static route for its public /28
+  # WAN loopback of the VPN-partner FW (address on unit 1, inside dc*_vpn_fw_wan_endpoint; picked in the templates)
   VpnFws: DcimDevice(role__value: "vpn_fw") {
     edges {
       node {
         name { value }
         role { value }
         location { node { name { value } } }
-        interfaces(name__value: "LO-WAN") { edges { node { name { value } ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } } }
+        interfaces { edges { node { name { value } ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } } }
       }
     }
   }
-  # Phase 4 PC3: WAN loopback of the SD-WAN hub (address on unit 1) -> static route for its public /28
+  # WAN loopback of the SD-WAN hub (address on unit 1, inside dc*_sdwan_fw_wan_endpoint; picked in the templates)
   SdwanFws: DcimDevice(role__value: "sdwan_fw") {
     edges {
       node {
         name { value }
         role { value }
         location { node { name { value } } }
-        interfaces(name__value: "LO-WAN") { edges { node { name { value } ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } } }
+        interfaces { edges { node { name { value } ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } } }
+      }
+    }
+  }
+  # Design values (FabricDesign) read by isp_router_config.j2, isp_router_lab_config.j2, frr_isp_router_lab.j2, frr_carrier_lab.j2
+  FabricDesign {
+    count
+    edges {
+      node {
+        bfd_interval_ms { value } bfd_min_rx_ms { value } bfd_multiplier { value } carrier_names { value }
+        carrier_side_host { value } dc1_internet_edge_bgp_password { value } dc1_sdwan_fw_wan_endpoint { value }
+        dc1_vpn_fw_wan_endpoint { value } dc2_internet_edge_bgp_password { value } dc2_sdwan_fw_wan_endpoint { value }
+        dc2_vpn_fw_wan_endpoint { value } edge_vlan_hosts { value } edge_vrrp_group_id { value }
+        edge_vrrp_preempt_delay_s { value } edge_vrrp_priority { value } edge_vrrp_track_decrement { value }
+        edge_vrrp_track_object { value } edge_vrrp_version { value } isp_bgp_graceful_restart { value }
+        isp_bundle_id { value } isp_carrier_bgp_bfd { value } isp_carrier_bgp_password { value }
+        isp_default_to_inetfw { value } isp_inetfw_bgp_bfd { value } isp_max_prefix { value }
+        isp_max_prefix_action { value } isp_max_prefix_threshold_pct { value } isp_pair_bgp_bfd { value }
+        isp_pair_next_hop_self { value } isp_static_next_hop_by_role { value } lacp_mode { value }
+        mgmt_vrf { value } mtu_external { value } oob_gateway_host { value } route_policy_seq_step { value }
       }
     }
   }

@@ -6,7 +6,7 @@ address, and renders the 134 configs and 58 lab artifacts equal to `tests/expect
 Commands marked READ ONLY change nothing; RUN changes something. Every step ends with the check that proves it.
 
 Status, step by step (so you know what to expect):
-- ✅ verified on an empty Infrahub: steps 3–8 at the Phase 0 commit (26 Sep 2026: schema, objects 00–06, pools,
+- ✅ verified on an empty Infrahub: steps 3–8 on 26 Sep 2026 (schema, objects 00–06, pools,
   `fabric_site` for both sites; every count equal to the records, 4 of 4 spine renders equal). Every later file, pool
   and generator was loaded the same way on its own branch of a running instance before it was merged, with its
   plan-only run reviewed and a full rerun that kept every object id.
@@ -89,7 +89,8 @@ infrahubctl schema load schemas --branch main --wait 120
 `schemas/base-schemas/` are the Marketplace base schemas (dcim, ipam, location, organization) with our role choices
 added; `schemas/locations.yml` is Country → Metro → Site; `schemas/fabric.yml` holds the fabric kinds (ASNs, VRFs,
 segments, switch pairs and vPC domains / ESI pairs, attachments, L2 VLANs, port-channels, branches, partners, ZTP
-state); `schemas/oob.yml` the OOB kinds (cables, racks, PDUs, console ports). Success: the load ends with the schema
+state); `schemas/oob.yml` the OOB kinds (cables, racks, PDUs, console ports); `schemas/design.yml` the single
+`FabricDesign` node that holds every design value the templates and generators read. Success: the load ends with the schema
 synced on every worker; a second `schema check` prints no diff. A `500` right after a fresh start means the server is
 still converging: wait a minute and run it again.
 
@@ -117,11 +118,20 @@ done
 
 Success: every load ends without an error and the loop does not `break`.
 
+### 5b. The design values ✅
+
+RUN: load `design/fabric-design.yml` into the single `FabricDesign` node
+```
+infrahubctl run scripts/load_design.py --branch main
+```
+Success: one line per field and nothing deleted; a rerun writes the same values. Every template and generator reads its
+numbering rules, keywords, timers and feature switches from this node, so step 10 cannot render without it.
+
 ## 6. Pools ✅
 
 RUN: the IP pools (loopback0, loopback1 VTEP, anycast VTEP, vPC backup and keepalive, fabric p2p, mgmt0, OOB) per site
 ```
-python scripts/create_pools.py
+infrahubctl run scripts/create_pools.py --branch main
 ```
 Success: one line per pool; a rerun prints the same pools and creates nothing.
 
@@ -186,15 +196,32 @@ The four diagram views per site render with `infrahubctl transform site_diagrams
 
 ## 11. Check ✅
 
-READ ONLY: every device in a site's fabric ASN has exactly one loopback0 with one address
+READ ONLY: all four checks
 ```
 infrahubctl check loopback0_check
+infrahubctl check design_overlap_check
+infrahubctl check design_copy_check
+infrahubctl check esi_release_check
 ```
-Success: `PASSED` for DC1 and DC2.
+`loopback0_check`: every device in a site's fabric ASN has exactly one loopback0 with one address.
+`design_overlap_check`: no two design prefixes overlap. `design_copy_check`: a per-site copy of a design value still
+equals the plan it was copied from.
+`esi_release_check`: every ESI pair member runs at least its device type's minimum ESI release. Success: `PASSED` from each, for DC1 and DC2 where a check is
+per-site.
 
-## 12. Connect the repository (optional, for the proposed-change pipeline)
+## 12. Connect the repository ✅ (required before the lab)
 
-In Infrahub, add a `CoreRepository` (read-write) pointing at your fork with a token that has Contents: Read and write.
+`labctl fetch` reads Infrahub's **stored** artifacts (`CoreArtifact` plus object storage), and those exist only once a
+repository is connected: on a fresh instance there are none, and `labctl` stops with `no artifact ... for <device>`. For
+the lab a read-only repository pointing at the public URL is enough and needs no credentials:
+```
+infrahubctl repository add Cisco-vxlan-evpn https://github.com/cciedata/Cisco-vxlan-evpn.git --read-only --ref main
+```
+Success: `infrahubctl repository list` shows it, and within a few minutes every artifact definition has produced its
+artifacts. An artifact left in `Error` blocks `labctl fetch` for that device even when its stored content is correct.
+
+For the proposed-change pipeline instead, add a `CoreRepository` (read-write) pointing at your fork with a token that
+has Contents: Read and write.
 Every later change then goes: Git branch → push (Infrahub creates the matching branch) → load schema and objects on the
 branch, run the generators there → proposed change → about 30 validators → merge through the PC → step 10 on `main`.
 The stored artifacts on `main` can lag a merge by a few minutes; the render comparison is the authority.
@@ -215,7 +242,8 @@ The stored artifacts on `main` can lag a merge by a few minutes; the render comp
 ## Known limits
 
 - The whole sequence has not been rerun from an empty instance at the current commit (see the status at the top).
-- `infrahubctl schema load --wait` behaviour on an empty instance and the pool allocation order of a fresh instance (which
-  decides whether the baselines match byte for byte) were verified at the Phase 0 commit, not since.
+- `infrahubctl schema load --wait` behaviour on an empty instance was verified on 26 Sep 2026, not since. The pool
+  allocation order of a fresh instance moved the mgmt addresses of the firewalls, ISP and cloud routers and the vPC backup
+  /31s (25 Oct); those are now set by rule (`FabricDesign.mgmt0_rule_first_host`, `vpc_backup_rule_first_host`).
 - The unused schema choices `pop_circuit` / `pop_router` exist in a live schema that saw the Denver POP; a fresh load from
   this repository does not have them.

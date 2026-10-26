@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 3 failure / behavior tests (claude/phase3-decisions.md, tests 1-15; test 4 removed 8 Oct) on a deployed site lab.
+"""Failure / behavior tests (tests 1-15; test 4 removed) on a deployed site lab.
 
   failtests.py <site> --list            the catalog: what each test breaks, what it expects, how it restores
   failtests.py <site> --run 1,3,5       run some tests (default: all, in order)
@@ -12,7 +12,7 @@ Session checks (8 Oct): a "sessions up" check compares against the sessions that
 already down before the test cannot fail it (the baseline post-check still has to pass first).
 Results: lab/build/<site>/reports/failtests-<time>.{txt,json}.
 
-How things break (P3D-13): link down inside the node (NX-API 'shutdown', 'ip link set down' in FRR, XR CLI when ISP_LAB_STANDIN = xrd);
+How things break: link down inside the node (NX-API 'shutdown', 'ip link set down' in FRR, XR CLI when ISP_LAB_STANDIN = xrd);
 node death = 'docker pause' (QEMU/FRR freeze, so neighbors detect it by BFD/hold timers, like a power loss);
 silent failure = netem 100% loss on a stand-in port (link stays up).
 Expectations reuse lab-expected entries (bgp / route / ping) plus a few explicit 'down' checks; nothing is typed per device
@@ -29,16 +29,65 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import labctl  # noqa: E402  (Infrahub client: login + GraphQL, the same code the lab uses)
 import postcheck  # noqa: E402  (Node drivers, ping, walk)
 import yaml  # noqa: E402
 
-PING_INTERVAL = 0.2           # P3D-14: continuous ping every 200 ms
-SETTLE_S = 45                 # P3D-14: wait after a break before checking (BFD 999x3 ~3 s, BGP, ECMP)
-RESTORE_S = 120               # P3D-14: wait after restore before the full post-check
-BFD_DETECT_MAX_S = 4          # P3D-14: test 9 expects detection within 999 ms x 3 + margin
-VRRP_PREEMPT_S = 180          # test 14: preempt delay in the ISP router config (Phase 2 PC3)
+PING_INTERVAL = 0.2           # continuous ping every 200 ms
+SETTLE_S = 45                 # wait after a break before checking (BFD detection = bfd_interval_ms x bfd_multiplier, BGP, ECMP)
+RESTORE_S = 120               # wait after restore before the full post-check
+# Design values: read from Infrahub (FabricDesign, FabricVRF) at start-up, see load_design(); a missing value stops the run
+DESIGN_FIELDS = ("edge_vrrp_preempt_delay_s",    # test 14: preempt delay in the ISP router config
+                 "vpc_peer_link_port_channel",   # test 6: peer-link port-channel number in the rendered config
+                 "vpc_keepalive_vrf",            # test 7: keepalive VRF in the rendered config
+                 "transit_vrf")                  # tests 11, 12: TRANSIT VRF name (and its FortiOS VRF id = the FRR stand-in's vrf<id>)
 FRR_BGP_RESTART = ("kill -9 $(cat /var/run/frr/bgpd.pid); sleep 3; /usr/lib/frr/bgpd -d -A 127.0.0.1 -K; "  # I-23: test 13 on an FRR
                    "sleep 2; vtysh -f /etc/frr/frr.conf")   # stand-in: kill bgpd (pid file), start it with -K (graceful restart), re-apply
+
+
+def load_design(branch):
+    """FabricDesign fields this script uses, plus the TRANSIT VRF's FortiOS VRF id, over GraphQL (labctl's Infrahub client)."""
+    ih = labctl.Infrahub(branch)
+    fd = ih.gql("{ FabricDesign { count edges { node { %s } } } }" % " ".join(f"{f} {{ value }}" for f in DESIGN_FIELDS))["FabricDesign"]
+    if fd["count"] != 1:
+        labctl.die(f"FabricDesign: expected exactly 1 object, found {fd['count']}; fix it in Infrahub (branch {branch})")
+    design = {}
+    for f in DESIGN_FIELDS:
+        value = (fd["edges"][0]["node"].get(f) or {}).get("value")
+        if value is None:
+            labctl.die(f"FabricDesign.{f} is empty; fix it in Infrahub (branch {branch})")
+        design[f] = value
+    vrfs = ih.gql('{ FabricVRF(name__value: "%s") { edges { node { fortios_vrf_id { value } } } } }' % design["transit_vrf"])["FabricVRF"]["edges"]
+    if len(vrfs) != 1 or vrfs[0]["node"]["fortios_vrf_id"]["value"] is None:
+        labctl.die(f"FabricVRF {design['transit_vrf']}: fortios_vrf_id is empty or the VRF is missing; fix it in Infrahub (branch {branch})")
+    design["transit_fw_vrf"] = f"vrf{vrfs[0]['node']['fortios_vrf_id']['value']}"
+    return design
+
+
+def test_host_vrf(lab, branch):
+    """Tests 3, 10: VRF of the PROD test host's access segment - FabricSegment.vrf of the access port(s) on the node the
+    host plugs into (from the topology), over GraphQL. Not exactly one VRF stops the run."""
+    far = sorted({fn for _, fn, _ in lab.links(lab.host)})
+    if len(far) != 1:
+        labctl.die(f"{lab.host}: expected one link in the topology, found nodes {far}")
+    q = ('{ InterfacePhysical(device__name__value: "%s", role__value: "access") { edges { node { name { value } '
+         'access_segment { node { name { value } vrf { node { name { value } } } } } } } } }' % far[0])
+    edges = labctl.Infrahub(branch).gql(q)["InterfacePhysical"]["edges"]
+    def vrf_of(port):
+        seg = (port.get("access_segment") or {}).get("node") or {}
+        return (((seg.get("vrf") or {}).get("node") or {}).get("name") or {}).get("value")
+    vrfs = sorted({vrf_of(e["node"]) for e in edges} - {None})
+    if len(vrfs) != 1:
+        labctl.die(f"{far[0]}: access ports with a segment VRF give {vrfs or 'none'}, expected exactly one; fix it in Infrahub (branch {branch})")
+    return vrfs[0]
+
+
+def own_asn(lab, node):
+    """The node's own BGP AS (DcimDevice.asn), from lab-expected node_asn (transforms/lab.py)."""
+    asn = lab.exp.get("node_asn", {}).get(node)
+    if asn is None:
+        labctl.die(f"{node}: no own ASN in lab-expected node_asn; re-run 'labctl.py fetch {lab.site}'")
+    return asn
 
 
 def sh(*argv, timeout=120):
@@ -56,6 +105,7 @@ class Lab:
         self.nodes = {n: postcheck.Node(n, s, self.name) for n, s in self.topo["topology"]["nodes"].items()}
         self.host = f"{site}-HOST-PROD"
         self.inet = [p["to"] for p in self.exp["pings"] if p["to"].startswith("198.18.")]
+        self.design = {}             # load_design(), filled in main()
 
     def ctr(self, node):
         return f"clab-{self.name}-{node}"
@@ -216,6 +266,9 @@ def catalog(lab):
     leaf = f"{S}-L11"
     intfw, inetfw = f"{S}-INTFW1", f"{S}-INETFW1"
     a_host, b_host = (lab.inet + [None, None])[:2]
+    D = lab.design
+    transit, fw_vrf, preempt_s = D["transit_vrf"], D["transit_fw_vrf"], D["edge_vrrp_preempt_delay_s"]
+    host_vrf = D["host_vrf"]
 
     def link_to(node, far_prefix):
         return next(((p, fn, fp) for p, fn, fp in lab.links(node) if fn.startswith(far_prefix)), None)
@@ -252,34 +305,34 @@ def catalog(lab):
                   steps=[lambda: lab.linux_if(carriers[0], car_a_port, "down")],
                   checks=[("ISP1 carrier session down", notest(isp_routers[0], "ISP-A")),
                           ("ISP2 still has 0/0", route(isp_routers[1], "default", "0.0.0.0/0")),
-                          ("Internet FW still has 0/0", route(inetfw, "vrf1", "0.0.0.0/0")),
+                          ("Internet FW still has 0/0", route(inetfw, fw_vrf, "0.0.0.0/0")),
                           ("ping ISP-B host", ping_ok(b_host))],
                   then=[lambda: lab.linux_if(carriers[1], car_a_port, "down")],
-                  then_checks=[("both ISP routers withdraw 0/0 to the FW (conditional default)", route(inetfw, "vrf1", "0.0.0.0/0", present=False))],
+                  then_checks=[("both ISP routers withdraw 0/0 to the FW (conditional default)", route(inetfw, fw_vrf, "0.0.0.0/0", present=False))],
                   restore=[lambda: lab.linux_if(carriers[0], car_a_port, "up"), lambda: lab.linux_if(carriers[1], car_a_port, "up")],
                   ping=b_host, outage_max=10))
     T.append(dict(id=2, title=f"ISP router down: {isp_routers[0]}",
                   steps=[lambda: lab.pause(isp_routers[0])],
                   checks=[("Internet FW session to ISP2 up", est(inetfw, isp_routers[1])),
-                          ("Internet FW still has 0/0", route(inetfw, "vrf1", "0.0.0.0/0")), ("ping ISP-B host", ping_ok(b_host))],
+                          ("Internet FW still has 0/0", route(inetfw, fw_vrf, "0.0.0.0/0")), ("ping ISP-B host", ping_ok(b_host))],
                   restore=[lambda: lab.pause(isp_routers[0], on=False)], ping=b_host, outage_max=10))
     T.append(dict(id=3, title=f"Spine down: {spines[0]}",
                   steps=[lambda: lab.pause(spines[0])],
                   checks=[(f"{leaf} EVPN session to {spines[1]} up", est(leaf, spines[1])),
-                          (f"{leaf} still has PROD 0/0", route(leaf, "PROD", "0.0.0.0/0")), ("ping ISP-A host", ping_ok(a_host))],
+                          (f"{leaf} still has {host_vrf} 0/0", route(leaf, host_vrf, "0.0.0.0/0")), ("ping ISP-A host", ping_ok(a_host))],
                   restore=[lambda: lab.pause(spines[0], on=False)], ping=a_host, outage_max=5))
-    # test 4 (border / service leaf vPC peer death) removed 8 Oct (decided): docker pause is a hung switch, not a power loss
+    # test 4 (border / service leaf vPC peer death) removed: docker pause is a hung switch, not a power loss
     up = link_to(leaf, spines[0])
     T.append(dict(id=5, title=f"One leaf-spine link down: {leaf} {up[0] if up else '?'} -> {spines[0]}",
                   steps=[lambda: lab.port(leaf, up[0], "down")],
                   checks=[(f"{leaf} EVPN sessions to both spines up", est(leaf, "")), ("ping ISP-A host", ping_ok(a_host))],
                   restore=[lambda: lab.port(leaf, up[0], "up")], ping=a_host, outage_max=2))
-    pl = lab.cfg_ports(bls[0], r"channel-group 1000\b")           # peer-link members, from the rendered config
+    pl = lab.cfg_ports(bls[0], rf"channel-group {D['vpc_peer_link_port_channel']}\b")           # peer-link members, from the rendered config
     T.append(dict(id=6, title=f"vPC peer-link down ({bls[0]}-{bls[1]})",
                   steps=[(lambda p=p: lab.port(bls[0], p, "down")) for p in pl],
                   checks=[("ping ISP-A host", ping_ok(a_host))],
                   restore=[(lambda p=p: lab.port(bls[0], p, "up")) for p in pl], ping=a_host, outage_max=5))
-    ka = (lab.cfg_ports(bls[0], r"vrf member VPC-KEEPALIVE") + [None])[0]   # keepalive port, from the rendered config
+    ka = (lab.cfg_ports(bls[0], r"vrf member " + re.escape(D["vpc_keepalive_vrf"])) + [None])[0]   # keepalive port, from the rendered config
     T.append(dict(id=7, title=f"vPC keepalive down ({bls[0]} {ka or 'no keepalive port found in the config'})",
                   steps=[lambda: lab.port(bls[0], ka, "down")] if ka else [],
                   checks=[("ping ISP-A host (no change expected)", ping_ok(a_host))],
@@ -295,33 +348,33 @@ def catalog(lab):
                   restore=[(lambda p=p: lab.netem(intfw, p, on=False)) for p in fwp], ping=a_host, outage_max=None, bfd=True))
     T.append(dict(id=10, title=f"Internal FW stand-in down: {intfw}",
                   steps=[lambda: lab.pause(intfw)],
-                  checks=[(f"{leaf} loses PROD 0/0 (single active unit in the lab)", route(leaf, "PROD", "0.0.0.0/0", present=False)),
+                  checks=[(f"{leaf} loses {host_vrf} 0/0 (single active unit in the lab)", route(leaf, host_vrf, "0.0.0.0/0", present=False)),
                           ("ping ISP-A host fails", ping_fails(a_host))],
                   restore=[lambda: lab.pause(intfw, on=False)], ping=None, outage_max=None))
     T.append(dict(id=11, title=f"Internet FW stand-in down: {inetfw}",
                   steps=[lambda: lab.pause(inetfw)],
-                  checks=[(f"{bls[0]} TRANSIT 0/0 gone", route(bls[0], "TRANSIT", "0.0.0.0/0", present=False)),
+                  checks=[(f"{bls[0]} TRANSIT 0/0 gone", route(bls[0], transit, "0.0.0.0/0", present=False)),
                           ("ping ISP-A host fails", ping_fails(a_host))],
                   restore=[lambda: lab.pause(inetfw, on=False)], ping=None, outage_max=None))
     T.append(dict(id=12, title=f"Filter test: {intfw} announces an extra prefix 10.99.0.0/16 in TRANSIT",
-                  steps=[lambda: lab.vtysh(intfw, "configure terminal", "ip route 10.99.0.0/16 blackhole vrf vrf1",
-                                           f"router bgp {fw_sessions(sls[0])[0]['remote_as']} vrf vrf1",
+                  steps=[lambda: lab.vtysh(intfw, "configure terminal", f"ip route 10.99.0.0/16 blackhole vrf {fw_vrf}",
+                                           f"router bgp {own_asn(lab, intfw)} vrf {fw_vrf}",
                                            "address-family ipv4 unicast", "redistribute static")],
-                  checks=[(f"{sls[0]} rejects 10.99.0.0/16 in TRANSIT", route(sls[0], "TRANSIT", "10.99.0.0/16", present=False))],
-                  restore=[lambda: lab.vtysh(intfw, "configure terminal", "no ip route 10.99.0.0/16 blackhole vrf vrf1")],
+                  checks=[(f"{sls[0]} rejects 10.99.0.0/16 in TRANSIT", route(sls[0], transit, "10.99.0.0/16", present=False))],
+                  restore=[lambda: lab.vtysh(intfw, "configure terminal", f"no ip route 10.99.0.0/16 blackhole vrf {fw_vrf}")],
                   ping=None, outage_max=None))
     T.append(dict(id=13, title=f"BGP graceful restart: {leaf} BGP process restart, then {isp_routers[0]}",
-                  steps=[lambda: f"{leaf} restart bgp (NX-API {postcheck.httpx.post(f'https://{lab.nodes[leaf].ip}/ins', auth=(postcheck.NXOS_USER, postcheck.NXOS_PASS), verify=False, timeout=60, headers={'content-type': 'application/json'}, content=json.dumps({'ins_api': {'version': '1.0', 'type': 'cli_show', 'chunk': '0', 'sid': '1', 'input': 'restart bgp ' + str(sessions(lab, leaf, '')[0]['remote_as']), 'output_format': 'json'}})).status_code})"],
+                  steps=[lambda: f"{leaf} restart bgp (NX-API {postcheck.httpx.post(f'https://{lab.nodes[leaf].ip}/ins', auth=(postcheck.NXOS_USER, postcheck.NXOS_PASS), verify=False, timeout=60, headers={'content-type': 'application/json'}, content=json.dumps({'ins_api': {'version': '1.0', 'type': 'cli_show', 'chunk': '0', 'sid': '1', 'input': 'restart bgp ' + str(own_asn(lab, leaf)), 'output_format': 'json'}})).status_code})"],
                   checks=[(f"{leaf} EVPN sessions back", est(leaf, "")), ("ping ISP-A host", ping_ok(a_host))],
                   then=[lambda: (sh("docker", "exec", lab.ctr(isp_routers[0]), "sh", "-c", FRR_BGP_RESTART)
                                  if lab.nodes[isp_routers[0]].kind == "linux" else
                                  sh("docker", "exec", lab.ctr(isp_routers[0]), postcheck.XR_CLI, "process restart bgp"))[1][:80]],
                   then_checks=[("Internet FW sessions back", est(inetfw, ""))],
                   restore=[], ping=a_host, outage_max=1))
-    T.append(dict(id=14, title=f"ISP1 returns: VRRP preempt after {VRRP_PREEMPT_S} s" + (" (FRR stand-in: no VRRP, same waits)" if lab.nodes[isp_routers[0]].kind == "linux" else ""),
+    T.append(dict(id=14, title=f"ISP1 returns: VRRP preempt after {preempt_s} s" + (" (FRR stand-in: no VRRP, same waits)" if lab.nodes[isp_routers[0]].kind == "linux" else ""),
                   steps=[lambda: lab.pause(isp_routers[0]), lambda: time.sleep(SETTLE_S), lambda: lab.pause(isp_routers[0], on=False)],
                   checks=[("ping ISP-B host right after return", ping_ok(b_host))],
-                  then=[lambda: time.sleep(VRRP_PREEMPT_S + 30)],
+                  then=[lambda: time.sleep(preempt_s + 30)],
                   then_checks=[("Internet FW sessions to both ISP routers", est(inetfw, ""))],
                   restore=[], ping=b_host, outage_max=5))
     T.append(dict(id=15, title=f"Node reload with its rendered config: {leaf}",
@@ -396,8 +449,17 @@ def main():
     ap.add_argument("site")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--run", help="comma-separated test ids (default all)")
+    ap.add_argument("--branch", help="Infrahub branch for the design values (default: the branch in the build's MANIFEST.json, else main)")
     a = ap.parse_args()
     lab = Lab(a.site)
+    branch = a.branch
+    if not branch:
+        try:
+            branch = json.load(open(os.path.join(lab.base, "MANIFEST.json"))).get("branch")
+        except (OSError, ValueError):
+            branch = None
+    lab.design = load_design(branch or "main")
+    lab.design["host_vrf"] = test_host_vrf(lab, branch or "main")
     tests = catalog(lab)
     if a.list:
         for t in tests:

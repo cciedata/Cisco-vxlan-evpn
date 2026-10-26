@@ -40,12 +40,13 @@ docker compose start
 What ran this way: every one of the 106 NX-OS configs loaded on a single N9Kv (acceptance test), a two-node lab
 (DC1-L11 plus a PROD host pinging its anycast gateway), the Day-2 push test, and the ZTP server test with a blank N9Kv.
 
-## The DC1 lab path (about 80 GB)
+## The DC1 lab path (about 88 GB)
 
-The DC1 lab path is 18 nodes and 43 links: 9 N9Kv (S1, S2, L11, BL1/2, SL1/2, EDGE1/2), FRR stand-ins for the Internal
-FW, the Internet FW, the two ISP routers and their carriers, and three hosts (PROD, two internet hosts). It ran on an
-AWS m8i.8xlarge spot instance (32 vCPU, 123 GB, nested virtualization) with Infrahub on the laptop and the artifacts
-fetched there first:
+The DC1 lab path is 21 nodes and 49 links: 10 N9Kv (S1, S2, L11, L12, BL1/2, SL1/2, EDGE1/2), FRR stand-ins for the
+Internal FW, the Internet FW, the two ISP routers and their carriers, and five hosts (a test host on each leaf access
+port, two internet hosts). It first ran on 8 Oct as 18 nodes with 9 N9Kv (before L12 joined) on an AWS m8i.8xlarge spot
+instance (32 vCPU, 123 GB, nested virtualization), and ran again at full size on 25 Oct together with DC2 on one
+64-core cloud VM (see below). The artifacts are fetched from Infrahub first:
 ```
 .venv/bin/python lab/labctl.py fetch DC1 --compare-baselines
 .venv/bin/python lab/labctl.py validate DC1
@@ -55,10 +56,16 @@ fetched there first:
 .venv-lab/bin/python lab/postcheck.py DC1
 .venv-lab/bin/python lab/failtests.py DC1 --list
 ```
-Deploy to a fully configured 18-node lab took 27 minutes with no manual step. `postcheck.py` runs 164 checks from the
-`lab-expected` artifact over SSH with Nornir and netmiko (`show … | json`) and `docker exec` for the FRR nodes: BGP
-sessions, BFD sessions, routes, pings. The last runs ended at 108 of 164: the 56 that fail are the 44 BFD checks (the
-virtual Nexus does not run BFD) and 12 DEV / CITRIX summary routes (no lab host in those VRFs, so no aggregate).
+`deploy` boots the N9Kv in groups of 5 (topology order): a group is created when every N9Kv of the previous group is
+healthy (`topology.staged.yml`, containerlab stages). A watchdog treats an N9Kv as hung when it is not healthy and its
+vrnetlab log has not moved for 10 minutes (25 Oct: one N9Kv stopped in the vrnetlab bootstrap at `feature telnet`);
+it then destroys and redeploys the site once, and stops if the hang comes back. `--group-size 0` boots all at once,
+`--no-watchdog` is the plain containerlab deploy. ❓ Not yet run on a lab host.
+On 8 Oct, deploy to a fully configured 18-node lab took 27 minutes with no manual step. `postcheck.py` runs the checks
+in the `lab-expected` artifact over SSH with Nornir and netmiko (`show … | json`) and `docker exec` for the FRR nodes:
+BGP sessions, BFD sessions, routes, pings. Every BFD check fails on the virtual Nexus, which does not run BFD. On 25 Oct,
+with the BFD checks left out and lab-only test hosts added in the DEV and CITRIX networks (so their summary routes
+exist), DC1 passed 124 of 124. The BFD skip was a lab-only copy of the script; it is not in this repository yet.
 
 `failtests.py` breaks something, measures the outage from the break to the first reply to a probe sent after it,
 restores and runs the post-check again. 14 scenarios are documented with before, during and after captures: leaf–spine
@@ -67,11 +74,12 @@ carriers down (the ISP default is a graceful-restart stale path for 15 s, then t
 reload, firewall and ISP failures, filter tests. Open and accepted: one Internal FW bundle member down stops traffic
 on the stand-in; the vPC peer-link outage is measured later than the break.
 
-## The DC2 lab path (about 80 GB, not run)
+## The DC2 lab path (about 88 GB)
 
-The same lab for DC2: 17 nodes and 42 links (9 N9Kv, FRR stand-ins for the Internal FW, the Internet FW, the two ISP
-routers and their carriers, two internet hosts). It has no PROD test host: DC2-L11 has no host port. It is rendered and
-validated on every change but has never been deployed (accepted for go-live). Same commands with `DC2`:
+The same lab for DC2: 21 nodes and 49 links (10 N9Kv, the same FRR stand-ins, five hosts). It ran on 25 Oct together
+with DC1. With the BFD checks left out and the lab-only DEV and CITRIX hosts, DC2 passed 150 of 150. One lab-only
+change: the BGP password was removed from one Internal FW session in DC2, whose MD5 session would not come up (cause
+still open). Same commands with `DC2`:
 ```
 .venv/bin/python lab/labctl.py fetch DC2 --compare-baselines
 .venv/bin/python lab/labctl.py validate DC2
@@ -80,11 +88,12 @@ validated on every change but has never been deployed (accepted for go-live). Sa
 .venv/bin/python lab/labctl.py carve DC2
 ```
 
-## DC1 and DC2 together (about 160 GB, not run)
+## DC1 and DC2 together (about 176 GB)
 
 The two lab paths can run side by side on one host: separate labs (`vamd-dc1-p3`, `vamd-dc2-p3`), separate mgmt networks
 (10.250.0.0/24, 10.250.16.0/24), nothing shared. They are not connected: neither lab path has the BGWs or the DCI
-switches, so there is no Multi-Site traffic between them. Run the five commands above for `DC1`, then for `DC2`.
+switches, so there is no Multi-Site traffic between them. Run the five commands above for `DC1`, then for `DC2`. This ran on
+25 Oct on one 64-core cloud VM with nested virtualization. How to run it there, with the cost: [LAB-GCP.md](LAB-GCP.md).
 
 ## The entire DC1 site (about 290 GB, not run)
 
@@ -121,7 +130,7 @@ schedule, and a run card (memory, commands, logins).
 
 - `ztp/`: a blank switch gets its address from Kea DHCP, runs `poap.py`, and the ZTP server serves the device's
   `startup-config` artifact live by serial from Infrahub, then verifies the reloaded switch and writes `ztp_state`.
-  Ran end to end to `complete` in 233 s. The `vamdadmin` secret (`ztp/make-secret.sh`) must exist before ZTP, or the
+  Ran end to end to `complete` in 233 s. The `ciscoadmin` secret (`ztp/make-secret.sh`) must exist before ZTP, or the
   verification has no login. Details and the state table: [`ztp/README.md`](../ztp/README.md).
 - `lab/day2/`: `nornir_push.py --check` copies the device's artifact to bootflash and runs the NX-OS config-replace
   pre-check; without `--check` it runs `configure replace`, saves, and the next `--check` must print
@@ -135,9 +144,9 @@ schedule, and a run card (memory, commands, logins).
 |---|---|
 | Infrahub stack (8 containers) | about 3.7 GiB |
 | one N9Kv 10.6(4)M lite | 6 GB (`--memory 6144`) plus the host reserve |
-| the DC1 lab path (9 N9Kv + 9 FRR / hosts) | about 80 GB; ran on a 123 GB AWS host |
-| the DC2 lab path (9 N9Kv + 8 FRR / hosts) | about 80 GB; never run (accepted for go-live) |
-| DC1 and DC2 lab paths together | about 160 GB; not run |
+| the DC1 lab path (10 N9Kv + 11 FRR / hosts) | about 88 GB; ran on a 123 GB AWS host with 9 N9Kv (8 Oct) |
+| the DC2 lab path (10 N9Kv + 11 FRR / hosts) | about 88 GB |
+| DC1 and DC2 lab paths together | about 176 GB; ran on a 64-core cloud VM (25 Oct) |
 | the entire DC1 site (34 N9Kv + FRR stand-ins) | about 290 GB; not run |
 
 ## Known limits

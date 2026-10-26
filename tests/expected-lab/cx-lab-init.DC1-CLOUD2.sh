@@ -11,7 +11,7 @@ ip link set aws up
 ip link add link cr name cr.101 type vlan id 101 2>/dev/null || true
 ip link set cr.101 master aws
 ip addr replace 169.254.101.1/30 dev cr.101
-ip link set cr.101 up
+ip link set cr.101 mtu 1500 up
 ip link add aws-net type dummy 2>/dev/null || true
 ip link set aws-net master aws
 ip addr replace 172.16.1.1/24 dev aws-net
@@ -21,7 +21,7 @@ ip link set azure up
 ip link add link cr name cr.200 type vlan id 200 2>/dev/null || true
 ip link set cr.200 master azure
 ip addr replace 10.98.0.6/30 dev cr.200
-ip link set cr.200 up
+ip link set cr.200 mtu 1500 up
 ip link add azure-net type dummy 2>/dev/null || true
 ip link set azure-net master azure
 ip addr replace 172.30.1.1/24 dev azure-net

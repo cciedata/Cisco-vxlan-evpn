@@ -26,7 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 from day2 import build_cfg, infrahub_inventory  # noqa: E402
 
-NXOS_USER = os.environ.get("DAY2_USER", "admin")                 # lab: vrnetlab login (P3D-07); production: AAA (not designed)
+NXOS_USER = os.environ.get("DAY2_USER", "admin")                 # lab: vrnetlab login; production: AAA (not designed)
 NXOS_PASS = os.environ.get("DAY2_PASSWORD", "admin")
 REMOTE_FILE = "day2-{device}.cfg"                                 # FU-14: one file per device on bootflash:
 CHECKPOINT = "day2-before-{stamp}"                                # FU-14: rollback point before every replace

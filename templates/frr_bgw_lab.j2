@@ -1,20 +1,41 @@
-{# Option 5 (D5-24, D5-35): lab stand-in for a border gateway of the other site, control plane only, as one POSIX shell script
+{# Option 5 lab: stand-in for a border gateway of the other site, control plane only, as one POSIX shell script
    run in an FRR container. Same query as bgw_config.j2: loopbacks 0/1/2, the routed link to its DCI (eBGP IPv4, the loopbacks
    advertised, as the BGW's "redistribute direct" toward the DCI), and eBGP l2vpn evpn multihop from loopback0 to every BGW of
    the other sites (the Multi-Site overlay). No VXLAN data plane: the EVPN sessions come up, no VNI is configured.
    Containerlab port names: Ethernet1/<n> -> eth<n>. #}
-{% set bgp_password = "cisco123" -%}
-{% set mtu = 9216 -%}
-{% set ebgp_multihop = 64 -%}
-{% set seq_step = 10 -%}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.inter_site_bgw_bgp_password.value is none %}{{ missing_FabricDesign_inter_site_bgw_bgp_password() }}{% endif -%}
+{%- if fd.mtu_fabric.value is none %}{{ missing_FabricDesign_mtu_fabric() }}{% endif -%}
+{%- if fd.inter_site_ebgp_multihop_ttl.value is none %}{{ missing_FabricDesign_inter_site_ebgp_multihop_ttl() }}{% endif -%}
+{%- if fd.route_policy_seq_step.value is none %}{{ missing_FabricDesign_route_policy_seq_step() }}{% endif -%}
+{%- if fd.bgw_underlay_advertise_method.value is none %}{{ missing_FabricDesign_bgw_underlay_advertise_method() }}{% endif -%}
+{%- if fd.inter_site_vip_third_octet.value is none %}{{ missing_FabricDesign_inter_site_vip_third_octet() }}{% endif -%}
+{%- if fd.inter_site_vip_host.value is none %}{{ missing_FabricDesign_inter_site_vip_host() }}{% endif -%}
+{% set inter_site_bgp_password = fd.inter_site_bgw_bgp_password.value -%}
+{% set mtu = fd.mtu_fabric.value -%}
+{% set ebgp_multihop = fd.inter_site_ebgp_multihop_ttl.value -%}
+{% set seq_step = fd.route_policy_seq_step.value -%}
+{% set frr_advertise = {"redistribute direct": "redistribute connected"} -%}   {#- bgw_underlay_advertise_method (NX-OS keyword) -> FRR keyword -#}
+{%- if fd.bgw_underlay_advertise_method.value not in frr_advertise %}{{ unsupported_FabricDesign_bgw_underlay_advertise_method_in_frr() }}{% endif -%}
 {% macro lx(n) %}{% if n.startswith("Ethernet1/") %}eth{{ n.split("/")[1] }}{% else %}{{ n }}{% endif %}{% endmacro -%}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set name = device.name.value -%}
 {% set site_name = device.location.node.name.value -%}
+{% set pw_key = site_name | lower ~ "_bgw_dci_bgp_password" -%}
+{%- if fd[pw_key] is not defined or fd[pw_key].value is none %}{{ fd["missing_FabricDesign_" ~ pw_key].value() }}{% endif -%}
+{% set bgp_password = fd[pw_key].value -%}
+{% set infra_key = site_name | lower ~ "_infra_block" -%}
+{%- if fd[infra_key] is not defined or fd[infra_key].value is none %}{{ fd["missing_FabricDesign_" ~ infra_key].value() }}{% endif -%}
+{% set io = fd[infra_key].value.split("/")[0].split(".") -%}
+{% set vip_addr = io[0] ~ "." ~ io[1] ~ "." ~ fd.inter_site_vip_third_octet.value ~ "." ~ fd.inter_site_vip_host.value ~ "/32" -%}
+{% set vip_ns = namespace(name=none) -%}   {#- the Multi-Site VIP interface: the one on this site's BGWs holding the VIP (template_name_reads, as bgw_config.j2) -#}
+{% for b in data.Bgws.edges | map(attribute="node") | list %}{% if b.location.node.name.value == site_name %}{% for i in b.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges and i.ip_addresses.edges[0].node.address.value == vip_addr %}{% set vip_ns.name = i.name.value %}{% endif %}{% endfor %}{% endif %}{% endfor -%}
+{%- if vip_ns.name is none %}{{ missing_inter_site_vip_interface_in_Bgws() }}{% endif -%}
 {% set asn = device.asn.node.asn.value -%}
 {% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
-{% set loops = interfaces | selectattr("name.value", "in", ["loopback0", "loopback1", "loopback2"]) | selectattr("ip_addresses", "defined") | list | sort(attribute="name.value") -%}
+{% set loops = interfaces | selectattr("name.value", "in", ["loopback0", "loopback1", vip_ns.name]) | selectattr("ip_addresses", "defined") | list | sort(attribute="name.value") -%}
 {% set loops = loops | selectattr("ip_addresses.edges") | list -%}{# the Multi-Site VIP (loopback2) has an address on unit 1 only #}
 {% set lo0 = loops | selectattr("name.value", "equalto", "loopback0") | list | first -%}
 {% set router_id = lo0.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
@@ -58,12 +79,12 @@ router bgp {{ asn }}
 {% for rname, rip, rasn in remote.items %}
  neighbor {{ rip }} remote-as {{ rasn }}
  neighbor {{ rip }} description {{ rname }}
- neighbor {{ rip }} password {{ bgp_password }}
+ neighbor {{ rip }} password {{ inter_site_bgp_password }}
  neighbor {{ rip }} update-source {{ router_id }}
  neighbor {{ rip }} ebgp-multihop {{ ebgp_multihop }}
 {% endfor %}
  address-family ipv4 unicast
-  redistribute connected route-map RM-UNDERLAY-TO-DCI
+  {{ frr_advertise[fd.bgw_underlay_advertise_method.value] }} route-map RM-UNDERLAY-TO-DCI
 {% for rname, rip, rasn in remote.items %}
   no neighbor {{ rip }} activate
 {% endfor %}

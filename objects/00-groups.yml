@@ -12,12 +12,12 @@ kind: Object
 spec:
   kind: CoreStandardGroup
   data:
-    # Phase 1: artifact targets; members are added by the fabric_site generator
+    # Artifact targets; members are added by the fabric_site generator
     - name: fabric-spines
       description: Spines; target of the spine_startup_config artifact
     - name: fabric-server-leaves
       description: Server leaves; target of the leaf_startup_config artifact
-    # Phase 2: targets for the PC2 (NX-OS) and PC3 (FortiOS, IOS XR) artifacts; members added by the generator
+    # Targets of the NX-OS, FortiOS and IOS XR artifacts; members added by the generator
     - name: fabric-border-leaves
       description: Border leaves; target of the border_leaf_startup_config artifact
     - name: fabric-service-leaves
@@ -32,12 +32,12 @@ spec:
       description: Internal firewalls; target of the internal_fw_config artifact
     - name: fabric-isp-routers
       description: ISP routers; target of the isp_router_startup_config artifact
-    # Phase 4 PC1: targets of the BGW and DCI switch artifacts; members added by the generator
+    # Targets of the BGW and DCI switch artifacts; members added by the generator
     - name: fabric-bgws
       description: Border gateways; target of the bgw_startup_config artifact
     - name: fabric-dci-switches
       description: DCI switches; target of the dci_startup_config artifact
-    # Phase 4 PC2: target of the cloud router artifact; members added by the generator
+    # Target of the cloud router artifact; members added by the generator
     - name: fabric-cloud-routers
       description: Cloud routers; target of the cloud_router_iosxr_config artifact
 ---
@@ -46,7 +46,7 @@ kind: Object
 spec:
   kind: CoreStandardGroup
   data:
-    # Phase 4 PC3: target of the sdwan_fw_fortios_config artifact; members added by the generator
+    # Target of the sdwan_fw_fortios_config artifact; members added by the generator
     - name: fabric-sdwan-fws
       description: SD-WAN hub firewalls; target of the sdwan_fw_fortios_config artifact
 ---
@@ -55,7 +55,7 @@ kind: Object
 spec:
   kind: CoreStandardGroup
   data:
-    # Phase 4 PC4: target of the vpn_fw_fortios_config artifact; members added by the generator
+    # Target of the vpn_fw_fortios_config artifact; members added by the generator
     - name: fabric-vpn-fws
       description: VPN-partner firewalls; target of the vpn_fw_fortios_config artifact
 ---
@@ -64,7 +64,7 @@ kind: Object
 spec:
   kind: CoreStandardGroup
   data:
-    # Phase 4 PC6: target of generator oob_site (DC1, DC2) and of the OOB artifacts; artifact members added by oob_site
+    # Target of generator oob_site (DC1, DC2) and of the OOB artifacts; artifact members added by oob_site
     - name: oob-sites
       description: Sites the OOB generator builds (target group of generator oob_site).
     - name: oob-switches

@@ -89,6 +89,16 @@ nodes:
             label: Backbone
             description: Core network infrastructure prefixes.
             color: "#9678B6"
+          # Public prefixes are found by role, not by prefix length
+          - name: public_block
+            label: Public Block
+            description: A site's public address block.
+          - name: public_nat_pool
+            label: Public NAT Pool
+            description: Internet FW source-NAT pool.
+          - name: public_services
+            label: Public Services
+            description: Published services (DMZ inbound).
         optional: true
         order_weight: 1300
     relationships:

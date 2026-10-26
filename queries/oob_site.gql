@@ -1,4 +1,4 @@
-# Phase 4 PC6: generator oob_site (target group oob-sites); the production devices are read by the generator itself
+# Generator oob_site (target group oob-sites); the production devices are read by the generator itself
 query OobSite($site: String!) {
   LocationSite(name__value: $site) {
     edges {

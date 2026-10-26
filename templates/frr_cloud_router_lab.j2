@@ -1,27 +1,72 @@
-{# Option 5 (D5-22): lab stand-in for an IOS XR cloud router (Cisco 8201), as one POSIX shell script run in an FRR container,
+{# Option 5 lab: stand-in for an IOS XR cloud router (Cisco 8201), as one POSIX shell script run in an FRR container,
    same pattern as frr_isp_router_lab.j2. Same query and derivation rules as cloud_router_config.j2; mirrors its routing: the
    bundle toward the border leaves with its TRANSIT sub-interface, the cross-link iBGP (next-hop-self), the AWS and Microsoft
    handoffs on the cloud-exchange port, every prefix-set and route-policy (as prefix-lists and route-maps), the aggregate, the
-   backup-site prepend, BFD 300 ms x 3 toward the clouds and 999 x 3 inside. Not mirrored: the management VRF (the container's
-   eth0). Port names (P3-70 and P5): FourHundredGigE0/0/0/<2k> -> Gi0-0-0-<k>, HundredGigE0/0/0/<n> -> Hu0-0-0-<n>. #}
-{% set bgp_password = "cisco123" -%}
-{% set aws_md5_key = "cisco123" -%}
-{% set azure_md5_key = "cisco123" -%}
-{% set cloud_bfd_interval = 300 -%}{% set cloud_bfd_mult = 3 -%}
-{% set bfd_interval = 999 -%}{% set bfd_mult = 3 -%}
-{% set aws_provider = "AWS" -%}{% set azure_provider = "Microsoft" -%}
-{% set aws_peer_host = 1 -%}
-{% set ms_peer_host = 2 -%}
-{% set backup_site = "DC2" -%}{% set prepend_count = 3 -%}
-{% set dc_summary = {"DC1": "10.16.0.0/16", "DC2": "10.20.0.0/16"} -%}
-{% set partner_vrf = "PARTNER" -%}
-{% set aws_block = "172.16.0.0/13" -%}{% set azure_block = "172.30.0.0/15" -%}
-{% set cloud_le = 24 -%}
-{% set fabric_le = 24 -%}
-{% set guardrail = ["10.19.0.0/16", "10.23.0.0/16", "10.0.0.0/16"] -%}
-{% set max_prefix = 100 -%}{% set max_prefix_pct = 90 -%}
-{% set seq_step = 10 -%}
-{% set bond_mode = "802.3ad" -%}{# I-10 #}
+   backup-site prepend, BFD cloud_bfd_interval_ms x cloud_bfd_multiplier toward the clouds and bfd_interval_ms x bfd_multiplier
+   inside, each session gated by the same field as the router. Not mirrored: the management VRF (the container's
+   eth0). Port names: FourHundredGigE0/0/0/<2k> -> Gi0-0-0-<k>, HundredGigE0/0/0/<n> -> Hu0-0-0-<n>. #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.aws_bgp_password.value is none %}{{ missing_FabricDesign_aws_bgp_password() }}{% endif -%}
+{%- if fd.azure_bgp_password.value is none %}{{ missing_FabricDesign_azure_bgp_password() }}{% endif -%}
+{%- if fd.cloud_bfd_interval_ms.value is none %}{{ missing_FabricDesign_cloud_bfd_interval_ms() }}{% endif -%}
+{%- if fd.cloud_bfd_multiplier.value is none %}{{ missing_FabricDesign_cloud_bfd_multiplier() }}{% endif -%}
+{%- if fd.bfd_interval_ms.value is none %}{{ missing_FabricDesign_bfd_interval_ms() }}{% endif -%}
+{%- if fd.bfd_multiplier.value is none %}{{ missing_FabricDesign_bfd_multiplier() }}{% endif -%}
+{%- if fd.bfd_min_rx_ms.value is none %}{{ missing_FabricDesign_bfd_min_rx_ms() }}{% endif -%}
+{%- if fd.aws_peer_host.value is none %}{{ missing_FabricDesign_aws_peer_host() }}{% endif -%}
+{%- if fd.er_provider_host.value is none %}{{ missing_FabricDesign_er_provider_host() }}{% endif -%}
+{%- if fd.cloud_backup_site.value is none %}{{ missing_FabricDesign_cloud_backup_site() }}{% endif -%}
+{%- if fd.cloud_prepend_count.value is none %}{{ missing_FabricDesign_cloud_prepend_count() }}{% endif -%}
+{%- if fd.partner_vrf.value is none %}{{ missing_FabricDesign_partner_vrf() }}{% endif -%}
+{%- if fd.cloud_aws_block.value is none %}{{ missing_FabricDesign_cloud_aws_block() }}{% endif -%}
+{%- if fd.cloud_azure_block.value is none %}{{ missing_FabricDesign_cloud_azure_block() }}{% endif -%}
+{%- if fd.cloud_prefix_max_length.value is none %}{{ missing_FabricDesign_cloud_prefix_max_length() }}{% endif -%}
+{%- if fd.cloud_from_fabric_max_length.value is none %}{{ missing_FabricDesign_cloud_from_fabric_max_length() }}{% endif -%}
+{%- if fd.external_guardrail_prefixes.value is none %}{{ missing_FabricDesign_external_guardrail_prefixes() }}{% endif -%}
+{%- if fd.external_guardrail_max_length.value is none %}{{ missing_FabricDesign_external_guardrail_max_length() }}{% endif -%}
+{%- if fd.cloud_max_prefix.value is none %}{{ missing_FabricDesign_cloud_max_prefix() }}{% endif -%}
+{%- if fd.cloud_max_prefix_threshold_pct.value is none %}{{ missing_FabricDesign_cloud_max_prefix_threshold_pct() }}{% endif -%}
+{%- if fd.cloud_max_prefix_action.value is none %}{{ missing_FabricDesign_cloud_max_prefix_action() }}{% endif -%}
+{%- if fd.cloud_advertise_default.value is none %}{{ missing_FabricDesign_cloud_advertise_default() }}{% endif -%}
+{%- if fd.cloud_prepend_default.value is none %}{{ missing_FabricDesign_cloud_prepend_default() }}{% endif -%}
+{%- if fd.cloud_accept_default_from_fabric.value is none %}{{ missing_FabricDesign_cloud_accept_default_from_fabric() }}{% endif -%}
+{%- if fd.bfd_echo.value is none %}{{ missing_FabricDesign_bfd_echo() }}{% endif -%}
+{%- if fd.cloud_router_bgp_graceful_restart.value is none %}{{ missing_FabricDesign_cloud_router_bgp_graceful_restart() }}{% endif -%}
+{%- if fd.attachment_leaf_hosts.value is none %}{{ missing_FabricDesign_attachment_leaf_hosts() }}{% endif -%}
+{%- if fd.route_policy_seq_step.value is none %}{{ missing_FabricDesign_route_policy_seq_step() }}{% endif -%}
+{%- if fd.dc1_tenant_block.value is none %}{{ missing_FabricDesign_dc1_tenant_block() }}{% endif -%}
+{%- if fd.dc2_tenant_block.value is none %}{{ missing_FabricDesign_dc2_tenant_block() }}{% endif -%}
+{%- if fd.cloud_aws_provider.value is none %}{{ missing_FabricDesign_cloud_aws_provider() }}{% endif -%}
+{%- if fd.cloud_azure_provider.value is none %}{{ missing_FabricDesign_cloud_azure_provider() }}{% endif -%}
+{%- if fd.cloud_prepend_max_length.value is none %}{{ missing_FabricDesign_cloud_prepend_max_length() }}{% endif -%}
+{%- if fd.cloud_bgp_bfd.value is none %}{{ missing_FabricDesign_cloud_bgp_bfd() }}{% endif -%}
+{%- if fd.cloud_router_pair_bgp_bfd.value is none %}{{ missing_FabricDesign_cloud_router_pair_bgp_bfd() }}{% endif -%}
+{%- if fd.cloud_router_pair_next_hop_self.value is none %}{{ missing_FabricDesign_cloud_router_pair_next_hop_self() }}{% endif -%}
+{%- if fd.attachment_bgp_bfd.value is none %}{{ missing_FabricDesign_attachment_bgp_bfd() }}{% endif -%}
+{%- if fd.cloud_advertise_tenant_summary.value is none %}{{ missing_FabricDesign_cloud_advertise_tenant_summary() }}{% endif -%}
+{%- if fd.cloud_advertise_partner_summaries.value is none %}{{ missing_FabricDesign_cloud_advertise_partner_summaries() }}{% endif -%}
+{%- if fd.cloud_tenant_summary_mode.value is none %}{{ missing_FabricDesign_cloud_tenant_summary_mode() }}{% endif -%}
+{%- if fd.lacp_mode.value is none %}{{ missing_FabricDesign_lacp_mode() }}{% endif -%}
+{% set aws_md5_key = fd.aws_bgp_password.value -%}
+{% set azure_md5_key = fd.azure_bgp_password.value -%}
+{% set cloud_bfd_interval = fd.cloud_bfd_interval_ms.value -%}{% set cloud_bfd_mult = fd.cloud_bfd_multiplier.value -%}
+{% set bfd_interval = fd.bfd_interval_ms.value -%}{% set bfd_mult = fd.bfd_multiplier.value -%}
+{% set aws_provider = fd.cloud_aws_provider.value -%}{% set azure_provider = fd.cloud_azure_provider.value -%}
+{% set aws_peer_host = fd.aws_peer_host.value -%}
+{% set ms_peer_host = fd.er_provider_host.value -%}
+{% set backup_site = fd.cloud_backup_site.value -%}{% set prepend_count = fd.cloud_prepend_count.value -%}
+{% set dc_summary = {"DC1": fd.dc1_tenant_block.value, "DC2": fd.dc2_tenant_block.value} -%}
+{% set partner_vrf = fd.partner_vrf.value -%}
+{% set aws_block = fd.cloud_aws_block.value -%}{% set azure_block = fd.cloud_azure_block.value -%}
+{% set cloud_le = fd.cloud_prefix_max_length.value -%}
+{% set fabric_le = fd.cloud_from_fabric_max_length.value -%}
+{% set guardrail = fd.external_guardrail_prefixes.value -%}
+{% set max_prefix = fd.cloud_max_prefix.value -%}{% set max_prefix_pct = fd.cloud_max_prefix_threshold_pct.value -%}
+{% set seq_step = fd.route_policy_seq_step.value -%}
+{% set lab_bond_mode = {"active": "802.3ad"} -%}{# Linux bond mode for each lacp_mode the lab supports #}
+{%- if fd.lacp_mode.value not in lab_bond_mode %}{{ unsupported_FabricDesign_lacp_mode_in_lab() }}{% endif -%}
+{% set bond_mode = lab_bond_mode[fd.lacp_mode.value] -%}
 {% set bfd_profile = "CR-BFD" -%}{% set cloud_bfd_profile = "CLOUD-BFD" -%}{# P5 #}
 {% macro lx(n) %}{% if n.startswith("FourHundredGigE0/0/0/") %}Gi0-0-0-{{ (n.split("/")[-1] | int) // 2 }}{% elif n.startswith("HundredGigE0/0/0/") %}Hu0-0-0-{{ n.split("/")[-1] }}{% else %}{{ n }}{% endif %}{% endmacro -%}
 {% macro be(n) %}{{ n | replace("Bundle-Ether", "BE") }}{% endmacro -%}
@@ -31,6 +76,13 @@
 {% set asn = device.asn.node.asn.value -%}
 {% set site = device.location.node -%}
 {% set site_name = site.name.value -%}
+{% set pw_key = site_name | lower ~ "_attachment_bgp_password" -%}
+{%- if fd[pw_key] is not defined or fd[pw_key].value is none %}{{ fd["missing_FabricDesign_" ~ pw_key].value() }}{% endif -%}
+{% set bgp_password = fd[pw_key].value -%}
+{% set pair_pw_key = site_name | lower ~ "_cloud_pair_bgp_password" -%}
+{%- if fd[pair_pw_key] is not defined or fd[pair_pw_key].value is none %}{{ fd["missing_FabricDesign_" ~ pair_pw_key].value() }}{% endif -%}
+{% set pair_bgp_password = fd[pair_pw_key].value -%}
+{%- if fd[site_name | lower ~ "_tenant_block"] is not defined %}{{ fd["missing_FabricDesign_" ~ site_name | lower ~ "_tenant_block"].value() }}{% endif -%}
 {% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
 {% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
 {% set virtual = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
@@ -62,7 +114,7 @@
 {% set azure_addr = hs.azure.ip_addresses.edges[0].node.address.value -%}
 {% set aws_peer = host(aws_addr, aws_peer_host) -%}
 {% set azure_peer = host(azure_addr, ms_peer_host) -%}
-{% set to_cloud = ["0.0.0.0/0", dc_summary[site_name]] + pns.items -%}
+{% set to_cloud = (["0.0.0.0/0"] if fd.cloud_advertise_default.value else []) + ([dc_summary[site_name]] if fd.cloud_advertise_tenant_summary.value else []) + (pns.items if fd.cloud_advertise_partner_summaries.value else []) -%}
 {% set pp = namespace(items=[]) -%}
 {% for s, p in dc_summary | dictsort %}{% if s != site_name %}{% set pp.items = pp.items + [p] %}{% endif %}{% endfor -%}
 {% set xc_if = lx(xc.name.value) -%}
@@ -73,7 +125,7 @@
 set -eu
 sysctl -qw net.ipv4.ip_forward=1
 ip route del default dev eth0 2>/dev/null || true
-ip addr replace {{ router_id }}/32 dev lo
+ip addr replace {{ lo0.ip_addresses.edges[0].node.address.value }} dev lo
 # --- {{ bundle.name.value }} (LACP; members that exist in the lab) and its sub-interface {{ fabric_sub.name.value }}
 ip link add {{ bond }} type bond mode {{ bond_mode }} 2>/dev/null || true
 {% for m in members %}
@@ -103,9 +155,8 @@ hostname {{ name }}
 service integrated-vtysh-config
 !
 {% for p in guardrail %}
-ip prefix-list PS-GUARDRAIL seq {{ loop.index * seq_step }} permit {{ p }} le 32
+ip prefix-list PS-GUARDRAIL seq {{ loop.index * seq_step }} permit {{ p }} le {{ fd.external_guardrail_max_length.value }}
 {% endfor %}
-ip prefix-list PS-DEFAULT seq {{ seq_step }} permit 0.0.0.0/0
 ip prefix-list PS-AWS seq {{ seq_step }} permit {{ aws_block }} le {{ cloud_le }}
 ip prefix-list PS-AZURE seq {{ seq_step }} permit {{ azure_block }} le {{ cloud_le }}
 {% for p in to_cloud %}
@@ -113,14 +164,17 @@ ip prefix-list PS-TO-CLOUD seq {{ loop.index * seq_step }} permit {{ p }}
 {% endfor %}
 {% if site_name == backup_site %}
 {# IOS XR: "if destination in PS-TO-CLOUD then if destination in PS-PREPEND then prepend": FRR takes one prefix-list per entry, so
-   PS-PREPEND here is the part of PS-TO-CLOUD that IOS XR's PS-PREPEND (0/0 and the other DC's summary le 32) matches #}
+   PS-PREPEND here is the part of PS-TO-CLOUD that IOS XR's PS-PREPEND (0/0 and the other DC's summary le
+   cloud_prepend_max_length) matches: inside the other DC's block, at least its length and at most cloud_prepend_max_length #}
 {% set ppn = namespace(items=[]) -%}
-{% for p in to_cloud %}{% if p == "0.0.0.0/0" %}{% set ppn.items = ppn.items + [p] %}{% else %}{% for o in pp.items %}{% if p.split(".")[:2] == o.split(".")[:2] and (p.split("/")[1] | int) >= (o.split("/")[1] | int) %}{% set ppn.items = ppn.items + [p] %}{% endif %}{% endfor %}{% endif %}{% endfor -%}
+{% for p in to_cloud %}{% if p == "0.0.0.0/0" %}{% if fd.cloud_prepend_default.value %}{% set ppn.items = ppn.items + [p] %}{% endif %}{% else %}{% for o in pp.items %}{% if ((p.split("/")[0] ~ "/" ~ o.split("/")[1]) | ipaddress_interface("network") | string) == o and (p.split("/")[1] | int) >= (o.split("/")[1] | int) and (p.split("/")[1] | int) <= fd.cloud_prepend_max_length.value %}{% set ppn.items = ppn.items + [p] %}{% endif %}{% endfor %}{% endif %}{% endfor -%}
 {% for p in ppn.items %}
 ip prefix-list PS-PREPEND seq {{ loop.index * seq_step }} permit {{ p }}
 {% endfor %}
 {% endif %}
+{% if fd.cloud_accept_default_from_fabric.value %}
 ip prefix-list PS-FROM-FABRIC seq {{ seq_step }} permit 0.0.0.0/0
+{% endif %}
 ip prefix-list PS-FROM-FABRIC seq {{ 2 * seq_step }} permit {{ dc_summary[site_name] }} le {{ fabric_le }}
 !
 route-map RP-AWS-IN deny {{ seq_step }}
@@ -151,50 +205,73 @@ route-map RP-FABRIC-OUT permit {{ 2 * seq_step }}
 bfd
  profile {{ bfd_profile }}
   transmit-interval {{ bfd_interval }}
-  receive-interval {{ bfd_interval }}
+  receive-interval {{ fd.bfd_min_rx_ms.value }}
   detect-multiplier {{ bfd_mult }}
+{% if fd.bfd_echo.value %}
+  echo-mode
+{% else %}
   no echo-mode
+{% endif %}
  exit
  profile {{ cloud_bfd_profile }}
   transmit-interval {{ cloud_bfd_interval }}
   receive-interval {{ cloud_bfd_interval }}
   detect-multiplier {{ cloud_bfd_mult }}
+{% if fd.bfd_echo.value %}
+  echo-mode
+{% else %}
   no echo-mode
+{% endif %}
  exit
 exit
 !
 router bgp {{ asn }}
  bgp router-id {{ router_id }}
+{% if fd.cloud_router_bgp_graceful_restart.value %}
+ bgp graceful-restart
+{% endif %}
  neighbor {{ aws_peer }} remote-as {{ hs.aws_asn }}
  neighbor {{ aws_peer }} description {{ hs.aws.description.value }}
  neighbor {{ aws_peer }} password {{ aws_md5_key }}
+{% if fd.cloud_bgp_bfd.value %}
  neighbor {{ aws_peer }} bfd profile {{ cloud_bfd_profile }}
+{% endif %}
  neighbor {{ azure_peer }} remote-as {{ hs.azure_asn }}
  neighbor {{ azure_peer }} description {{ hs.azure.description.value }}
  neighbor {{ azure_peer }} password {{ azure_md5_key }}
+{% if fd.cloud_bgp_bfd.value %}
  neighbor {{ azure_peer }} bfd profile {{ cloud_bfd_profile }}
+{% endif %}
  neighbor {{ ibgp_peer }} remote-as {{ asn }}
  neighbor {{ ibgp_peer }} description {{ xlink.description.value.split(" ")[0] }}
- neighbor {{ ibgp_peer }} password {{ bgp_password }}
+ neighbor {{ ibgp_peer }} password {{ pair_bgp_password }}
+{% if fd.cloud_router_pair_bgp_bfd.value %}
  neighbor {{ ibgp_peer }} bfd profile {{ bfd_profile }}
+{% endif %}
 {% for leaf in leaves %}
- neighbor {{ host(att.prefix.node.prefix.value, loop.index) }} remote-as {{ leaf.asn.node.asn.value }}
- neighbor {{ host(att.prefix.node.prefix.value, loop.index) }} description {{ leaf.name.value }} ({{ att.name.value }})
- neighbor {{ host(att.prefix.node.prefix.value, loop.index) }} password {{ bgp_password }}
- neighbor {{ host(att.prefix.node.prefix.value, loop.index) }} bfd profile {{ bfd_profile }}
+ neighbor {{ host(att.prefix.node.prefix.value, fd.attachment_leaf_hosts.value[loop.index0]) }} remote-as {{ leaf.asn.node.asn.value }}
+ neighbor {{ host(att.prefix.node.prefix.value, fd.attachment_leaf_hosts.value[loop.index0]) }} description {{ leaf.name.value }} ({{ att.name.value }})
+ neighbor {{ host(att.prefix.node.prefix.value, fd.attachment_leaf_hosts.value[loop.index0]) }} password {{ bgp_password }}
+{% if fd.attachment_bgp_bfd.value %}
+ neighbor {{ host(att.prefix.node.prefix.value, fd.attachment_leaf_hosts.value[loop.index0]) }} bfd profile {{ bfd_profile }}
+{% endif %}
 {% endfor %}
  address-family ipv4 unicast
+{% if fd.cloud_tenant_summary_mode.value == "aggregate" %}
   aggregate-address {{ dc_summary[site_name] }}
+{% endif %}
   neighbor {{ aws_peer }} route-map RP-AWS-IN in
-  neighbor {{ aws_peer }} maximum-prefix {{ max_prefix }} {{ max_prefix_pct }} warning-only
+  neighbor {{ aws_peer }} maximum-prefix {{ max_prefix }} {{ max_prefix_pct }} {{ fd.cloud_max_prefix_action.value }}
   neighbor {{ aws_peer }} route-map RP-CLOUD-OUT out
   neighbor {{ azure_peer }} route-map RP-AZURE-IN in
-  neighbor {{ azure_peer }} maximum-prefix {{ max_prefix }} {{ max_prefix_pct }} warning-only
+  neighbor {{ azure_peer }} maximum-prefix {{ max_prefix }} {{ max_prefix_pct }} {{ fd.cloud_max_prefix_action.value }}
   neighbor {{ azure_peer }} route-map RP-CLOUD-OUT out
+{% if fd.cloud_router_pair_next_hop_self.value %}
   neighbor {{ ibgp_peer }} next-hop-self
+{% endif %}
 {% for leaf in leaves %}
-  neighbor {{ host(att.prefix.node.prefix.value, loop.index) }} route-map RP-FABRIC-IN in
-  neighbor {{ host(att.prefix.node.prefix.value, loop.index) }} route-map RP-FABRIC-OUT out
+  neighbor {{ host(att.prefix.node.prefix.value, fd.attachment_leaf_hosts.value[loop.index0]) }} route-map RP-FABRIC-IN in
+  neighbor {{ host(att.prefix.node.prefix.value, fd.attachment_leaf_hosts.value[loop.index0]) }} route-map RP-FABRIC-OUT out
 {% endfor %}
  exit-address-family
 exit

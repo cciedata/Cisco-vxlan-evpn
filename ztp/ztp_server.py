@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""vamd ZTP server (Phase 3b). Serves the POAP script, serves each device's startup-config LIVE from Infrahub looked up by serial
-number (Z-04, Z-05), and keeps DcimDevice.ztp_state current on main through the ztp-callback account (Z-06, Z-08).
+"""vamd ZTP server. Serves the POAP script, serves each device's startup-config LIVE from Infrahub looked up by serial
+number, and keeps DcimDevice.ztp_state current on main through the ztp-callback account.
 
   ztp_server.py <listen ip> <port>
 
-States (decided 8 Oct): pending is set by a person / PC before racking. This server writes
+States: pending is set by a person / PC before racking. This server writes
   served    config sent to that serial                                        (GET /config/<serial>)
-  complete  after the POAP reload: SSH to the device's mgmt0 address from its config answers with hostname = device name
-  failed    the POAP script reported an error (GET /callback/<serial>/failed/<reason>), or no verified login within 30 min
+  complete  after the POAP reload: SSH to the device's management interface (FabricDesign <role>_mgmt_interface) address from
+            its config answers with hostname = device name, and 'show version' equals its DcimPlatform.os_version
+  failed    the POAP script reported an error (GET /callback/<serial>/failed/<reason>), no verified login within
+            FabricDesign.ztp_verify_window_s of the callback, or the running release differs from DcimPlatform.os_version
+            (ZTP does not install images; the mismatch is logged as event version-mismatch and in the state reason)
 The callback itself (GET /callback/<serial>) only starts the verification; the state stays served until it ends.
+Design values are read from Infrahub through ztp_design.py; a missing one ends the device failed with the field named.
 Every write also sets ztp_updated (UTC). Writes go directly to main (decision 8 Oct).
 
 Secrets (~/.vamd/secrets.env, ztp/make-secret.sh, ztp/setup_account.py): ZTP_CALLBACK_TOKEN (Infrahub API token of ztp-callback),
-VAMDADMIN_HASH (filled into the config, lab/vamd_secrets.py), VAMDADMIN_PASSWORD (the verification login). Without VAMDADMIN_HASH
-the username line is dropped (warning event) and the verification logs in with the lab login (labctl P3D-07).
+CISCOADMIN_HASH (filled into the config, lab/vamd_secrets.py), CISCOADMIN_PASSWORD (the verification login). Without CISCOADMIN_HASH
+the username line is dropped (warning event) and the verification logs in with the lab login (as labctl).
 env: INFRAHUB_ADDRESS (labctl's default when unset), ZTP_SERIAL_ATTR (serial_number)
 """
 import datetime
@@ -21,7 +25,6 @@ import hashlib
 import http.server
 import json
 import os
-import re
 import sys
 import threading
 import time
@@ -32,11 +35,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "lab"))
 import labctl          # noqa: E402  Infrahub client (login + artifact read), the same code the lab uses
 import vamd_secrets    # noqa: E402
+import ztp_design      # noqa: E402  FabricDesign / DcimPlatform values (fails loudly on a missing value)
 
 LOG = os.path.join(HERE, "ztp-events.jsonl")
 ATTR = os.environ.get("ZTP_SERIAL_ATTR", "serial_number")
-VERIFY_MAX_S = 1800        # decided 8 Oct: 30 min after the callback, then failed
-VERIFY_EVERY_S = 30
 LISTEN, PORT = sys.argv[1], int(sys.argv[2])
 
 
@@ -75,33 +77,57 @@ def set_state(dev_id, name, state, **kw):
         event("state", device=name, state=state, written=False, error=repr(e)[:300], **kw)
 
 
-def mgmt_target(cfg):
-    m = re.search(r"^interface mgmt0\n(?:  .*\n)*?\s+ip address (\d+\.\d+\.\d+\.\d+)/\d+", cfg, re.M)
-    return m.group(1) if m else None
+def mgmt_target(ih, dev_id, cfg):
+    """(address of the device's management interface in its config, why not) - the interface is FabricDesign.<role>_mgmt_interface."""
+    try:
+        ifname = ztp_design.mgmt_interface(ih, ztp_design.device(ih, dev_id=dev_id))
+    except (Exception, SystemExit) as e:
+        return None, f"design value not readable: {e}"[:200]
+    ip = ztp_design.mgmt_address(cfg, ifname)
+    return ip, (None if ip else f"no {ifname} address in the config")
 
 
 def verify(dev_id, name, sn, ip):
-    """After the callback: SSH every 30 s until the device answers with its own hostname (complete) or 30 min pass (failed)."""
+    """After the callback: SSH every ztp_verify_poll_s until the device answers with its own hostname, then compare its running
+    release ('show version') with DcimPlatform.os_version: equal -> complete, different -> failed. No verified login
+    within ztp_verify_window_s -> failed."""
     from netmiko import ConnectHandler
     vals = vamd_secrets.load()
-    user, pw = ("vamdadmin", vals["VAMDADMIN_PASSWORD"]) if vals.get("VAMDADMIN_PASSWORD") and vals.get("VAMDADMIN_HASH") \
-        else (labctl.NXOS_USER, labctl.NXOS_PASS)
-    event("verify-start", serial=sn, device=name, ip=ip, user=user, max_s=VERIFY_MAX_S)
+    login = vals.get("CISCOADMIN_PASSWORD") and vals.get("CISCOADMIN_HASH")
+    try:
+        ih = labctl.Infrahub("main")
+        d = ztp_design.design_values(ih, "ztp_verify_window_s", "ztp_verify_poll_s", *(["local_admin_username"] if login else []))
+        want = ztp_design.os_version(ztp_design.device(ih, dev_id=dev_id))
+    except (Exception, SystemExit) as e:
+        return set_state(dev_id, name, "failed", serial=sn, reason=f"design value not readable: {e}"[:200])
+    max_s, every_s = d["ztp_verify_window_s"], d["ztp_verify_poll_s"]
+    if login:
+        user, pw = d["local_admin_username"], vals["CISCOADMIN_PASSWORD"]
+    else:
+        user, pw = labctl.NXOS_USER, labctl.NXOS_PASS
+    event("verify-start", serial=sn, device=name, ip=ip, user=user, max_s=max_s, os_version=want)
     start, last = time.time(), ""
-    while time.time() - start < VERIFY_MAX_S:
+    while time.time() - start < max_s:
         try:
             with ConnectHandler(device_type="cisco_nxos", host=ip, username=user, password=pw, conn_timeout=20, fast_cli=False) as c:
                 out = c.send_command("show hostname").strip()
+                ver = c.send_command("show version") if out.split(".")[0] == name else ""
             if out.split(".")[0] == name:
-                return set_state(dev_id, name, "complete", serial=sn, after_s=round(time.time() - start))
+                running = ztp_design.running_version(ver)
+                if running != want:
+                    line = next((l.strip() for l in ver.splitlines() if "NXOS: version" in l), "no 'NXOS: version' line")
+                    event("version-mismatch", serial=sn, device=name, running=running, os_version=want, show_version=line[:120])
+                    return set_state(dev_id, name, "failed", serial=sn,
+                                     reason=f"release mismatch: running {running}, DcimPlatform.os_version {want}")
+                return set_state(dev_id, name, "complete", serial=sn, after_s=round(time.time() - start), os_version=running)
             last = f"hostname {out!r}"
         except Exception as e:
             last = type(e).__name__
-        time.sleep(VERIFY_EVERY_S)
-    set_state(dev_id, name, "failed", serial=sn, reason=f"not verified in {VERIFY_MAX_S} s ({last})")
+        time.sleep(every_s)
+    set_state(dev_id, name, "failed", serial=sn, reason=f"not verified in {max_s} s ({last})")
 
 
-SERVED = {}    # serial -> (device id, name, mgmt ip) of the last config served
+SERVED = {}    # serial -> (device id, name, mgmt ip, why no ip) of the last config served
 
 
 class H(http.server.BaseHTTPRequestHandler):
@@ -126,7 +152,7 @@ class H(http.server.BaseHTTPRequestHandler):
                     body, warns = vamd_secrets.fill(body)
                     for w in warns:
                         event("secret-warning", serial=sn, device=name, warning=w)
-                    SERVED[sn] = (dev_id, name, mgmt_target(body))
+                    SERVED[sn] = (dev_id, name, *mgmt_target(ih, dev_id, body))
                     event("config", serial=sn, device=name, artifact_id=meta["id"], checksum=meta["checksum"], bytes=len(body))
                     set_state(dev_id, name, "served", serial=sn)
                     return self.send(200, body.encode())
@@ -135,10 +161,10 @@ class H(http.server.BaseHTTPRequestHandler):
                     event("callback-failed", serial=sn, device=name, reason=reason)
                     set_state(dev_id, name, "failed", serial=sn, reason=reason)
                     return self.send(200, b"ok\n")
-                ip = SERVED.get(sn, (None, None, None))[2]
+                _, _, ip, why = SERVED.get(sn, (None, None, None, "callback without a served config"))
                 event("callback", serial=sn, device=name, verify_ip=ip)
                 if not ip:
-                    set_state(dev_id, name, "failed", serial=sn, reason="callback without a served config / no mgmt0 address")
+                    set_state(dev_id, name, "failed", serial=sn, reason=why)
                 else:
                     threading.Thread(target=verify, args=(dev_id, name, sn, ip), daemon=True).start()
                 return self.send(200, b"ok\n")

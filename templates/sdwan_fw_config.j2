@@ -1,38 +1,96 @@
-{# Phase 4 PC3: SD-WAN hub FortiGate (FG-1800F, FortiOS 7.6.7), A/P HA, single VDOM. Two routing tables: VRF 0 = WAN
+{# SD-WAN hub FortiGate (FG-1800F, FortiOS 7.6.7), A/P HA, single VDOM. Two routing tables: VRF 0 = WAN
    underlay (outside leg on the edge VLAN, public WAN loopback, static 0/0 to the ISP routers' VRRP VIP); VRF 1 = TRANSIT
    and the overlay (inside leg to the border leaves, ADVPN 2.0 hub tunnel). BGP AS 65400 toward the branches (iBGP,
-   dynamic neighbors, the hub reflects branch routes: row 73), local-as 65120 / 65220 toward the border leaves. Routing only (no policies,
-   no NAT). Rows = decisions.xlsx Open-Phase4; P4A-3xx = auto_approved.md. #}
-{# Approved constants #}
-{% set overlay_asn = 65400 -%}   {#- row 38 B: AS 65400 toward the branches -#}
-{% set table_vrf = 1 -%}   {#- TRANSIT VRF id (Phase 2 PC3 FW_VRF_ID); the overlay shares it (P4A-310) -#}
-{% set wan_vrf = 0 -%}   {#- P4A-310: WAN underlay in its own table -#}
-{% set transit_vrf = "TRANSIT" -%}
-{% set ha_group_base = 20 -%}   {#- P4A-311: fabric-ASN offset rule (Internal 10, Internet 40) -#}
-{% set ha_site_offset = 100 -%}   {#- same as the Phase 2 FWs -#}
-{% set ha_priority = {1: 200, 2: 100} -%}   {#- same as the Phase 2 FWs -#}
-{% set ha_hbdev = [("ha1", 50), ("ha2", 50)] -%}   {#- P4A-303: FG-1800F HA ports, weight as the Phase 2 FWs -#}
-{% set ha_monitor = ["agg-inside", "agg-outside"] -%}   {#- P4A-312 -#}
-{% set bgp_password = "cisco123" -%}   {#- every BGP session (decided) -#}
-{% set bfd_tx = 999 -%}{% set bfd_rx = 999 -%}{% set bfd_mult = 3 -%}   {#- toward the leaves: NX-OS single-hop max (decided) -#}
-{% set seq_step = 10 -%}
-{% set fw_host = 3 -%}   {#- attachment /29: .3 = the FW pair -#}
-{% set edge_fw_host = 11 -%}   {#- edge VLAN: .11 SD-WAN FW (decided, EDGE_VLAN_HOST) -#}
-{% set vip_host = 1 -%}   {#- edge VLAN: .1 VRRP VIP of the ISP routers (decided: SD-WAN/VPN legs route statically to it) -#}
-{% set mtu = 9216 -%}
-{% set wan_lo = "LO-WAN" -%}   {#- P4A-305 -#}
-{% set tunnel = "ADVPN-HUB" -%}   {#- P4A-306 -#}
-{% set branch_group = "BRANCHES" -%}   {#- P4A-313 -#}
-{% set branch_summary = "10.64.0.0/12" -%}   {#- design: branches; toward TRANSIT -#}
-{% set branch_lan_le = 24 -%}   {#- design: from the branches accept 10.64.0.0/12 le 24 (row 41 B) -#}
-{% set cloud_summaries = ["172.16.0.0/13", "172.30.0.0/15"] -%}   {#- design: allowlist toward the SD-WAN (AWS, Azure) -#}
-{% set cloud_in_le = 24 -%}   {#- P4A-327: TRANSIT carries the cloud prefixes le 24 (PC2 cloud routers); the hub aggregates them -#}
-{% set reflect_branches = true -%}   {#- Open-Phase4 row 73 D + follow-up (7 Oct): the hub reflects the branch /24s to its branches; hubs stay unpeered (row 44 C) -#}
-{% set no_branch_vrfs = ["PARTNER"] -%}   {#- design: never PARTNER summaries (and never 0/0) toward the branches -#}
-{% set psk = "cisco123" -%}   {#- row 43 B: placeholder (public repo), P4A-314 value -#}
-{% set ike_proposal = "aes256gcm-prfsha384" -%}{% set ike_dhgrp = 20 -%}{% set ike_keylife = 28800 -%}   {#- P4A-315 -#}
-{% set esp_proposal = "aes256gcm" -%}{% set esp_keylife = 3600 -%}   {#- P4A-315 -#}
-{% set dpd_retry = 10 -%}   {#- P4A-316 -#}
+   dynamic neighbors, the hub reflects branch routes), local-as 65120 / 65220 toward the border leaves. Routing only (no policies,
+   no NAT). #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.sdwan_overlay_asn.value is none %}{{ missing_FabricDesign_sdwan_overlay_asn() }}{% endif -%}
+{%- if fd.fw_wan_vrf_id.value is none %}{{ missing_FabricDesign_fw_wan_vrf_id() }}{% endif -%}
+{%- if fd.transit_vrf.value is none %}{{ missing_FabricDesign_transit_vrf() }}{% endif -%}
+{%- if fd.sdwan_fw_ha_group_base.value is none %}{{ missing_FabricDesign_sdwan_fw_ha_group_base() }}{% endif -%}
+{%- if fd.fw_ha_priority.value is none %}{{ missing_FabricDesign_fw_ha_priority() }}{% endif -%}
+{%- if fd.ha_heartbeat_priority.value is none %}{{ missing_FabricDesign_ha_heartbeat_priority() }}{% endif -%}
+{%- if fd.ha_monitor_aggregates.value is none %}{{ missing_FabricDesign_ha_monitor_aggregates() }}{% endif -%}
+{%- if fd.ha_mode.value is none %}{{ missing_FabricDesign_ha_mode() }}{% endif -%}
+{%- if fd.ha_session_pickup.value is none %}{{ missing_FabricDesign_ha_session_pickup() }}{% endif -%}
+{%- if fd.ha_preempt.value is none %}{{ missing_FabricDesign_ha_preempt() }}{% endif -%}
+{%- if fd.ha_reserved_mgmt_interface.value is none %}{{ missing_FabricDesign_ha_reserved_mgmt_interface() }}{% endif -%}
+{%- if fd.oob_gateway_host.value is none %}{{ missing_FabricDesign_oob_gateway_host() }}{% endif -%}
+{%- if fd.lacp_mode.value is none %}{{ missing_FabricDesign_lacp_mode() }}{% endif -%}
+{%- if fd.bfd_interval_ms.value is none %}{{ missing_FabricDesign_bfd_interval_ms() }}{% endif -%}
+{%- if fd.bfd_multiplier.value is none %}{{ missing_FabricDesign_bfd_multiplier() }}{% endif -%}
+{%- if fd.bfd_min_rx_ms.value is none %}{{ missing_FabricDesign_bfd_min_rx_ms() }}{% endif -%}
+{%- if fd.route_policy_seq_step.value is none %}{{ missing_FabricDesign_route_policy_seq_step() }}{% endif -%}
+{%- if fd.attachment_device_host.value is none %}{{ missing_FabricDesign_attachment_device_host() }}{% endif -%}
+{%- if fd.attachment_leaf_hosts.value is none %}{{ missing_FabricDesign_attachment_leaf_hosts() }}{% endif -%}
+{%- if fd.edge_vlan_hosts.value is none %}{{ missing_FabricDesign_edge_vlan_hosts() }}{% endif -%}
+{%- if fd.mtu_fw_subinterface.value is none %}{{ missing_FabricDesign_mtu_fw_subinterface() }}{% endif -%}
+{%- if fd.sdwan_branch_summary.value is none %}{{ missing_FabricDesign_sdwan_branch_summary() }}{% endif -%}
+{%- if fd.sdwan_branch_lan_max_length.value is none %}{{ missing_FabricDesign_sdwan_branch_lan_max_length() }}{% endif -%}
+{%- if fd.cloud_aws_block.value is none %}{{ missing_FabricDesign_cloud_aws_block() }}{% endif -%}
+{%- if fd.cloud_azure_block.value is none %}{{ missing_FabricDesign_cloud_azure_block() }}{% endif -%}
+{%- if fd.cloud_prefix_max_length.value is none %}{{ missing_FabricDesign_cloud_prefix_max_length() }}{% endif -%}
+{%- if fd.sdwan_reflect_branches.value is none %}{{ missing_FabricDesign_sdwan_reflect_branches() }}{% endif -%}
+{%- if fd.sdwan_branch_ipsec_psk.value is none %}{{ missing_FabricDesign_sdwan_branch_ipsec_psk() }}{% endif -%}
+{%- if fd.sdwan_branch_bgp_password.value is none %}{{ missing_FabricDesign_sdwan_branch_bgp_password() }}{% endif -%}
+{%- if fd.ike_proposal.value is none %}{{ missing_FabricDesign_ike_proposal() }}{% endif -%}
+{%- if fd.ike_dh_group.value is none %}{{ missing_FabricDesign_ike_dh_group() }}{% endif -%}
+{%- if fd.ike_keylife_s.value is none %}{{ missing_FabricDesign_ike_keylife_s() }}{% endif -%}
+{%- if fd.esp_proposal.value is none %}{{ missing_FabricDesign_esp_proposal() }}{% endif -%}
+{%- if fd.esp_keylife_s.value is none %}{{ missing_FabricDesign_esp_keylife_s() }}{% endif -%}
+{%- if fd.ike_dpd_retry_interval_s.value is none %}{{ missing_FabricDesign_ike_dpd_retry_interval_s() }}{% endif -%}
+{%- if fd.ike_version.value is none %}{{ missing_FabricDesign_ike_version() }}{% endif -%}
+{%- if fd.ike_peer_type.value is none %}{{ missing_FabricDesign_ike_peer_type() }}{% endif -%}
+{%- if fd.ike_dpd_mode.value is none %}{{ missing_FabricDesign_ike_dpd_mode() }}{% endif -%}
+{%- if fd.ipsec_per_peer_interface.value is none %}{{ missing_FabricDesign_ipsec_per_peer_interface() }}{% endif -%}
+{%- if fd.ipsec_add_route.value is none %}{{ missing_FabricDesign_ipsec_add_route() }}{% endif -%}
+{%- if fd.ipsec_phase2_selector.value is none %}{{ missing_FabricDesign_ipsec_phase2_selector() }}{% endif -%}
+{%- if fd.sdwan_shortcut_discovery.value is none %}{{ missing_FabricDesign_sdwan_shortcut_discovery() }}{% endif -%}
+{%- if fd.sdwan_overlay_pool_start_offset.value is none %}{{ missing_FabricDesign_sdwan_overlay_pool_start_offset() }}{% endif -%}
+{%- if fd.sdwan_overlay_pool_end_offset.value is none %}{{ missing_FabricDesign_sdwan_overlay_pool_end_offset() }}{% endif -%}
+{%- if fd.sdwan_overlay_remote_ip_offset.value is none %}{{ missing_FabricDesign_sdwan_overlay_remote_ip_offset() }}{% endif -%}
+{%- if fd.fw_bgp_graceful_restart.value is none %}{{ missing_FabricDesign_fw_bgp_graceful_restart() }}{% endif -%}
+{%- if fd.sdwan_local_as_no_prepend.value is none %}{{ missing_FabricDesign_sdwan_local_as_no_prepend() }}{% endif -%}
+{%- if fd.sdwan_local_as_replace_as.value is none %}{{ missing_FabricDesign_sdwan_local_as_replace_as() }}{% endif -%}
+{%- if fd.sdwan_branch_next_hop_self.value is none %}{{ missing_FabricDesign_sdwan_branch_next_hop_self() }}{% endif -%}
+{%- if fd.sdwan_branch_next_hop_self_rr.value is none %}{{ missing_FabricDesign_sdwan_branch_next_hop_self_rr() }}{% endif -%}
+{%- if fd.sdwan_aggregate_summary_only.value is none %}{{ missing_FabricDesign_sdwan_aggregate_summary_only() }}{% endif -%}
+{%- if fd.fw_mgmt_allowed_access.value is none %}{{ missing_FabricDesign_fw_mgmt_allowed_access() }}{% endif -%}
+{%- if fd.fw_bfd.value is none %}{{ missing_FabricDesign_fw_bfd() }}{% endif -%}
+{%- if fd.fw_mtu_override.value is none %}{{ missing_FabricDesign_fw_mtu_override() }}{% endif -%}
+{%- if fd.attachment_bgp_bfd.value is none %}{{ missing_FabricDesign_attachment_bgp_bfd() }}{% endif -%}
+{%- if fd.fw_router_id_source.value is none %}{{ missing_FabricDesign_fw_router_id_source() }}{% endif -%}
+{%- if fd.wan_default_static_route_id.value is none %}{{ missing_FabricDesign_wan_default_static_route_id() }}{% endif -%}
+{%- if fd.sdwan_hub_mode_cfg.value is none %}{{ missing_FabricDesign_sdwan_hub_mode_cfg() }}{% endif -%}
+{%- if fd.sdwan_overlay_vrf.value is none %}{{ missing_FabricDesign_sdwan_overlay_vrf() }}{% endif -%}
+{%- if fd.sdwan_hub_aggregates.value is none %}{{ missing_FabricDesign_sdwan_hub_aggregates() }}{% endif -%}
+{%- if fd.esp_pfs_dh_group.value is none %}{{ missing_FabricDesign_esp_pfs_dh_group() }}{% endif -%}
+{# Approved constants, read from FabricDesign #}
+{% set overlay_asn = fd.sdwan_overlay_asn.value -%}   {#- AS 65400 toward the branches -#}
+{% set wan_vrf = fd.fw_wan_vrf_id.value -%}   {#- WAN underlay in its own table -#}
+{% set transit_vrf = fd.transit_vrf.value -%}
+{% set ha_group_base = fd.sdwan_fw_ha_group_base.value -%}   {#- fabric-ASN offset rule (Internal 10, Internet 40) -#}
+{% set ha_priority = fd.fw_ha_priority.value -%}   {#- same as the Internal and Internet FWs -#}
+{% set ha_hb_weight = fd.ha_heartbeat_priority.value -%}   {#- weight as the Internal and Internet FWs -#}
+{% set bfd_tx = fd.bfd_interval_ms.value -%}{% set bfd_rx = fd.bfd_min_rx_ms.value -%}{% set bfd_mult = fd.bfd_multiplier.value -%}   {#- toward the leaves: NX-OS single-hop max -#}
+{% set seq_step = fd.route_policy_seq_step.value -%}
+{% set fw_host = fd.attachment_device_host.value -%}   {#- attachment /29: .3 = the FW pair -#}
+{%- if fd.edge_vlan_hosts.value["SDWANFW"] is not defined %}{{ missing_FabricDesign_edge_vlan_hosts_SDWANFW() }}{% endif -%}
+{%- if fd.edge_vlan_hosts.value["VIP"] is not defined %}{{ missing_FabricDesign_edge_vlan_hosts_VIP() }}{% endif -%}
+{% set edge_fw_host = fd.edge_vlan_hosts.value["SDWANFW"] -%}   {#- edge VLAN: .11 SD-WAN FW (decided, EDGE_VLAN_HOST) -#}
+{% set vip_host = fd.edge_vlan_hosts.value["VIP"] -%}   {#- edge VLAN: .1 VRRP VIP of the ISP routers (decided: SD-WAN/VPN legs route statically to it) -#}
+{% set mtu = fd.mtu_fw_subinterface.value -%}
+{% set branch_group = "BRANCHES" -%}   {#- BGP peer group of the branches -#}
+{% set branch_summary = fd.sdwan_branch_summary.value -%}   {#- design: branches; toward TRANSIT -#}
+{% set branch_lan_le = fd.sdwan_branch_lan_max_length.value -%}   {#- design: from the branches accept 10.64.0.0/12 le 24 -#}
+{% set cloud_summaries = [fd.cloud_aws_block.value, fd.cloud_azure_block.value] -%}   {#- design: allowlist toward the SD-WAN (AWS, Azure) -#}
+{% set cloud_in_le = fd.cloud_prefix_max_length.value -%}   {#- TRANSIT carries the cloud prefixes le 24 (from the cloud routers); the hub aggregates them -#}
+{% set reflect_branches = fd.sdwan_reflect_branches.value -%}   {#- the hub reflects the branch /24s to its branches; hubs stay unpeered -#}
+{% set psk = fd.sdwan_branch_ipsec_psk.value -%}   {#- placeholder (public repo) -#}
+{% set ike_proposal = fd.ike_proposal.value -%}{% set ike_dhgrp = fd.ike_dh_group.value -%}{% set ike_keylife = fd.ike_keylife_s.value -%}   {#- IKE proposal, DH group, key life -#}
+{% set esp_proposal = fd.esp_proposal.value -%}{% set esp_keylife = fd.esp_keylife_s.value -%}   {#- ESP proposal, key life -#}
+{% set dpd_retry = fd.ike_dpd_retry_interval_s.value -%}   {#- DPD retry interval -#}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set name = device.name.value -%}
@@ -41,17 +99,48 @@
 {% set site = device.location.node -%}
 {% set site_name = site.name.value -%}
 {% set fabric_asn = site.fabric_asn.node.asn.value -%}
+{# Per-site FabricDesign fields (dc1_/dc2_): a site without its field fails on the lookup, naming the field #}
+{% set site_key = site_name | lower -%}
+{%- if fd[site_key ~ "_fw_ha_group_offset"].value is none %}{{ missing_FabricDesign_fw_ha_group_offset() }}{% endif -%}
+{%- if fd[site_key ~ "_attachment_bgp_password"].value is none %}{{ missing_FabricDesign_attachment_bgp_password() }}{% endif -%}
+{%- if fd[site_key ~ "_sdwan_fw_wan_endpoint"].value is none %}{{ missing_FabricDesign_sdwan_fw_wan_endpoint() }}{% endif -%}
+{%- if fd[site_key ~ "_sdwan_overlay"].value is none %}{{ missing_FabricDesign_sdwan_overlay() }}{% endif -%}
+{%- if ha_priority[unit | string] is not defined %}{{ missing_FabricDesign_fw_ha_priority_for_unit() }}{% endif -%}
+{% set ha_site_offset = fd[site_key ~ "_fw_ha_group_offset"].value -%}   {#- same as the Internal and Internet FWs -#}
+{% set bgp_password = fd[site_key ~ "_attachment_bgp_password"].value -%}   {#- leaf sessions -#}
+{% set branch_bgp_password = fd.sdwan_branch_bgp_password.value -%}   {#- branch sessions -#}
+{% for v in site.vrfs.edges | map(attribute="node") | list %}{% if v.sdwan_excluded.value is none %}{{ missing_FabricVRF_sdwan_excluded() }}{% endif %}{% endfor -%}
+{% set no_branch_vrfs = site.vrfs.edges | map(attribute="node") | selectattr("sdwan_excluded.value") | map(attribute="name.value") | list -%}   {#- design: never PARTNER summaries (and never 0/0) toward the branches -#}
 {% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
 {% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
 {% set mgmt = physical | selectattr("role.value", "equalto", "management") | list | first -%}
 {% set aggs = interfaces | selectattr("__typename", "equalto", "InterfacePortChannel") | list | sort(attribute="name.value") -%}
 {% set fw_ports = physical | selectattr("role.value", "equalto", "peering") | list -%}
+{# HA heartbeat ports from the device type #}
+{%- if device.device_type.node.ha_ports.value is none %}{{ missing_DcimDeviceType_ha_ports() }}{% endif -%}
+{% set ha_ports = device.device_type.node.ha_ports.value -%}
 {% set transit_att = data.FabricAttachment.edges | map(attribute="node") | list | selectattr("vrf.node.name.value", "equalto", transit_vrf) | list | first -%}
+{# TRANSIT VRF id (FabricVRF.fortios_vrf_id); the overlay shares it #}
+{%- if transit_att.vrf.node.fortios_vrf_id.value is none %}{{ missing_FabricVRF_fortios_vrf_id() }}{% endif -%}
+{% set table_vrf = transit_att.vrf.node.fortios_vrf_id.value -%}
+{# VRF of the overlay tunnel (sdwan_overlay_vrf): "transit" = the TRANSIT table #}
+{% if fd.sdwan_overlay_vrf.value == "transit" %}{% set overlay_vrf = table_vrf %}{% else %}{{ unsupported_FabricDesign_sdwan_overlay_vrf() }}{% endif -%}
+{# Prefixes the hub aggregates: the values of the FabricDesign prefix fields named in sdwan_hub_aggregates, in order #}
+{% set agg_ns = namespace(items=[]) -%}
+{% for f in fd.sdwan_hub_aggregates.value %}{% if fd[f] is not defined or fd[f].value is none %}{{ missing_FabricDesign_field_named_in_sdwan_hub_aggregates() }}{% else %}{% set agg_ns.items = agg_ns.items + [fd[f].value] %}{% endif %}{% endfor -%}
+{% set hub_aggregates = agg_ns.items -%}
 {% set l2_site = data.FabricL2Vlan.edges | map(attribute="node") | list | selectattr("site.node.name.value", "equalto", site_name) | list -%}
 {% set edge_vlan = l2_site | selectattr("switch_pair.node.name.value", "equalto", site_name ~ "-VPC-EDGE1-EDGE2") | list | first -%}
-{# The pair's shared addresses on unit 1: WAN loopback and hub tunnel #}
-{% set unit_ns = namespace(wan=none, tun=none) -%}
-{% for u in data.SdwanUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges %}{% if i.name.value == wan_lo %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% elif i.name.value == tunnel %}{% set unit_ns.tun = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endif %}{% endfor %}{% endfor -%}
+{# The pair's shared addresses on unit 1: WAN loopback (address in the site's SD-WAN FW WAN endpoint block) and hub
+   tunnel (address in the site's SD-WAN overlay); their names are read from those interface objects #}
+{% set wan_ep = fd[site_key ~ "_sdwan_fw_wan_endpoint"].value -%}
+{% set overlay = fd[site_key ~ "_sdwan_overlay"].value -%}
+{% set unit_ns = namespace(wan=none, tun=none, wan_name=none, tun_name=none) -%}
+{% for u in data.SdwanUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges %}{% set a = i.ip_addresses.edges[0].node.address.value %}{% if a | ipaddress_interface("network") | string == wan_ep %}{% set unit_ns.wan = a %}{% set unit_ns.wan_name = i.name.value %}{% elif a | ipaddress_interface("network") | string == overlay %}{% set unit_ns.tun = a %}{% set unit_ns.tun_name = i.name.value %}{% endif %}{% endif %}{% endfor %}{% endfor -%}
+{%- if unit_ns.wan_name is none %}{{ missing_InterfaceVirtual_wan_loopback_in_sdwan_fw_wan_endpoint() }}{% endif -%}
+{%- if unit_ns.tun_name is none %}{{ missing_InterfaceVirtual_hub_tunnel_in_sdwan_overlay() }}{% endif -%}
+{% set wan_lo = unit_ns.wan_name -%}
+{% set tunnel = unit_ns.tun_name -%}
 {# Summaries per VRF for this site (same rule as the border leaf); allowlist toward the branches #}
 {% set summ_ns = namespace(pairs=[]) -%}
 {% for v in site.vrfs.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for s in v.summaries.edges | map(attribute="node") | list | sort(attribute="prefix.value") %}{% if v.multisite.value or (s.site.node is not none and s.site.node.name.value == site_name) %}{% set summ_ns.pairs = summ_ns.pairs + [(v.name.value, s.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
@@ -71,44 +160,59 @@
 {% set tun_mask = unit_ns.tun | ipaddress_interface("netmask") | string -%}
 {% set tun_net = net(unit_ns.tun) -%}
 {% set tun_bcast = tun_net | ipaddress_network("broadcast_address") | string -%}
-{% set router_id = host(transit_att.prefix.node.prefix.value, fw_host) | ipaddress_interface("ip") -%}
+{% if fd.fw_router_id_source.value == "attachment_fw_address" %}{% set router_id = host(transit_att.prefix.node.prefix.value, fw_host) | ipaddress_interface("ip") %}{% else %}{{ unsupported_FabricDesign_fw_router_id_source() }}{% endif -%}
+{# Sub-interface parents and the HA monitor list are read from the interface objects #}
+{% set subif_objs = interfaces | selectattr("__typename", "equalto", "InterfaceVirtual") | list -%}
+{% macro parent_of(n) %}{% set s = subif_objs | selectattr("name.value", "equalto", n) | list | first %}{% if s is not defined or s.parent_interface.node is none %}{{ missing_InterfaceVirtual_parent_interface() }}{% else %}{{ s.parent_interface.node.name.value }}{% endif %}{% endmacro -%}
+{% set pc_names = aggs | selectattr("role.value", "equalto", "peering") | map(attribute="name.value") | list -%}
+{% set mon_ns = namespace(names=[]) -%}
+{% for n in [inside_if, outside_if] %}{% set p = parent_of(n) | string %}{% if p in pc_names and p not in mon_ns.names %}{% set mon_ns.names = mon_ns.names + [p] %}{% endif %}{% endfor -%}
+{% for p in pc_names %}{% if p not in mon_ns.names %}{% set mon_ns.names = mon_ns.names + [p] %}{% endif %}{% endfor -%}
+{% set ha_monitor = mon_ns.names -%}
 config system global
     set hostname "{{ name }}"
 end
 config system settings
-    set bfd enable
+    set bfd {{ "enable" if fd.fw_bfd.value else "disable" }}
     set bfd-desired-min-tx {{ bfd_tx }}
     set bfd-required-min-rx {{ bfd_rx }}
     set bfd-detect-mult {{ bfd_mult }}
 end
 config system ha
-    set group-id {{ ha_group_base + ha_site_offset * ((site_name[-1] | int) - 1) }}
+    set group-id {{ ha_group_base + ha_site_offset }}
     set group-name "{{ name[:-1] }}-HA"
-    set mode a-p
-    set hbdev{% for p, w in ha_hbdev %} "{{ p }}" {{ w }}{% endfor %}
+    set mode {{ fd.ha_mode.value }}
+    set hbdev{% for p in ha_ports %} "{{ p }}" {{ ha_hb_weight }}{% endfor %}
 
-    set session-pickup enable
-    set override disable
-    set priority {{ ha_priority[unit] }}
+    set session-pickup {{ "enable" if fd.ha_session_pickup.value else "disable" }}
+    set override {{ "enable" if fd.ha_preempt.value else "disable" }}
+    set priority {{ ha_priority[unit | string] }}
+{% if fd.ha_monitor_aggregates.value %}
     set monitor{% for m in ha_monitor %} "{{ m }}"{% endfor %}
 
+{% endif %}
+{% if fd.ha_reserved_mgmt_interface.value %}
     set ha-mgmt-status enable
     config ha-mgmt-interfaces
         edit 1
             set interface "{{ mgmt.name.value }}"
-            set gateway {{ net(mgmt.ip_addresses.edges[0].node.address.value) | get_first_usable }}
+            set gateway {{ host(net(mgmt.ip_addresses.edges[0].node.address.value), fd.oob_gateway_host.value) | ipaddress_interface("ip") }}
         next
     end
+{% else %}
+    set ha-mgmt-status disable
+{% endif %}
 end
 config system interface
     edit "{{ mgmt.name.value }}"
         set ip {{ ipmask(mgmt.ip_addresses.edges[0].node.address.value) }}
+        set allowaccess {{ fd.fw_mgmt_allowed_access.value | join(" ") }}
         set description "{{ mgmt.description.value }}"
     next
 {% for p in fw_ports | sort(attribute="name.value") %}
     edit "{{ p.name.value }}"
         set description "{{ p.description.value }}"
-        set mtu-override enable
+        set mtu-override {{ "enable" if fd.fw_mtu_override.value else "disable" }}
         set mtu {{ p.mtu.value }}
     next
 {% endfor %}
@@ -117,29 +221,29 @@ config system interface
         set type aggregate
         set member{% for m in a.members.edges | map(attribute="node.name.value") | list | sort %} "{{ m }}"{% endfor %}
 
-        set lacp-mode active
+        set lacp-mode {{ fd.lacp_mode.value }}
         set description "{{ a.description.value }}"
-        set mtu-override enable
+        set mtu-override {{ "enable" if fd.fw_mtu_override.value else "disable" }}
         set mtu {{ a.mtu.value }}
     next
 {% endfor %}
     edit "{{ inside_if }}"
         set vrf {{ table_vrf }}
-        set interface "agg-inside"
+        set interface "{{ parent_of(inside_if) }}"
         set vlanid {{ transit_att.vlan_id.value }}
         set ip {{ ipmask(host(transit_att.prefix.node.prefix.value, fw_host)) }}
         set description "{{ transit_att.name.value }}"
-        set mtu-override enable
+        set mtu-override {{ "enable" if fd.fw_mtu_override.value else "disable" }}
         set mtu {{ mtu }}
-        set bfd enable
+        set bfd {{ "enable" if fd.attachment_bgp_bfd.value else "disable" }}
     next
     edit "{{ outside_if }}"
         set vrf {{ wan_vrf }}
-        set interface "agg-outside"
+        set interface "{{ parent_of(outside_if) }}"
         set vlanid {{ edge_vlan.vlan_id.value }}
         set ip {{ ipmask(outside_ip) }}
         set description "Edge VLAN {{ edge_vlan.vlan_id.value }}"
-        set mtu-override enable
+        set mtu-override {{ "enable" if fd.fw_mtu_override.value else "disable" }}
         set mtu {{ mtu }}
     next
     edit "{{ wan_lo }}"
@@ -153,21 +257,21 @@ config vpn ipsec phase1-interface
     edit "{{ tunnel }}"
         set type dynamic
         set interface "{{ wan_lo }}"
-        set ike-version 2
-        set peertype any
-        set net-device disable
-        set mode-cfg enable
-        set ipv4-start-ip {{ shift(tun_ip, 1) }}
-        set ipv4-end-ip {{ shift(tun_bcast, -2) }}
+        set ike-version {{ fd.ike_version.value }}
+        set peertype {{ fd.ike_peer_type.value }}
+        set net-device {{ "enable" if fd.ipsec_per_peer_interface.value else "disable" }}
+        set mode-cfg {{ "enable" if fd.sdwan_hub_mode_cfg.value else "disable" }}
+        set ipv4-start-ip {{ shift(tun_ip, fd.sdwan_overlay_pool_start_offset.value) }}
+        set ipv4-end-ip {{ shift(tun_bcast, fd.sdwan_overlay_pool_end_offset.value) }}
         set ipv4-netmask {{ tun_mask }}
         set proposal {{ ike_proposal }}
         set dhgrp {{ ike_dhgrp }}
         set keylife {{ ike_keylife }}
-        set add-route disable
-        set dpd on-idle
+        set add-route {{ "enable" if fd.ipsec_add_route.value else "disable" }}
+        set dpd {{ fd.ike_dpd_mode.value }}
         set dpd-retryinterval {{ dpd_retry }}
-        set auto-discovery-sender enable
-        set auto-discovery-forwarder enable
+        set auto-discovery-sender {{ "enable" if fd.sdwan_shortcut_discovery.value else "disable" }}
+        set auto-discovery-forwarder {{ "enable" if fd.sdwan_shortcut_discovery.value else "disable" }}
         set psksecret {{ psk }}
     next
 end
@@ -175,22 +279,22 @@ config vpn ipsec phase2-interface
     edit "{{ tunnel }}"
         set phase1name "{{ tunnel }}"
         set proposal {{ esp_proposal }}
-        set dhgrp {{ ike_dhgrp }}
+        set dhgrp {{ fd.esp_pfs_dh_group.value }}
         set keylifeseconds {{ esp_keylife }}
-        set src-subnet 0.0.0.0 0.0.0.0
-        set dst-subnet 0.0.0.0 0.0.0.0
+        set src-subnet {{ pfxmask(fd.ipsec_phase2_selector.value) }}
+        set dst-subnet {{ pfxmask(fd.ipsec_phase2_selector.value) }}
     next
 end
 config system interface
     edit "{{ tunnel }}"
-        set vrf {{ table_vrf }}
+        set vrf {{ overlay_vrf }}
         set ip {{ tun_ip }} 255.255.255.255
-        set remote-ip {{ shift(tun_bcast, -1) }} {{ tun_mask }}
+        set remote-ip {{ shift(tun_bcast, fd.sdwan_overlay_remote_ip_offset.value) }} {{ tun_mask }}
         set description "ADVPN 2.0 hub, overlay {{ tun_net }}"
     next
 end
 config router static
-    edit 1
+    edit {{ fd.wan_default_static_route_id.value }}
         set dst 0.0.0.0 0.0.0.0
         set gateway {{ isp_vip }}
         set device "{{ outside_if }}"
@@ -276,20 +380,20 @@ end
 config router bgp
     set as {{ overlay_asn }}
     set router-id {{ router_id }}
-    set graceful-restart enable
+    set graceful-restart {{ "enable" if fd.fw_bgp_graceful_restart.value else "disable" }}
     config neighbor
 {% set leaves = transit_att.switch_pair.node.members.edges | map(attribute="node.name.value") | list | sort_interface_list %}
-{% for k in [1, 2] %}
+{% for k in fd.attachment_leaf_hosts.value %}
         edit "{{ host(transit_att.prefix.node.prefix.value, k) | ipaddress_interface("ip") }}"
-            set description "{{ leaves[k - 1] }}"
+            set description "{{ leaves[loop.index0] }}"
             set remote-as {{ fabric_asn }}
             set local-as {{ fabric_side_asn }}
-            set local-as-no-prepend enable
-            set local-as-replace-as enable
+            set local-as-no-prepend {{ "enable" if fd.sdwan_local_as_no_prepend.value else "disable" }}
+            set local-as-replace-as {{ "enable" if fd.sdwan_local_as_replace_as.value else "disable" }}
             set interface "{{ inside_if }}"
             set update-source "{{ inside_if }}"
-            set bfd enable
-            set capability-graceful-restart enable
+            set bfd {{ "enable" if fd.attachment_bgp_bfd.value else "disable" }}
+            set capability-graceful-restart {{ "enable" if fd.fw_bgp_graceful_restart.value else "disable" }}
             set password {{ bgp_password }}
             set route-map-in "RM-{{ transit_vrf }}-FROM-LEAF"
             set route-map-out "RM-{{ transit_vrf }}-TO-LEAF"
@@ -301,13 +405,13 @@ config router bgp
             set remote-as {{ overlay_asn }}
             set interface "{{ tunnel }}"
             set update-source "{{ tunnel }}"
-            set next-hop-self enable
+            set next-hop-self {{ "enable" if fd.sdwan_branch_next_hop_self.value else "disable" }}
 {% if reflect_branches %}
-            set next-hop-self-rr disable
+            set next-hop-self-rr {{ "enable" if fd.sdwan_branch_next_hop_self_rr.value else "disable" }}
             set route-reflector-client enable
 {% endif %}
-            set capability-graceful-restart enable
-            set password {{ bgp_password }}
+            set capability-graceful-restart {{ "enable" if fd.fw_bgp_graceful_restart.value else "disable" }}
+            set password {{ branch_bgp_password }}
             set route-map-in "RM-FROM-BRANCH"
             set route-map-out "RM-TO-BRANCH"
         next
@@ -319,11 +423,11 @@ config router bgp
         next
     end
     config aggregate-address
-{% for p in [branch_summary] + cloud_summaries %}
+{% for p in hub_aggregates %}
         edit {{ loop.index }}
             set prefix {{ pfxmask(p) }}
 {% if not (reflect_branches and p == branch_summary) %}
-            set summary-only enable
+            set summary-only {{ "enable" if fd.sdwan_aggregate_summary_only.value else "disable" }}
 {% endif %}
         next
 {% endfor %}

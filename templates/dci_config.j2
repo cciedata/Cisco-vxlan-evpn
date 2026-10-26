@@ -1,17 +1,46 @@
-{# Phase 4 PC1: DCI switch (N9K-C9332D-GX2B, routed, no NVE). eBGP IPv4 to the local BGW (upstream /31 from the BGW),
-   iBGP to the pair peer over port-channel23 with next-hop-self, eBGP across the vendor circuit (row 27 B: Eth1/25, the first
-   MACsec port) with MACsec (row 28 B: placeholder key, public repo) and BFD (row 29 B). Loopback0 advertised. #}
-{# Approved constants: Open-Phase4 rows 26-30 and Auto-approved-P4 #}
-{% set bgp_password = "cisco123" -%}
-{% set bfd_timers = "interval 999 min_rx 999 multiplier 3" -%}     {#- rows 25 B / 29 B -#}
-{% set macsec_keychain = "KC-DCI" -%}                               {#- P4A-05 -#}
+{# DCI switch (N9K-C9332D-GX2B, routed, no NVE). eBGP IPv4 to the local BGW (upstream /31 from the BGW),
+   iBGP to the pair peer over port-channel23 with next-hop-self, eBGP across the vendor circuit (Eth1/25, the first
+   MACsec port) with MACsec (placeholder key, public repo) and BFD. Loopback0 advertised. #}
+{# Constants #}
+{# Design values: read from the FabricDesign object in Infrahub; a missing value stops the render #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.dci_circuit_bgp_password.value is none %}{{ missing_FabricDesign_dci_circuit_bgp_password() }}{% endif -%}
+{%- if fd.bfd_interval_ms.value is none %}{{ missing_FabricDesign_bfd_interval_ms() }}{% endif -%}
+{%- if fd.bfd_multiplier.value is none %}{{ missing_FabricDesign_bfd_multiplier() }}{% endif -%}
+{%- if fd.bfd_min_rx_ms.value is none %}{{ missing_FabricDesign_bfd_min_rx_ms() }}{% endif -%}
+{%- if fd.dci_macsec_key_id.value is none %}{{ missing_FabricDesign_dci_macsec_key_id() }}{% endif -%}
+{%- if fd.dci_macsec_key.value is none %}{{ missing_FabricDesign_dci_macsec_key() }}{% endif -%}
+{%- if fd.dci_macsec_key_algorithm.value is none %}{{ missing_FabricDesign_dci_macsec_key_algorithm() }}{% endif -%}
+{%- if fd.dci_macsec_cipher_suite.value is none %}{{ missing_FabricDesign_dci_macsec_cipher_suite() }}{% endif -%}
+{%- if fd.route_policy_seq_step.value is none %}{{ missing_FabricDesign_route_policy_seq_step() }}{% endif -%}
+{%- if fd.local_admin_username.value is none %}{{ missing_FabricDesign_local_admin_username() }}{% endif -%}
+{%- if fd.local_admin_role.value is none %}{{ missing_FabricDesign_local_admin_role() }}{% endif -%}
+{%- if fd.dns_lookup.value is none %}{{ missing_FabricDesign_dns_lookup() }}{% endif -%}
+{%- if fd.oob_gateway_host.value is none %}{{ missing_FabricDesign_oob_gateway_host() }}{% endif -%}
+{%- if fd.bfd_echo.value is none %}{{ missing_FabricDesign_bfd_echo() }}{% endif -%}
+{%- if fd.lacp_mode.value is none %}{{ missing_FabricDesign_lacp_mode() }}{% endif -%}
+{%- if fd.dci_pair_next_hop_self.value is none %}{{ missing_FabricDesign_dci_pair_next_hop_self() }}{% endif -%}
+{%- if fd.nxos_scp_server.value is none %}{{ missing_FabricDesign_nxos_scp_server() }}{% endif -%}
+{%- if fd.ip_redirects.value is none %}{{ missing_FabricDesign_ip_redirects() }}{% endif -%}
+{%- if fd.dci_macsec.value is none %}{{ missing_FabricDesign_dci_macsec() }}{% endif -%}
+{%- if fd.dci_loopback0_advertise_method.value is none %}{{ missing_FabricDesign_dci_loopback0_advertise_method() }}{% endif -%}
+{%- if fd.dci_ebgp_bfd.value is none %}{{ missing_FabricDesign_dci_ebgp_bfd() }}{% endif -%}
+{%- set site_key = data.DcimDevice.edges[0].node.location.node.name.value | lower -%}
+{%- if fd[site_key ~ "_bgw_dci_bgp_password"] is not defined or fd[site_key ~ "_bgw_dci_bgp_password"].value is none %}{{ fd["missing_FabricDesign_" ~ site_key ~ "_bgw_dci_bgp_password"]() }}{% endif -%}
+{%- if fd[site_key ~ "_dci_pair_bgp_password"] is not defined or fd[site_key ~ "_dci_pair_bgp_password"].value is none %}{{ fd["missing_FabricDesign_" ~ site_key ~ "_dci_pair_bgp_password"]() }}{% endif -%}
+{% set bgw_dci_bgp_password = fd[site_key ~ "_bgw_dci_bgp_password"].value -%}
+{% set dci_pair_bgp_password = fd[site_key ~ "_dci_pair_bgp_password"].value -%}
+{% set dci_circuit_bgp_password = fd.dci_circuit_bgp_password.value -%}
+{% set bfd_timers = "interval " ~ fd.bfd_interval_ms.value ~ " min_rx " ~ fd.bfd_min_rx_ms.value ~ " multiplier " ~ fd.bfd_multiplier.value -%}     {#- as on the BGWs -#}
+{% set macsec_keychain = "KC-DCI" -%}                               {#- MACsec key chain name -#}
 {% set macsec_policy = "MP-DCI" -%}
-{% set macsec_key_id = "01" -%}
-{% set macsec_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" -%}   {#- row 28 B: placeholder, public repo -#}
-{% set macsec_algorithm = "AES_256_CMAC" -%}
-{% set macsec_cipher = "GCM-AES-XPN-256" -%}
+{% set macsec_key_id = fd.dci_macsec_key_id.value -%}
+{% set macsec_key = fd.dci_macsec_key.value -%}   {#- placeholder, public repo -#}
+{% set macsec_algorithm = fd.dci_macsec_key_algorithm.value -%}
+{% set macsec_cipher = fd.dci_macsec_cipher_suite.value -%}
 {% set loopback_rm = "RM-LOOPBACK0" -%}
-{% set seq_step = 10 -%}
+{% set seq_step = fd.route_policy_seq_step.value -%}
 {% macro peer31(a) %}{% set p = (a | ipaddress_interface("ip") | string).split(".") %}{% set n = p[3] | int %}{{ p[:3] | join(".") }}.{{ n + 1 if n % 2 == 0 else n - 1 }}{% endmacro -%}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set asn = device.asn.node.asn.value -%}
@@ -33,14 +62,22 @@
 {% set lo0_addr = lo0.ip_addresses.edges[0].node.address.value -%}
 {% set router_id = lo0_addr | ipaddress_interface("ip") -%}
 {% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
-{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+{% set mgmt_gw = ((mgmt_addr | ipaddress_interface("network")).network_address + fd.oob_gateway_host.value) | string -%}
 hostname {{ device.name.value }}
-username vamdadmin password 5 __VAMDADMIN_HASH__ role network-admin
+username {{ fd.local_admin_username.value }} password 5 __CISCOADMIN_HASH__ role {{ fd.local_admin_role.value }}
+{% if not fd.dns_lookup.value %}
 no ip domain-lookup
+{% endif %}
 feature bgp
+{% if fd.dci_ebgp_bfd.value %}
 feature bfd
+{% endif %}
 feature lacp
+{% if fd.dci_macsec.value %}
 feature macsec
+{% if fd.nxos_scp_server.value %}
+feature scp-server
+{% endif %}
 
 key chain {{ macsec_keychain }} macsec
   key {{ macsec_key_id }}
@@ -48,6 +85,7 @@ key chain {{ macsec_keychain }} macsec
 
 macsec policy {{ macsec_policy }}
   cipher-suite {{ macsec_cipher }}
+{% endif %}
 
 route-map {{ loopback_rm }} permit {{ seq_step }}
   match interface {{ lo0.name.value }}
@@ -70,9 +108,15 @@ interface {{ intf.name.value }}
   no switchport
   mtu {{ intf.mtu.value }}
   ip address {{ intf.ip_addresses.edges[0].node.address.value }}
+{% if not fd.ip_redirects.value %}
   no ip redirects
+{% endif %}
+{% if fd.dci_ebgp_bfd.value %}
+{% if not fd.bfd_echo.value %}
   no bfd echo
+{% endif %}
   bfd {{ bfd_timers }}
+{% endif %}
   no shutdown
 {% endfor %}
 {% for name in pair_member_names %}{% set intf = pair_members | selectattr("name.value", "equalto", name) | list | first %}
@@ -81,7 +125,7 @@ interface {{ intf.name.value }}
   description {{ intf.description.value }}
   no switchport
   mtu {{ intf.mtu.value }}
-  channel-group {{ intf.port_channel.node.name.value | replace("port-channel", "") }} mode active
+  channel-group {{ intf.port_channel.node.name.value | replace("port-channel", "") }} mode {{ fd.lacp_mode.value }}
   no shutdown
 {% endfor %}
 
@@ -90,7 +134,9 @@ interface {{ pair_po.name.value }}
   no switchport
   mtu {{ pair_po.mtu.value }}
   ip address {{ pair_po.ip_addresses.edges[0].node.address.value }}
+{% if not fd.ip_redirects.value %}
   no ip redirects
+{% endif %}
   no shutdown
 {% for name in circuit_names %}{% set intf = circuits | selectattr("name.value", "equalto", name) | list | first %}
 
@@ -99,34 +145,46 @@ interface {{ intf.name.value }}
   no switchport
   mtu {{ intf.mtu.value }}
   ip address {{ intf.ip_addresses.edges[0].node.address.value }}
+{% if not fd.ip_redirects.value %}
   no ip redirects
+{% endif %}
+{% if fd.dci_macsec.value %}
   macsec keychain {{ macsec_keychain }} policy {{ macsec_policy }}
+{% endif %}
+{% if fd.dci_ebgp_bfd.value %}
+{% if not fd.bfd_echo.value %}
   no bfd echo
+{% endif %}
   bfd {{ bfd_timers }}
+{% endif %}
   no shutdown
 {% endfor %}
 
 router bgp {{ asn }}
   router-id {{ router_id }}
   address-family ipv4 unicast
-    redistribute direct route-map {{ loopback_rm }}
+    {{ fd.dci_loopback0_advertise_method.value }} route-map {{ loopback_rm }}
 {% for name in bgw_link_names %}{% set intf = bgw_links | selectattr("name.value", "equalto", name) | list | first %}
 {% set far = intf.description.value.split(" ")[0] %}
 {% set far_dev = bgws | selectattr("name.value", "equalto", far) | list | first %}
   neighbor {{ peer31(intf.ip_addresses.edges[0].node.address.value) }}
     remote-as {{ far_dev.asn.node.asn.value }}
     description {{ far }}
-    password {{ bgp_password }}
+    password {{ bgw_dci_bgp_password }}
+{% if fd.dci_ebgp_bfd.value %}
     bfd
+{% endif %}
     address-family ipv4 unicast
 {% endfor %}
 {% set pair_peer = pair_po.description.value.split(" ")[0] %}
   neighbor {{ peer31(pair_po.ip_addresses.edges[0].node.address.value) }}
     remote-as {{ asn }}
     description {{ pair_peer }}
-    password {{ bgp_password }}
+    password {{ dci_pair_bgp_password }}
     address-family ipv4 unicast
+{% if fd.dci_pair_next_hop_self.value %}
       next-hop-self
+{% endif %}
 {% for name in circuit_names %}{% set intf = circuits | selectattr("name.value", "equalto", name) | list | first %}
 {% set far_ip = peer31(intf.ip_addresses.edges[0].node.address.value) | string %}
 {% set far_ns = namespace(dev=none) %}
@@ -134,7 +192,9 @@ router bgp {{ asn }}
   neighbor {{ far_ip }}
     remote-as {{ far_ns.dev.asn.node.asn.value }}
     description {{ far_ns.dev.name.value }}
-    password {{ bgp_password }}
+    password {{ dci_circuit_bgp_password }}
+{% if fd.dci_ebgp_bfd.value %}
     bfd
+{% endif %}
     address-family ipv4 unicast
 {% endfor %}

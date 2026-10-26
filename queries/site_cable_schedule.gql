@@ -2,7 +2,6 @@ query SiteCableSchedule($site: String!) {
   DcimDevice(location__name__value: $site) {
     edges { node {
       name { value }
-      role { value }
       position { value }
       rack { node { name { value } } }
       interfaces { edges { node { id name { value } } } }
@@ -18,5 +17,15 @@ query SiteCableSchedule($site: String!) {
   }
   LocationRack(parent__name__value: $site) {
     edges { node { name { value } row { value } row_position { value } purpose { value } } }
+  }
+  # Physical / cabling design values (FabricDesign) read by transforms/site_cable_schedule.py
+  FabricDesign {
+    count
+    edges { node {
+      rack_width_m { value } row_pitch_m { value } vertical_per_end_m { value } row_index { value } cable_slack_m { value }
+      cable_stock_lengths_m { value } network_patch_racks { value } patch_rack_tie_break { value } rack_local_panel_u { value }
+      patch_block_ports_network_rack { value } patch_block_ports_server_rack { value } patch_panel_u { value } network_racks { value }
+      server_rows { value } patch_block_first_port { value }
+    } }
   }
 }

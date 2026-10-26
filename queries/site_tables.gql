@@ -28,4 +28,9 @@ query SiteTables($site: String!) {
       } } }
     } }
   }
+  # Design values (FabricDesign) read by transforms/site_tables.py
+  FabricDesign {
+    count
+    edges { node { attachment_leaf_hosts { value } attachment_device_host { value } carrier_link_prefix_length { value } p2p_link_prefix_length { value } } }
+  }
 }

@@ -1,5 +1,5 @@
 # Install for the .venv-lab Ansible (FU-21): .venv-lab/bin/ansible-galaxy collection install -r lab/day2/ansible/requirements.yml
-# (laptop 1's system ansible had cisco.nxos 11.1.0 / ansible.netcommon 8.2.0 in its own Python, job 207)
+# (laptop 1's system ansible had cisco.nxos 11.1.0 / ansible.netcommon 8.2.0 in its own Python)
 collections:
   - name: cisco.nxos
     version: ">=11.1.0"

@@ -1,16 +1,24 @@
-{# Option 5 (D5-33): lab stand-in for the first VPN partner of the site (by name), behind carrier A, rendered from the VPN FW's
+{# Option 5 lab: stand-in for the first VPN partner of the site (by name), behind carrier A, rendered from the VPN FW's
    data (same query as vpn_fw_config.j2): peer address, protected networks, translated /28 and the FW's WAN loopback come from
-   the graph. GRE stands in for the IKEv2 tunnel; the protected networks sit on a dummy interface (.1 of each). #}
-{% set wan_lo = "LO-WAN" -%}
-{% set mtu = 9216 -%}
-{% set wan_gw_host = 254 -%}{# P5 (D5-31): carrier A's side of the partner subnet #}
-{% set wan_plen = 24 -%}{# P5 (D5-31): carrier A's partner subnet is the /24 around the peer address #}
+   the graph. GRE stands in for the IKEv2 tunnel; the protected networks sit on a dummy interface (first host of each).
+   WAN MTU: mtu_external. #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.mtu_external.value is none %}{{ missing_FabricDesign_mtu_external() }}{% endif -%}
+{# the VPN FW's WAN loopback: the interface on the pair whose address lies in dc*_vpn_fw_wan_endpoint (read below) #}
+{% set mtu = fd.mtu_external.value -%}
+{% set wan_gw_host = 254 -%}{# lab-only: carrier A's side of the partner subnet #}
+{% set wan_plen = 24 -%}{# lab-only: carrier A's partner subnet is the /24 around the peer address #}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set name = device.name.value -%}
 {% set site_name = device.location.node.name.value -%}
+{% set wep_key = site_name | lower ~ "_vpn_fw_wan_endpoint" -%}
+{%- if fd[wep_key] is not defined or fd[wep_key].value is none %}{{ fd["missing_FabricDesign_" ~ wep_key].value() }}{% endif -%}
+{% set wep = fd[wep_key].value -%}
 {% set unit_ns = namespace(wan=none) -%}
-{% for u in data.VpnUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges and i.name.value == wan_lo %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endfor %}{% endfor -%}
+{% for u in data.VpnUnits.edges | map(attribute="node") | list | selectattr("location.node.name.value", "equalto", site_name) | list %}{% for i in u.interfaces.edges | map(attribute="node") | list %}{% if i.ip_addresses is defined and i.ip_addresses.edges and ((i.ip_addresses.edges[0].node.address.value.split("/")[0] ~ "/" ~ wep.split("/")[1]) | ipaddress_interface("network") | string) == wep %}{% set unit_ns.wan = i.ip_addresses.edges[0].node.address.value %}{% endif %}{% endfor %}{% endfor -%}
+{%- if unit_ns.wan is none %}{{ fd["missing_interface_in_" ~ wep_key].value() }}{% endif -%}
 {% set p_ns = namespace(items=[]) -%}
 {% for p in data.FabricPartner.edges | map(attribute="node") | list | sort(attribute="name.value") %}{% for t in p.translated_prefixes.edges | map(attribute="node") | list %}{% if t.site.node is not none and t.site.node.name.value == site_name %}{% set p_ns.items = p_ns.items + [(p.name.value, p.description.value or "", p.peer_ip.value, p.protected_prefixes.value | sort, t.prefix.value)] %}{% endif %}{% endfor %}{% endfor -%}
 {% set pname, pdesc, peer, protected, nat = p_ns.items[0] -%}

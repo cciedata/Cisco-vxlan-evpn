@@ -1,0 +1,19 @@
+# Members of every ESI pair with their device type (esi_min_release) and platform (os_version).
+query EsiReleaseCheck {
+  FabricEsiPair {
+    edges {
+      node {
+        name { value }
+        members {
+          edges {
+            node {
+              name { value }
+              device_type { node { name { value } esi_min_release { value } } }
+              platform { node { name { value } os_version { value } } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

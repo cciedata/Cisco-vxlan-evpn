@@ -4,7 +4,7 @@ kind: Object
 spec:
   kind: IpamPrefix
   data:
-    # --- Top level (design-decisions.md > IP plan > Top level) ---
+    # --- Top level ---
     - prefix: 10.0.0.0/16
       description: Shared infrastructure (belongs to no single site)
       status: active
@@ -97,31 +97,43 @@ spec:
       status: active
       member_type: prefix
       site: DC1
+      # public prefix role
+      role: "public_block"
     - prefix: 198.51.100.0/25
       description: DC1 Internet FW NAT pool
       status: active
       member_type: address
       site: DC1
+      # public prefix role
+      role: "public_nat_pool"
     - prefix: 198.51.100.160/27
       description: DC1 published services (DMZ inbound)
       status: active
       member_type: address
       site: DC1
+      # public prefix role
+      role: "public_services"
     - prefix: 203.0.113.0/24
       description: DC2 public (documentation range)
       status: active
       member_type: prefix
       site: DC2
+      # public prefix role
+      role: "public_block"
     - prefix: 203.0.113.0/25
       description: DC2 Internet FW NAT pool
       status: active
       member_type: address
       site: DC2
+      # public prefix role
+      role: "public_nat_pool"
     - prefix: 203.0.113.160/27
       description: DC2 published services (DMZ inbound)
       status: active
       member_type: address
       site: DC2
+      # public prefix role
+      role: "public_services"
     - prefix: 192.0.2.0/24
       description: Carrier handoff /30s (documentation range)
       status: active
@@ -150,7 +162,7 @@ spec:
       status: active
       member_type: address
       site: DC1
-    # Phase 1: vPC anycast VTEPs, backup underlay SVIs, peer-keepalive links
+    # vPC anycast VTEPs, backup underlay SVIs, peer-keepalive links
     - prefix: 10.19.2.0/25
       description: DC1 vPC anycast VTEPs (one per vPC domain with NVE)
       status: active
@@ -207,7 +219,7 @@ spec:
       member_type: prefix
       role: link
       site: DC2
-    # --- Phase 2: attachments, edge VLAN, ISP routers, TRANSIT, DMZ ---
+    # --- Attachments, edge VLAN, ISP routers, TRANSIT, DMZ ---
     - prefix: 10.19.8.0/22
       description: "DC1 firewall attachments for tenant VRFs"
       status: active
@@ -464,7 +476,7 @@ kind: Object
 spec:
   kind: IpamPrefix
   data:
-    # Phase 4 PC1: Multi-Site VIPs, DCI switch blocks (row 2 B carving), inter-site DCI circuits (design)
+    # Multi-Site VIPs, DCI switch blocks, inter-site DCI circuits
     - prefix: 10.19.2.128/25
       description: DC1 Multi-Site VIP (anycast BGW pair)
       status: active
@@ -511,8 +523,8 @@ kind: Object
 spec:
   kind: IpamPrefix
   data:
-    # Phase 4 PC2: cloud router blocks (design: <infra>.13.0/24, .0/28 loopbacks, .16/31 iBGP link made by the generator),
-    # ExpressRoute private peering /30s (row 57 B), AWS private VIF /30s (placeholders until AWS generates them, P4A-112)
+    # Cloud router blocks (design: <infra>.13.0/24, .0/28 loopbacks, .16/31 iBGP link made by the generator),
+    # ExpressRoute private peering /30s, AWS private VIF /30s (placeholders until AWS generates them)
     - prefix: 10.19.13.0/24
       description: "DC1 cloud routers: loopbacks .0/28, iBGP link .16/31"
       status: active
@@ -587,7 +599,7 @@ kind: Object
 spec:
   kind: IpamPrefix
   data:
-    # Phase 4 PC3: SD-WAN hub WAN endpoints (design: public /24 carving); the hub uses the first host on loopback LO-WAN
+    # SD-WAN hub WAN endpoints (design: public /24 carving); the hub uses the first host on loopback LO-WAN
     - prefix: 198.51.100.144/28
       description: DC1 SD-WAN FW (hub) WAN endpoints
       status: active
@@ -604,7 +616,7 @@ kind: Object
 spec:
   kind: IpamPrefix
   data:
-    # Phase 4 PC4: VPN-partner FW IPsec endpoints (design: public /24 carving; first host on loopback LO-WAN) and the
+    # VPN-partner FW IPsec endpoints (design: public /24 carving; first host on loopback LO-WAN) and the
     # VPN-partner FW attachment block (design: <infra>.9.0/26, .0/29 PARTNER)
     - prefix: 198.51.100.128/28
       description: DC1 VPN-partner FW IPsec endpoints
@@ -634,8 +646,7 @@ kind: Object
 spec:
   kind: IpamPrefix
   data:
-    # Phase 4 PC6: OOB carving inside 10.250.0.0/20 (DC1) and 10.250.16.0/20 (DC2) (decided: infra /24, BMC /22;
-    # remote-access pool and links: P4A-660, P4A-635)
+    # OOB carving inside 10.250.0.0/20 (DC1) and 10.250.16.0/20 (DC2): infra /24, BMC /22, remote-access pool and links
     - prefix: 10.250.1.0/24
       description: DC1 OOB infrastructure (console servers, OOB switches, OOB FW)
       status: active
@@ -690,7 +701,7 @@ kind: Object
 spec:
   kind: IpamIPAddress
   data:
-    # Phase 4 PC6: OOB FortiGate = .1 of every OOB zone (P4A-620); owned here, linked (never saved) by oob_site
+    # OOB FortiGate = .1 of every OOB zone; owned here, linked (never saved) by oob_site
     - address: 10.250.1.1/24
       description: DC1 OOB infrastructure gateway (OOB FortiGate)
       status: active
@@ -703,3 +714,22 @@ spec:
     - address: 10.250.20.1/22
       description: DC2 server BMC gateway (OOB FortiGate)
       status: active
+
+---
+# Fix (repo-fixes-pending #1): the VRF block prefixes used to live in 07-segments.yml, but objects/06-fabric.yml sets
+# FabricVRF.summaries from them, so a load in file-name order stopped at 06 with "Unable to find the node default ::
+# 10.16.0.0/18 / IpamPrefix". They are created here, before 06 is loaded.
+apiVersion: infrahub.app/v1
+kind: Object
+spec:
+  kind: IpamPrefix
+  data:
+    # Tenant VRF blocks
+    - {prefix: 10.16.0.0/18, description: "PROD VRF block", status: active, member_type: prefix, site: DC1}
+    - {prefix: 10.16.64.0/18, description: "DEV VRF block", status: active, member_type: prefix, site: DC1}
+    - {prefix: 10.16.144.0/20, description: "CITRIX VRF block (DC1)", status: active, member_type: prefix, site: DC1}
+    - {prefix: 10.16.160.0/21, description: "PARTNER VRF block, NAT /28s (DC1)", status: active, member_type: prefix, site: DC1}
+    - {prefix: 10.20.0.0/18, description: "DC2-PROD VRF block", status: active, member_type: prefix, site: DC2}
+    - {prefix: 10.20.64.0/18, description: "DC2-DEV VRF block", status: active, member_type: prefix, site: DC2}
+    - {prefix: 10.20.144.0/20, description: "CITRIX VRF block (DC2)", status: active, member_type: prefix, site: DC2}
+    - {prefix: 10.20.160.0/21, description: "PARTNER VRF block, NAT /28s (DC2)", status: active, member_type: prefix, site: DC2}

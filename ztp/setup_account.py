@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Phase 3b (Z-08): create the ztp-callback account on the Infrahub instance and its API token (idempotent).
+"""Create the ztp-callback account on the Infrahub instance and its API token (idempotent).
 
-  setup_account.py [--new-token]        run with the repo venv; admin login from INFRAHUB_USERNAME / INFRAHUB_PASSWORD (default admin)
+  setup_account.py [--new-token]        run with the repo venv from the repo root
 
-Decisions (decided 8 Oct): dedicated account ztp-callback, account type Script, token with no expiry, writes directly on main.
+Admin login: username/password. INFRAHUB_USERNAME / INFRAHUB_PASSWORD when set; otherwise user admin and the
+password the repo's .env generated (INFRAHUB_INITIAL_ADMIN_PASSWORD; another .env with VAMD_INFRAHUB_ENV). There is no
+built-in default password: on a fresh instance the old admin/infrahub default gave 401 at /api/auth/login.
+
+Choices: dedicated account ztp-callback, account type Script, token with no expiry, writes directly on main.
 Creates, when missing: object permissions Dcim:Device view (allow_all) + update (allow_default = main only), role and group
 "ZTP Callback", account ztp-callback (random password, never printed), member of the group. Then logs in as ztp-callback, creates
 the token (only if ~/.vamd/secrets.env has none, or --new-token) and stores it there as ZTP_CALLBACK_TOKEN (mode 600).
@@ -18,9 +22,26 @@ import sys
 import httpx
 
 ADDR = os.environ.get("INFRAHUB_ADDRESS", "http://localhost:8000")
-ADMIN = (os.environ.get("INFRAHUB_USERNAME", "admin"), os.environ.get("INFRAHUB_PASSWORD", "infrahub"))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ENV_FILE = os.path.expanduser(os.environ.get("VAMD_INFRAHUB_ENV", os.path.join(REPO, ".env")))
+ENV_ADMIN_PASSWORD = "INFRAHUB_INITIAL_ADMIN_PASSWORD"   # docker-compose.yml: the initial admin password, generated into .env
 SECRETS = os.path.expanduser(os.environ.get("VAMD_SECRETS", "~/.vamd/secrets.env"))
 NAME, ROLE, GROUP, TOKEN_NAME, TEST_DEV = "ztp-callback", "ZTP Callback", "ZTP Callback", "ztp-server", "DC1-L11"
+
+
+def admin_login():
+    """(user, password): INFRAHUB_USERNAME / INFRAHUB_PASSWORD, else admin + the .env password."""
+    user = os.environ.get("INFRAHUB_USERNAME") or "admin"
+    pw = os.environ.get("INFRAHUB_PASSWORD")
+    if pw:
+        return user, pw, "INFRAHUB_PASSWORD"
+    if os.path.exists(ENV_FILE):
+        for line in open(ENV_FILE):
+            m = re.match(r"\s*(?:export\s+)?%s=(.*)$" % ENV_ADMIN_PASSWORD, line.strip())
+            if m and m.group(1).strip("'\""):
+                return user, m.group(1).strip("'\""), f"{ENV_ADMIN_PASSWORD} in {ENV_FILE}"
+    sys.exit(f"STOP: no admin password: set INFRAHUB_PASSWORD, or run from the repo whose .env has {ENV_ADMIN_PASSWORD} "
+             f"(looked in {ENV_FILE}; another file: VAMD_INFRAHUB_ENV)")
 
 
 def login(user, pw):
@@ -41,7 +62,9 @@ def find(h, kind, field, value):
 
 
 def main():
-    A = login(*ADMIN)
+    user, pw, source = admin_login()
+    print(f"admin login: {user}, password from {source}")
+    A = login(user, pw)
     # decision encoding, read from the instance's own permissions (never assumed)
     perms = gql(A, "{ CoreObjectPermission { edges { node { id identifier { value } decision { value } } } } }")["CoreObjectPermission"]["edges"]
     enc = {}
@@ -60,7 +83,7 @@ def main():
         pid = e[0]["node"]["id"] if e else None    # 8 Oct: look up by namespace/name/action/decision (the identifier filter did not match)
         if not pid:
             pid = gql(A, 'mutation { CoreObjectPermissionCreate(data: {namespace: {value: "Dcim"}, name: {value: "Device"}, '
-                         'action: {value: "%s"}, decision: {value: %d}, description: {value: "ZTP callback (Phase 3b)"}}) '
+                         'action: {value: "%s"}, decision: {value: %d}, description: {value: "ZTP callback"}}) '
                          '{ ok object { id identifier { value } } } }' % (action, known[decision]))["CoreObjectPermissionCreate"]["object"]["id"]
             print("permission created:", ident)
         else:
@@ -72,7 +95,7 @@ def main():
     g = [x["node"]["id"] for x in g if x["node"]["decision"]["value"] == known["allow_all"]]
     if not g:
         g = [gql(A, 'mutation { CoreGlobalPermissionCreate(data: {action: {value: "edit_default_branch"}, decision: {value: %d}, '
-                    'description: {value: "ZTP callback (Phase 3b)"}}) { ok object { id } } }' % known["allow_all"])["CoreGlobalPermissionCreate"]["object"]["id"]]
+                    'description: {value: "ZTP callback"}}) { ok object { id } } }' % known["allow_all"])["CoreGlobalPermissionCreate"]["object"]["id"]]
         print("global permission created: edit_default_branch")
     else:
         print("global permission exists: edit_default_branch")
@@ -100,7 +123,7 @@ def main():
     if not aid:
         pw = secrets.token_urlsafe(24)
         aid = gql(A, 'mutation { CoreAccountCreate(data: {name: {value: "%s"}, password: {value: "%s"}, account_type: {value: "Script"}, '
-                     'description: {value: "ZTP server callback (Phase 3b): writes ztp_state on main"}, member_of_groups: [{id: "%s"}]}) '
+                     'description: {value: "ZTP server callback: writes ztp_state on main"}, member_of_groups: [{id: "%s"}]}) '
                      '{ ok object { id } } }' % (NAME, pw, gid))["CoreAccountCreate"]["object"]["id"]
         print("account created:", NAME, "(Script)")
     else:

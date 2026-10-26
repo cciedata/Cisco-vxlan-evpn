@@ -1,23 +1,49 @@
-{# Phase 4 PC6: OOB switches, NX-OS 10.6(1)F, L2 only (the OOB FortiGate is the gateway of every OOB VLAN).
+{# OOB switches, NX-OS 10.6(1)F, L2 only (the OOB FortiGate is the gateway of every OOB VLAN).
    oob_agg: vPC pair (peer-link Po1000, keepalive Eth1/48), one vPC per access switch and per FW unit.
    oob_access: LACP uplink Po1 to both aggregation switches; access ports from Infrahub (network-device access switches)
-   or one range in VLAN 102 (server-BMC access switches: no server objects, P4A-670).
-   Rows = decisions.xlsx Open-Phase4 (62-67); P4A-6xx = p4-files/oob/auto_approved.md. #}
+   or one range in VLAN 102 (server-BMC access switches: no server objects). #}
 {# Approved constants #}
-{% set keepalive_vrf = "VPC-KEEPALIVE" -%}   {#- P4A-635: as the fabric vPC pairs -#}
-{% set keepalive_timers = "interval 1000 timeout 5 hold-timeout 3" -%}
-{% set role_priority = [10, 20] -%}
-{% set delay_restore = 360 -%}
-{% set auto_recovery_delay = 360 -%}
-{% set stp_priority = 8192 -%}   {#- P4A-636: aggregation pair = root of every OOB VLAN (peer-switch) -#}
-{% set peer_link_po = 1000 -%}
-{% set bmc_vlan = 102 -%}   {#- row 65 B -#}
-{% set bmc_range = "Ethernet1/1-48" -%}   {#- P4A-670: every 1G port of a server-BMC access switch -#}
+{# Design values: read from the FabricDesign object in Infrahub; a missing value stops the render #}
+{%- if data.FabricDesign.count != 1 %}{{ missing_FabricDesign_object() }}{% endif -%}
+{%- set fd = data.FabricDesign.edges[0].node -%}
+{%- if fd.vpc_keepalive_vrf.value is none %}{{ missing_FabricDesign_vpc_keepalive_vrf() }}{% endif -%}
+{%- if fd.vpc_keepalive_interval_ms.value is none %}{{ missing_FabricDesign_vpc_keepalive_interval_ms() }}{% endif -%}
+{%- if fd.vpc_keepalive_timeout_s.value is none %}{{ missing_FabricDesign_vpc_keepalive_timeout_s() }}{% endif -%}
+{%- if fd.vpc_keepalive_hold_timeout_s.value is none %}{{ missing_FabricDesign_vpc_keepalive_hold_timeout_s() }}{% endif -%}
+{%- if fd.vpc_role_priority.value is none %}{{ missing_FabricDesign_vpc_role_priority() }}{% endif -%}
+{%- if fd.vpc_role_priority_order.value is none %}{{ missing_FabricDesign_vpc_role_priority_order() }}{% endif -%}
+{%- if fd.vpc_delay_restore_s.value is none %}{{ missing_FabricDesign_vpc_delay_restore_s() }}{% endif -%}
+{%- if fd.vpc_auto_recovery_reload_delay_s.value is none %}{{ missing_FabricDesign_vpc_auto_recovery_reload_delay_s() }}{% endif -%}
+{%- if fd.vpc_stp_priority.value is none %}{{ missing_FabricDesign_vpc_stp_priority() }}{% endif -%}
+{%- if fd.vpc_peer_link_port_channel.value is none %}{{ missing_FabricDesign_vpc_peer_link_port_channel() }}{% endif -%}
+{%- if fd.oob_vlans.value is none %}{{ missing_FabricDesign_oob_vlans() }}{% endif -%}
+{%- if fd.dns_lookup.value is none %}{{ missing_FabricDesign_dns_lookup() }}{% endif -%}
+{%- if fd.oob_gateway_host.value is none %}{{ missing_FabricDesign_oob_gateway_host() }}{% endif -%}
+{%- if fd.mlag_peer_switch.value is none %}{{ missing_FabricDesign_mlag_peer_switch() }}{% endif -%}
+{%- if fd.mlag_peer_gateway.value is none %}{{ missing_FabricDesign_mlag_peer_gateway() }}{% endif -%}
+{%- if fd.lacp_mode.value is none %}{{ missing_FabricDesign_lacp_mode() }}{% endif -%}
+{%- if fd.vpc_peer_link_stp_port_type.value is none %}{{ missing_FabricDesign_vpc_peer_link_stp_port_type() }}{% endif -%}
+{%- if fd.attachment_port_stp_edge.value is none %}{{ missing_FabricDesign_attachment_port_stp_edge() }}{% endif -%}
+{%- if fd.attachment_port_bpdu_guard.value is none %}{{ missing_FabricDesign_attachment_port_bpdu_guard() }}{% endif -%}
+{%- if fd.access_port_stp_edge.value is none %}{{ missing_FabricDesign_access_port_stp_edge() }}{% endif -%}
+{%- if fd.access_port_bpdu_guard.value is none %}{{ missing_FabricDesign_access_port_bpdu_guard() }}{% endif -%}
+{%- if fd.local_admin_username.value is none %}{{ missing_FabricDesign_local_admin_username() }}{% endif -%}
+{%- if fd.oob_switch_local_admin.value is none %}{{ missing_FabricDesign_oob_switch_local_admin() }}{% endif -%}
+{%- if fd.nxos_scp_server.value is none %}{{ missing_FabricDesign_nxos_scp_server() }}{% endif -%}
+{% set keepalive_vrf = fd.vpc_keepalive_vrf.value -%}   {#- as the fabric vPC pairs -#}
+{% set keepalive_timers = "interval " ~ fd.vpc_keepalive_interval_ms.value ~ " timeout " ~ fd.vpc_keepalive_timeout_s.value ~ " hold-timeout " ~ fd.vpc_keepalive_hold_timeout_s.value -%}
+{% set role_priority = fd.vpc_role_priority.value -%}
+{% set delay_restore = fd.vpc_delay_restore_s.value -%}
+{% set auto_recovery_delay = fd.vpc_auto_recovery_reload_delay_s.value -%}
+{% set stp_priority = fd.vpc_stp_priority.value -%}   {#- aggregation pair = root of every OOB VLAN (peer-switch) -#}
+{% set peer_link_po = fd.vpc_peer_link_port_channel.value -%}
+{% set bmc_vlan = (fd.oob_vlans.value | selectattr("zone", "equalto", "BMC") | list | first).vlan -%}   {#- VLAN of the server-BMC zone -#}
 {% set bmc_range_desc = "Server BMC" -%}
 {% macro vlan_ranges(ids) %}{% set ns = namespace(out=[], start=none, prev=none) %}{% for v in ids %}{% if ns.start is none %}{% set ns.start = v %}{% elif v != ns.prev + 1 %}{% set ns.out = ns.out + [ns.start ~ ("-" ~ ns.prev if ns.prev != ns.start else "")] %}{% set ns.start = v %}{% endif %}{% set ns.prev = v %}{% endfor %}{% if ns.start is not none %}{% set ns.out = ns.out + [ns.start ~ ("-" ~ ns.prev if ns.prev != ns.start else "")] %}{% endif %}{{ ns.out | join(",") }}{% endmacro -%}
 {# Values from the graph #}
 {% set device = data.DcimDevice.edges[0].node -%}
 {% set name = device.name.value -%}
+{% set bmc_range = "Ethernet1/1-" ~ device.device_type.node.access_port_count.value -%}   {#- every 1G port of a server-BMC access switch -#}
 {% set is_agg = device.role.value == "oob_agg" -%}
 {% set interfaces = device.interfaces.edges | map(attribute="node") | list -%}
 {% set physical = interfaces | selectattr("__typename", "equalto", "InterfacePhysical") | list -%}
@@ -31,7 +57,7 @@
 {% set trunk_po_names = trunk_pos | map(attribute="name.value") | list | sort_interface_list -%}
 {# Values derived by rule #}
 {% set mgmt_addr = mgmt.ip_addresses.edges[0].node.address.value -%}
-{% set mgmt_gw = mgmt_addr | ipaddress_interface("network") | string | get_first_usable -%}
+{% set mgmt_gw = ((mgmt_addr | ipaddress_interface("network")).network_address + fd.oob_gateway_host.value) | string -%}
 {% set v_ns = namespace(items=[]) -%}
 {% for p in access_ports %}{% if p.access_vlan.node is not none %}{% set v_ns.items = v_ns.items + [(p.access_vlan.node.vlan_id.value, p.access_vlan.node.name.value)] %}{% endif %}{% endfor -%}
 {% for po in portchannels %}{% for v in po.tagged_vlans.edges | map(attribute="node") | list %}{% set v_ns.items = v_ns.items + [(v.vlan_id.value, v.name.value)] %}{% endfor %}{% endfor -%}
@@ -42,7 +68,8 @@
 {% set member_nodes = pair.members.edges | map(attribute="node") | list -%}
 {% set member_names = member_nodes | map(attribute="name.value") | list | sort_interface_list -%}
 {% set peer = member_nodes | rejectattr("name.value", "equalto", name) | list | first -%}
-{% set my_priority = role_priority[0] if member_names[0] == name else role_priority[1] -%}
+{% if fd.vpc_role_priority_order.value != "by_name" %}{{ unsupported_FabricDesign_vpc_role_priority_order() }}{% endif -%}
+{% set my_priority = role_priority[0] if member_names[0] == name else role_priority[1] -%}   {#- vpc_role_priority_order by_name -#}
 {% set keepalive = physical | selectattr("role.value", "equalto", "vpc_keepalive") | list | first -%}
 {% set keepalive_ip = keepalive.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
 {% set peer_keepalive_ip = peer.interfaces.edges[0].node.ip_addresses.edges[0].node.address.value | ipaddress_interface("ip") -%}
@@ -51,10 +78,18 @@
 {% set po_member_names = po_members | map(attribute="name.value") | list | sort_interface_list -%}
 {% endif -%}
 hostname {{ name }}
+{% if fd.oob_switch_local_admin.value %}
+username {{ fd.local_admin_username.value }} password 5 __CISCOADMIN_HASH__ role network-admin
+{% endif %}
+{% if not fd.dns_lookup.value %}
 no ip domain-lookup
+{% endif %}
 feature lacp
 {% if is_agg %}
 feature vpc
+{% endif %}
+{% if fd.nxos_scp_server.value %}
+feature scp-server
 {% endif %}
 
 vrf context management
@@ -73,12 +108,16 @@ vlan {{ v }}
 spanning-tree vlan {{ vlan_ranges(vlan_ids) }} priority {{ stp_priority }}
 
 vpc domain {{ pair.domain_id.value }}
+{% if fd.mlag_peer_switch.value %}
   peer-switch
+{% endif %}
   role priority {{ my_priority }}
   peer-keepalive destination {{ peer_keepalive_ip }} source {{ keepalive_ip }} vrf {{ keepalive_vrf }} {{ keepalive_timers }}
   delay restore {{ delay_restore }}
   auto-recovery reload-delay {{ auto_recovery_delay }}
+{% if fd.mlag_peer_gateway.value %}
   peer-gateway
+{% endif %}
 {% endif %}
 
 interface {{ mgmt.name.value }}
@@ -100,7 +139,7 @@ interface {{ intf.name.value }}
   switchport
   switchport mode trunk
   switchport trunk allowed vlan {{ tagged(po) }}
-  channel-group {{ peer_link_po }} mode active
+  channel-group {{ peer_link_po }} mode {{ fd.lacp_mode.value }}
   no shutdown
 {% endfor %}
 
@@ -109,7 +148,7 @@ interface {{ po.name.value }}
   switchport
   switchport mode trunk
   switchport trunk allowed vlan {{ tagged(po) }}
-  spanning-tree port type network
+  spanning-tree port type {{ fd.vpc_peer_link_stp_port_type.value }}
   vpc peer-link
 {% endif %}
 {% for n in core_names %}{% set intf = core_ports | selectattr("name.value", "equalto", n) | list | first %}{% set parent = trunk_pos | selectattr("name.value", "equalto", intf.port_channel.node.name.value) | list | first %}
@@ -119,7 +158,7 @@ interface {{ intf.name.value }}
   switchport
   switchport mode trunk
   switchport trunk allowed vlan {{ tagged(parent) }}
-  channel-group {{ parent.name.value | replace("port-channel", "") }} mode active
+  channel-group {{ parent.name.value | replace("port-channel", "") }} mode {{ fd.lacp_mode.value }}
   no shutdown
 {% endfor %}
 {% for n in trunk_po_names %}{% set intf = trunk_pos | selectattr("name.value", "equalto", n) | list | first %}
@@ -130,8 +169,12 @@ interface {{ intf.name.value }}
   switchport mode trunk
   switchport trunk allowed vlan {{ tagged(intf) }}
 {% if is_agg and intf.role.value == "peering" %}
+{% if fd.attachment_port_stp_edge.value %}
   spanning-tree port type edge trunk
+{% endif %}
+{% if fd.attachment_port_bpdu_guard.value %}
   spanning-tree bpduguard enable
+{% endif %}
 {% endif %}
 {% if is_agg %}
   vpc {{ intf.name.value | replace("port-channel", "") }}
@@ -144,18 +187,27 @@ interface {{ intf.name.value }}
   switchport
   switchport mode access
   switchport access vlan {{ intf.access_vlan.node.vlan_id.value }}
+{% if fd.access_port_stp_edge.value %}
   spanning-tree port type edge
+{% endif %}
+{% if fd.access_port_bpdu_guard.value %}
   spanning-tree bpduguard enable
+{% endif %}
   no shutdown
 {% endfor %}
 {% if not is_agg and not access_ports and bmc_vlan in vlan_ids %}
+{% if device.device_type.node.access_port_count.value is none %}{{ missing_DcimDeviceType_access_port_count() }}{% endif %}
 
 interface {{ bmc_range }}
   description {{ bmc_range_desc }}
   switchport
   switchport mode access
   switchport access vlan {{ bmc_vlan }}
+{% if fd.access_port_stp_edge.value %}
   spanning-tree port type edge
+{% endif %}
+{% if fd.access_port_bpdu_guard.value %}
   spanning-tree bpduguard enable
+{% endif %}
   no shutdown
 {% endif %}

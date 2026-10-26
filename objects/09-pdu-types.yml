@@ -1,5 +1,5 @@
 ---
-# PDU vendor chosen early (P2-204, P2-205); model numbers stay open until Phase 5 (P2-140).
+# PDU vendor chosen early; model numbers are still open.
 apiVersion: infrahub.app/v1
 kind: Object
 spec:
@@ -7,7 +7,7 @@ spec:
   data:
     - name: APC by Schneider Electric
 ---
-# Placeholder PDU device types until the model is chosen (P2-159, P2-199 amended by P2-204).
+# Placeholder PDU device types until the model is chosen.
 apiVersion: infrahub.app/v1
 kind: Object
 spec:

@@ -1,13 +1,16 @@
 #!/bin/bash
-# vamd ZTP on the lab host (Phase 3b; A27/A30 lab values): run-ztp.sh prep | start <device> | status [n] | stop
+# vamd ZTP on the lab host (lab values): run-ztp.sh prep | start <device> | status [n] | stop
 #   prep            qemu packages, the N9Kv base disk + OVMF out of the vrnetlab image, the Kea image (no VM yet)
-#   start <device>  bridge br-ztp 10.250.99.1/24 + tap ztp0, Kea DHCP, the ZTP server, a blank N9Kv on ztp0, console logger.
-#                   <device> (for example DC1-L11): its mgmt0 gateway from its rendered config is added to br-ztp so the server
-#                   can verify the switch after the POAP reload (skipped, with a warning, when that subnet is already in use here).
+#   start <device>  bridge br-ztp + tap ztp0, Kea DHCP, the ZTP server, a blank N9Kv on ztp0, console logger. The ZTP subnet,
+#                   server/gateway address and DHCP pool come from FabricDesign (ztp_dhcp_subnet, ztp_server_host,
+#                   ztp_pool_start_host/_end_host, read by ztp_design.py; the Kea config is generated from kea-dhcp4.json into $W).
+#                   <device> (for example DC1-L11): the gateway of its management interface (FabricDesign <role>_mgmt_interface)
+#                   from its rendered config is added to br-ztp so the server can verify the switch after the POAP reload
+#                   (skipped, with a warning, when that subnet is already in use here).
 #   status [n]      last n events, POAP console lines, Kea log
 #   stop            stop everything started here
 # Needs: Infrahub reachable at INFRAHUB_ADDRESS (lab host: the laptop's reverse SSH tunnel, 127.0.0.1:18000), ~/.vamd/secrets.env
-# (ZTP_CALLBACK_TOKEN; VAMDADMIN_HASH/PASSWORD), the lab venv with netmiko (VENV, default <repo>/.venv-lab).
+# (ZTP_CALLBACK_TOKEN; CISCOADMIN_HASH/PASSWORD), the lab venv with netmiko (VENV, default <repo>/.venv-lab).
 set -u
 Z=$(cd "$(dirname "$0")" && pwd); REPO=$(dirname "$Z"); VENV=${VENV:-$REPO/.venv-lab}
 W=/var/lib/vamd-ztp; IMG=vrnetlab/cisco_n9kv:10.6.4.M-lite; KEA=docker.cloudsmith.io/isc/docker/kea-dhcp4:2.6.3
@@ -24,24 +27,23 @@ prep)
   ;;
 start)
   DEV=${2:?usage: run-ztp.sh start <device>}
-  sudo ip link add br-ztp type bridge 2>/dev/null; sudo ip addr replace 10.250.99.1/24 dev br-ztp; sudo ip link set br-ztp up
+  NET=$($VENV/bin/python $Z/ztp_design.py net) || { echo "$NET"; exit 1; }
+  eval "$NET"; echo "ZTP subnet $ZTP_SUBNET, server $ZTP_SERVER_IP (FabricDesign)"
+  sudo mkdir -p $W && sudo chown "$(id -un)" $W
+  $VENV/bin/python $Z/ztp_design.py kea $Z/kea-dhcp4.json $W/kea-dhcp4.json || exit 1
+  sudo ip link add br-ztp type bridge 2>/dev/null; sudo ip addr replace $ZTP_SERVER_CIDR dev br-ztp; sudo ip link set br-ztp up
   sudo ip tuntap add dev ztp0 mode tap user "$(id -un)" 2>/dev/null; sudo ip link set ztp0 master br-ztp; sudo ip link set ztp0 up
   sudo iptables -I INPUT -i br-ztp -j ACCEPT; sudo iptables -I DOCKER-USER -i br-ztp -j ACCEPT 2>/dev/null; true
-  GW=$(cd "$REPO/lab" && $VENV/bin/python -c "
-import re, sys, labctl
-cfg, _ = labctl.Infrahub('main').artifact('startup-config', '$DEV')
-gw = re.search(r'^vrf context management\n(?:  .*\n)*?  ip route 0\.0\.0\.0/0 (\S+)', cfg, re.M)
-ip = re.search(r'^interface mgmt0\n(?:  .*\n)*?  ip address \S+/(\d+)', cfg, re.M)
-print(f'{gw.group(1)}/{ip.group(1)}' if gw and ip else '')")
-  if [ -z "$GW" ]; then echo "WARNING: no mgmt0 gateway in $DEV's config: verification cannot reach the switch"
+  GW=$($VENV/bin/python $Z/ztp_design.py gateway "$DEV") || { echo "$GW"; exit 1; }
+  if [ -z "$GW" ]; then echo "WARNING: no management-interface gateway in $DEV's config: verification cannot reach the switch"
   elif ip -4 route show | grep -v br-ztp | grep -q "^$($VENV/bin/python -c "import ipaddress; print(ipaddress.ip_interface('$GW').network)") "; then
-    echo "WARNING: $GW's subnet is already routed on this host (lab mgmt network?): verification will not reach $DEV, ztp_state ends failed after 30 min"
-  else sudo ip addr replace "$GW" dev br-ztp; echo "br-ztp: + $GW (mgmt0 gateway of $DEV)"; fi
+    echo "WARNING: $GW's subnet is already routed on this host (lab mgmt network?): verification will not reach $DEV, ztp_state ends failed after FabricDesign.ztp_verify_window_s"
+  else sudo ip addr replace "$GW" dev br-ztp; echo "br-ztp: + $GW (management gateway of $DEV)"; fi
   sudo docker rm -f vamd-kea >/dev/null 2>&1
-  sudo docker run -d --name vamd-kea --network host --cap-add NET_ADMIN --cap-add NET_RAW -v $Z/kea-dhcp4.json:/etc/kea/kea-dhcp4.conf:ro $KEA >/dev/null && echo "kea started"
+  sudo docker run -d --name vamd-kea --network host --cap-add NET_ADMIN --cap-add NET_RAW -v $W/kea-dhcp4.json:/etc/kea/kea-dhcp4.conf:ro $KEA >/dev/null && echo "kea started"
   curl -s -o /dev/null -w "Infrahub at $INFRAHUB_ADDRESS: http %{http_code}\n" $INFRAHUB_ADDRESS/api/config
-  pkill -f ztp_server.py; nohup $VENV/bin/python $Z/ztp_server.py 10.250.99.1 8080 > $W/server.log 2>&1 &
-  sleep 2; curl -s http://10.250.99.1:8080/poap.py | head -3
+  pkill -f ztp_server.py; nohup $VENV/bin/python $Z/ztp_server.py $ZTP_SERVER_IP 8080 > $W/server.log 2>&1 &
+  sleep 2; curl -s http://$ZTP_SERVER_IP:8080/poap.py | head -3
   rm -f $W/ztp.qcow2; qemu-img create -q -f qcow2 -F qcow2 -b $W/base.qcow2 $W/ztp.qcow2
   sudo nohup qemu-system-x86_64 -enable-kvm -display none -machine pc -cpu host -smp 3 -m 8192 \
     -monitor tcp:127.0.0.1:4099,server,nowait -serial telnet:127.0.0.1:5099,server,nowait \
@@ -55,11 +57,12 @@ print(f'{gw.group(1)}/{ip.group(1)}' if gw and ip else '')")
   ;;
 status)
   echo "== events"; tail -n ${2:-15} $Z/ztp-events.jsonl 2>/dev/null
+  echo "== release check (DcimPlatform.os_version)"; grep -E '"event": "(version-mismatch|verify-start)"|"os_version"' $Z/ztp-events.jsonl 2>/dev/null | tail -n 5
   echo "== console (POAP lines)"; grep -aE 'POAP|poap|DHCP|Abort|serial|scheduled|login:|vamd|Reboot|reboot|hostname|loader' $W/console.log 2>/dev/null | tail -n ${2:-25} | cut -c1-200
   echo "== kea"; sudo docker logs --tail 5 vamd-kea 2>&1 | cut -c1-200
   ;;
 stop)
   sudo pkill -f 'qemu-system.*ztp.qcow2'; pkill -f ztp_server.py; pkill -f ztp_console.py; sudo docker rm -f vamd-kea >/dev/null 2>&1
   echo stopped ;;
-*) sed -n '2,12p' "$0"; exit 1 ;;
+*) sed -n '2,13p' "$0"; exit 1 ;;
 esac

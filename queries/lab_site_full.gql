@@ -1,12 +1,12 @@
-# Option 5 (claude/option5-decisions.md): lab_site plus the other sites' BGW/DCI switches and the VPN partners.
-# Phase 3 (P3-45, P3-48): everything the containerlab topology and the post-check expectations are built from, for one site.
+# Entire-site lab: lab_site plus the other sites' BGW/DCI switches and the VPN partners.
+# Everything the containerlab topology and the post-check expectations are built from, for one site.
 query LabSiteFull($site: String!) {
   LocationSite(name__value: $site) {
     edges {
       node {
         name { value }
         fabric_asn { node { asn { value } } }
-        owned_prefixes { edges { node { prefix { value } description { value } } } }
+        owned_prefixes { edges { node { prefix { value } description { value } role { value } } } }
         vrfs {
           edges {
             node {
@@ -64,7 +64,7 @@ query LabSiteFull($site: String!) {
   FabricAutonomousSystem {
     edges { node { asn { value } provider { node { name { value } } } } }
   }
-  # option 5 (D5-35): every BGW and DCI switch; the transform keeps the other sites' ones as FRR stand-ins
+  # every BGW and DCI switch; the transform keeps the other sites' ones as FRR stand-ins
   RemoteBgws: DcimDevice(role__value: "bgw") {
     edges { node { name { value } role { value } asn { node { asn { value } } } location { node { name { value } } }
       interfaces { edges { node { __typename name { value } description { value } role { value }
@@ -75,8 +75,21 @@ query LabSiteFull($site: String!) {
       interfaces { edges { node { __typename name { value } description { value } role { value }
         ... on InterfaceLayer3 { ip_addresses { edges { node { address { value } } } } } } } } } }
   }
-  # option 5 (D5-33): the partners with a translated prefix in the site get a stand-in
+  # the partners with a translated prefix in the site get a stand-in
   Partners: FabricPartner {
     edges { node { name { value } translated_prefixes { edges { node { site { node { name { value } } } } } } } }
+  }
+  # Design values (FabricDesign) read by transforms/lab.py (LabTopologyFull); role sets come from the <role>_platform fields
+  FabricDesign {
+    count
+    edges {
+      node {
+        segment_gateway_host { value } p2p_link_prefix_length { value } spine_platform { value } leaf_platform { value }
+        border_leaf_platform { value } service_leaf_platform { value } bgw_platform { value } dci_platform { value }
+        edge_platform { value } dmz_platform { value } internal_fw_platform { value } internet_fw_platform { value }
+        sdwan_fw_platform { value } vpn_fw_platform { value } isp_router_platform { value } cloud_router_platform { value }
+        fw_ha_priority { value }
+      }
+    }
   }
 }

@@ -1,0 +1,72 @@
+# Per-site FabricDesign values that must not overlap between sites, plus the vPC domains in use.
+query DesignOverlapCheck {
+  FabricDesign {
+    count
+    edges {
+      node {
+        name { value }
+        dc1_vpc_domain_base { value }
+        dc2_vpc_domain_base { value }
+        vpc_domain_slot_span { value }
+        vpc_first_server_slot { value }
+        vpc_first_extra_server_slot { value }
+        vpc_fixed_slots { value }
+        max_server_leaves { value }
+        dc1_oob_vpc_domain { value }
+        dc2_oob_vpc_domain { value }
+        dc1_oob_block_base { value }
+        dc2_oob_block_base { value }
+        oob_vlans { value }
+        oob_keepalive_third_octet { value }
+        oob_ra_pool_third_octet { value }
+        oob_ra_pool_prefix_length { value }
+        dc1_carrier_index_base { value }
+        dc2_carrier_index_base { value }
+        isp_router_count { value }
+        carrier_block { value }
+        carrier_link_prefix_length { value }
+        dc1_infra_block { value }
+        dc2_infra_block { value }
+        dc1_tenant_block { value }
+        dc2_tenant_block { value }
+        dc1_oob_wan_prefix { value }
+        dc2_oob_wan_prefix { value }
+        dc1_sdwan_overlay { value }
+        dc2_sdwan_overlay { value }
+        dc1_sdwan_fw_wan_endpoint { value }
+        dc2_sdwan_fw_wan_endpoint { value }
+        dc1_vpn_fw_wan_endpoint { value }
+        dc2_vpn_fw_wan_endpoint { value }
+        dc1_cloud_aws_net_1 { value }
+        dc2_cloud_aws_net_1 { value }
+        dc1_cloud_aws_net_2 { value }
+        dc2_cloud_aws_net_2 { value }
+        dc1_cloud_er_net_1 { value }
+        dc2_cloud_er_net_1 { value }
+        dc1_cloud_er_net_2 { value }
+        dc2_cloud_er_net_2 { value }
+        dc1_cloud_aws_vlan_1 { value }
+        dc2_cloud_aws_vlan_1 { value }
+        dc1_cloud_aws_vlan_2 { value }
+        dc2_cloud_aws_vlan_2 { value }
+        dc1_cloud_er_vlan { value }
+        dc2_cloud_er_vlan { value }
+        dc1_fw_ha_group_offset { value }
+        dc2_fw_ha_group_offset { value }
+        internal_fw_ha_group_base { value }
+        internet_fw_ha_group_base { value }
+        oob_fw_ha_group_base { value }
+        sdwan_fw_ha_group_base { value }
+        vpn_fw_ha_group_base { value }
+      }
+    }
+  }
+  FabricVpcDomain {
+    edges {
+      node {
+        name { value }
+        domain_id { value }
+      }
+    }
+  }
+}

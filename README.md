@@ -3,74 +3,88 @@
 [![checks](https://github.com/cciedata/Cisco-vxlan-evpn/actions/workflows/checks.yml/badge.svg)](https://github.com/cciedata/Cisco-vxlan-evpn/actions/workflows/checks.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-I built this to run two datacenters as code. DC1 and DC2 are Cisco Nexus VXLAN EVPN fabrics joined by EVPN Multi-Site,
-with FortiGate firewalls, Cisco 8000 ISP and cloud routers, an SD-WAN hub, VPN partners, a DMZ pair and a full
-out-of-band network around them.
+This is two datacenters built as code. DC1 and DC2 are Cisco Nexus VXLAN EVPN fabrics connected with EVPN Multi-Site.
+Around them sit FortiGate firewalls, Cisco 8000 routers for the ISPs and the clouds, an SD-WAN hub, partner VPNs, a DMZ
+and a separate out-of-band network.
 
-Everything starts in Infrahub. Two generators turn a few intent values per site into devices, interfaces, pairs, cables
-and IP addresses, and Jinja2 templates turn that into the configs: NX-OS for the switches, FortiOS for the firewalls,
-IOS XR for the routers. I don't edit configs by hand: if something has to change, it changes in the data, goes through a
-proposed change with about 30 validators, and every rendered config is compared byte for byte with a reviewed baseline.
-The lab (containerlab, Nexus 9000v plus FRR stand-ins for everything that is not a Nexus) is rendered from the same data.
+Infrahub holds everything. The design rules (IP numbering, port maps, timers, routing policy) are stored there as data,
+in `design/fabric-design.yml`, not hard-coded in scripts. From those rules and a few numbers per site (how many leaf
+pairs, how many single leaves), the generators create every device, interface, cable and IP address. Templates then
+produce the configs: NX-OS for the switches, FortiOS for the firewalls and IOS XR for the routers.
 
-## Where it stands
+I never edit a config by hand. A change goes into the data, runs through an Infrahub proposed change with its checks, and
+every config it produces is compared line by line with a reviewed copy before it is merged. The lab is built from the
+same data.
 
-134 configs render on `main` and equal their baselines: 106 NX-OS, 20 FortiOS, 8 IOS XR. Every Nexus config has loaded
-on a real NX-OS 10.6(4) image; the only rejected lines are two limits of the virtual image (MACsec, ESI multihoming). The full DC1 site (18 nodes, 43 links) has run as a lab on AWS end to
-end with the merged design and no lab-only changes: PROD host to the internet through the leaf, the service leaf, the
-Internal FW, TRANSIT, the border leaf and the Internet FW. 14 failure scenarios are documented with before/during/after
-evidence. ZTP (POAP) provisions a blank switch from Infrahub to `complete`, and the Day-2 push (NX-OS config replace from
-the Infrahub artifact) applies on a real switch with an empty rollback patch afterwards.
+## Status
 
-Not done: the F5 load balancers, the FortiOS and IOS XR configs on real devices (FRR stand-ins speak the same BGP in the
-lab), BFD (not on the virtual Nexus), a DC2 lab run, and the server-facing ports beyond one lab access port.
+- 134 configs: 106 NX-OS, 20 FortiOS and 8 IOS XR. All of them match their reviewed copies.
+- A fresh install, following [docs/QUICKSTART.md](docs/QUICKSTART.md) on an empty machine, works from start to finish.
+- Every Nexus config loads on a real NX-OS 10.6(4) image. The only lines it refuses are MACsec and ESI multihoming,
+  which the virtual Nexus doesn't support.
+- Both sites have run together as a lab: 10 virtual Nexus per site, with FRR containers standing in for the firewalls
+  and routers. All BGP, route and ping checks passed on both sites. Two things were changed only in the lab: extra test
+  hosts for the DEV and CITRIX networks, and no BGP password on one firewall session in DC2 (still looking at why).
+- DC1 has also run on its own with no lab changes at all: a server reaches the internet through the leaf, the service
+  leaf, the internal firewall, the border leaf and the internet firewall. The failure tests are written up with
+  before, during and after captures.
+- Zero-touch provisioning takes a blank switch to a working config straight from Infrahub. Day-2 changes are pushed with
+  NX-OS config replace, and the pre-check catches anything changed by hand on a switch.
+
+Not done yet: the F5 load balancers, running the FortiOS and IOS XR configs on real hardware (the lab uses FRR for
+those), BFD (the virtual Nexus doesn't run it), and server ports beyond the lab test ports.
 
 ## What's in it
 
-- Two sites, 46 production devices each: 2 spines, 20 server leaves (one vPC pair, 4 EVPN ESI pairs, 10 single-homed),
-  border, service, edge, DMZ, BGW and DCI pairs, 2 Internal and 2 Internet FortiGates, 2 ISP routers, 2 cloud routers,
-  2 SD-WAN hubs, 2 VPN-partner FortiGates. OSPF underlay, iBGP EVPN with the spines as route reflectors, eBGP at every
-  boundary, 8 tenant VRFs, 62 segments, anycast gateway.
-- A full out-of-band network per site: 2 OOB FortiGates, 2 aggregation switches, 2 network-access and 15 BMC switches,
-  2 console servers, a console port on every production device, 179 cables per site.
-- Rack placement and cabling as data: 69 placements, 58 PDUs and 167 fabric cables per site, with four rendered views per
-  site (site diagram, port view, tables, cable schedule).
-- The lab: topology, post-check expectations, FRR stand-in init scripts and the IOS XR lab variants are Infrahub artifacts.
-  `lab/labctl.py` fetches, validates, deploys, pushes and carves; `lab/postcheck.py` runs 164 checks; `lab/failtests.py`
-  runs the failure tests; `lab/day2/` pushes configs with Nornir or Ansible.
-- ZTP: Kea DHCP, a POAP script, a ZTP server that renders the config live by serial and records `ztp_state` in Infrahub.
-- The rendered config of every device, in [`tests/expected/`](tests/expected), and every lab artifact in
+- Two sites with 46 production devices each: 2 spines, 20 server leaves (one vPC pair, 4 ESI pairs, 10 single-homed),
+  border, service, edge, DMZ, border gateway and DCI pairs, internal and internet firewalls, ISP and cloud routers,
+  SD-WAN hubs and partner VPN firewalls. OSPF underlay, iBGP EVPN with the spines as route reflectors, eBGP at every
+  boundary, 8 tenant VRFs and 62 networks.
+- An out-of-band network per site: its own firewalls and switches, console servers, and a console cable to every
+  production device.
+- Racks, power and cabling as data, with a site diagram, port view and cable schedule generated for each site.
+- The lab: Infrahub produces the containerlab topology, the expected results and the FRR configs. `lab/labctl.py` sets
+  the lab up and loads the configs, `lab/postcheck.py` checks it, `lab/failtests.py` breaks things on purpose and checks
+  again, and `lab/day2/` pushes changes with Nornir or Ansible.
+- Zero-touch provisioning: DHCP, a POAP script and a small server that builds each switch's config on request and
+  records the result in Infrahub.
+- Four checks that run on every change, for example that every fabric switch has exactly one loopback0 address and that
+  no two address blocks overlap.
+- The expected config of every device in [`tests/expected/`](tests/expected) and of every lab file in
   [`tests/expected-lab/`](tests/expected-lab).
 
 ## Try it
 
-[docs/QUICKSTART.md](docs/QUICKSTART.md) takes you from an empty Ubuntu machine (Linux, or Windows with WSL2) to an
-Infrahub that holds both sites and renders all 134 configs. One Nexus 9000v fits a 12 GB laptop with Infrahub stopped;
-the full DC1 lab needs a host with about 80 GB (it ran on an AWS m8i.8xlarge). More detail is in
-[docs/BUILD.md](docs/BUILD.md) (every build step) and [docs/DESIGN.md](docs/DESIGN.md) (the design as built).
+Start with [docs/QUICKSTART.md](docs/QUICKSTART.md). It takes an empty Ubuntu machine (Linux, or Windows with WSL2) to an
+Infrahub with both sites and all 134 configs. One virtual Nexus runs on a 12 GB laptop if Infrahub is stopped. A full
+site lab needs about 88 GB of RAM; both sites together ran on a 64-core cloud VM. [docs/BUILD.md](docs/BUILD.md) goes
+through every build step, [docs/DESIGN.md](docs/DESIGN.md) explains the design and [docs/LAB.md](docs/LAB.md) the lab.
 
 ## Repository map
 
-| Path | What it holds |
+| Path | Contents |
 |---|---|
-| `docs/QUICKSTART.md` | from an empty Ubuntu (Linux or WSL2) to Infrahub with both sites and 134 rendered configs; then the lab |
-| `docs/DESIGN.md` | the design as built: sites, hardware, numbering, underlay, vPC and ESI, overlay, tenants, firewalls, OOB, pipeline |
-| `docs/BUILD.md` | the build, step by step: Infrahub, schema, objects, pools, generators, renders, checks against the baselines |
-| `docs/LAB.md` | the lab: images, single Nexus on a laptop, full DC1 site on a big host, post-checks, failure tests, Day-2 push |
-| `docs/LAB-GUI.md` | turn a single device off and on, from the command line or by clicking in VS Code (containerlab extension) |
-| `docs/lab-diagrams/` | one PDF per lab (one switch, DC1 lab path, DC2 lab path, both, the entire DC1 site): cables, addresses, BGP, packet walk, first ARP, run card |
-| `docs/diagrams/` | the four rendered views per site (draw.io diagrams, port views, tables, cable schedule) |
-| `ztp/` | zero-touch provisioning of the Nexus switches from Infrahub (`ztp/README.md`) |
-| `lab/` | `labctl.py`, `postcheck.py`, `failtests.py`, the Day-2 push (`lab/day2/`), the lab requirements (`lab/README.md`) |
-| `docker-compose.yml`, `.env.example` | the Infrahub 1.11.2 stack (compose project `cisco-vxlan-evpn`, no built-in secrets) |
-| `pyproject.toml`, `uv.lock`, `infrahubctl.toml.example` | the uv environment (infrahub-sdk 1.23.2), infrahubctl settings |
-| `schemas/` | the Infrahub schema: base schemas, locations, `fabric.yml` (ASNs, VRFs, segments, switch pairs, attachments), `oob.yml` |
-| `objects/` | the data that is not generated, loaded in file-name order: groups, countries, sites, IP plan, hardware, providers, ASNs and VRFs, segments, branches, partners, lab host ports |
-| `generators/` | `fabric_site` (the production fabric of a site from 4 intent values), `oob_site` (the OOB network and cables), `site_physical` (racks, PDUs, placements, fabric cables) |
-| `queries/`, `templates/`, `transforms/`, `.infrahub.yml` | GraphQL queries, 28 Jinja2 templates, the lab transforms, the artifact and generator definitions |
-| `checks/` | `loopback0_check`: every device in a site's fabric ASN has exactly one loopback0 with one address |
-| `scripts/` | `create_pools.py` (the IP pools), schema and query helpers |
-| `tests/expected/`, `tests/expected-lab/` | the 134 reference configs and 58 reference lab artifacts |
+| `docs/QUICKSTART.md` | Install guide, from an empty Ubuntu machine to Infrahub with all 134 configs, then the lab |
+| `docs/DESIGN.md` | The design: sites, hardware, IP numbering, underlay, vPC and ESI, overlay, tenants, firewalls, OOB |
+| `docs/BUILD.md` | Every build step in order, with the checks against the expected configs |
+| `docs/LAB.md` | Running the lab, from one switch on a laptop to both sites on a large host |
+| `docs/LAB-GUI.md` | Shutting down or starting one lab device, from the CLI or VS Code |
+| `docs/LAB-GCP.md` | Running both lab paths on one Google Cloud VM, with the cost |
+| `docs/lab-diagrams/` | A PDF per lab with cabling, addressing, BGP and a packet walk |
+| `docs/diagrams/` | Site diagrams, port views, tables and cable schedules |
+| `design/fabric-design.yml` | The design rules and values that everything else reads |
+| `schemas/` | The Infrahub schema |
+| `objects/` | Data that is entered rather than generated: sites, IP plan, hardware, VRFs, networks |
+| `generators/` | Code that builds the devices, interfaces, cables and addresses for each site |
+| `templates/`, `queries/`, `transforms/` | Config templates, the queries that feed them, and the lab file builders |
+| `checks/` | The four checks that run on every change |
+| `lab/` | Lab tools: setup, checks, failure tests and Day-2 push |
+| `lab/gcp/` | Scripts that create, start and stop the Google Cloud lab VM and run the lab on it |
+| `ztp/` | Zero-touch provisioning for the Nexus switches |
+| `scripts/` | Helpers for loading the IP pools and the design rules |
+| `tests/` | Offline tests and the expected output of every device and lab file |
+| `docker-compose.yml`, `.env.example` | The Infrahub 1.11.2 stack; passwords come from your own `.env` |
+| `pyproject.toml`, `uv.lock` | The Python environment |
 
 ## License
 

@@ -2,8 +2,7 @@
 
 Two datacenters, DC1 and DC2, each a Cisco Nexus VXLAN EVPN fabric, joined by EVPN Multi-Site over two 100G circuits.
 Everything around the fabric (firewalls, ISP and cloud routers, SD-WAN hub, VPN partners, DMZ, out-of-band) is modeled as
-data too, and every device's config renders from Infrahub. This page describes what is built; the full decision log with
-every alternative considered lives outside this repository.
+data too, and every device's config renders from Infrahub. This page describes what is built.
 
 Diagrams: `docs/diagrams/` (one draw.io site diagram and one port view per site, plus tables and a cable schedule, all
 rendered by the `site_diagrams`, `site_ports`, `site_tables` and `site_cable_schedule` transforms).
@@ -61,7 +60,10 @@ The leaf-side spine ports are Eth1/49–52 on the 93180YC-FX3 (two per spine) an
 | 192.0.2.0/24 | carrier /30s (documentation range) |
 
 Source: `objects/03-ip-plan.yml` and `scripts/create_pools.py`. Pools allocate by identifier (`<device>-<interface>`),
-so a rerun gets the same addresses.
+so a rerun gets the same addresses. Two sets are set by rule instead of by pool, so a phased build and a build from empty
+give the same addresses: the mgmt addresses of the ISP routers, firewalls and cloud routers
+(`FabricDesign.mgmt0_rule_first_host`, unit n = first host + n - 1) and the vPC backup SVI /31s
+(`FabricDesign.vpc_backup_rule_first_host`).
 
 ### ASNs
 
@@ -143,7 +145,7 @@ Traffic paths:
 
 - `mgmt0` in VRF `management` on the OOB network, gateway .1 of the site's network-device /24 (the OOB FortiGate), one
   console port per device to the console servers; pairs split across the two OOB access switches and console servers.
-- Local user `vamdadmin` (network-admin) on every NX-OS device: its hash is a placeholder in every render and baseline
+- Local user `ciscoadmin` (network-admin) on every NX-OS device: its hash is a placeholder in every render and baseline
   and is filled at delivery time from `~/.vamd/secrets.env` (`ztp/make-secret.sh`, `lab/vamd_secrets.py`).
 - ZTP: Kea DHCP points a blank switch at `ztp/poap.py`; the ZTP server finds the device by `serial_number`, serves its
   `startup-config` artifact live, and after the reload verifies the switch over SSH. `ztp_state` (pending / served /
@@ -156,6 +158,8 @@ Traffic paths:
 ## 9. Data model and pipeline
 
 ```
+design/fabric-design.yml ──► FabricDesign (one node, every design value)
+                                   │
 objects/*.yml ──► Infrahub (branch main) ──► generator fabric_site ──► 46 production devices per site, interfaces,
       ▲             pools (scripts/create_pools.py)     oob_site      ──► OOB devices, console ports, 179 cables per site
       │                                                site_physical ──► racks, PDUs, placements, 167 fabric cables per site
@@ -169,11 +173,17 @@ objects/*.yml ──► Infrahub (branch main) ──► generator fabric_site �
   `FabricVRF`, `FabricSegment`, `FabricSwitchPair` → `FabricVpcDomain` / `FabricEsiPair`, `FabricAttachment`,
   `FabricL2Vlan`, `FabricBranch`, `FabricPartner`, `InterfacePortChannel`, device roles, `ztp_state`) and
   `schemas/oob.yml` (`DcimCable`, racks, PDUs, console ports). A device can be in at most one pair.
+- Design values: one global `FabricDesign` node (`schemas/design.yml`) carries every numbering rule, address-block rule,
+  port map, timer, keyword and feature switch that the templates and generators used to hold as literals. It is loaded
+  from `design/fabric-design.yml` by `scripts/load_design.py` and read through `queries/*.gql`, so changing a design
+  value is a data change on a branch, not a code edit. A small number
+  of vendor keywords stay as template literals on purpose, recorded as such rather than moved.
 - Generators have a plan-only mode (`FABRIC_DRY_RUN=1`, `SITE_PHYSICAL_DRY_RUN=1`) and a reconciler that removes what
   the plan no longer contains (`FABRIC_RECONCILE=report` prints instead). Objects owned by a file are linked, never
   saved, by a generator. Idempotency standard: every generator-owned id is snapshotted before and after a full rerun.
 - Every change goes through a Git branch, an Infrahub proposed change (about 30 validators: schema, data, repository,
-  tests, one artifact validator per artifact definition, one generator validator per generator, `loopback0_check`), a
+  tests, one artifact validator per artifact definition, one generator validator per generator, and the four checks
+  `loopback0_check`, `design_overlap_check`, `design_copy_check`, `esi_release_check`), a
   merge through the PC, then a check of `main`: object counts, stored artifacts equal to the baselines, every config
   rendered and compared byte for byte with `tests/expected/`.
 
@@ -182,7 +192,8 @@ objects/*.yml ──► Infrahub (branch main) ──► generator fabric_site �
 | Item | Status |
 |---|---|
 | Every NX-OS config (106) on one Nexus 9000v 10.6(4)M lite | loaded, no config error that needs a change; rejected only MACsec (DCI) and `evpn esi multihoming` (ESI leaves), both limits of the virtual image |
-| Full DC1 site on AWS (m8i.8xlarge, 18 nodes, 43 links: 9 N9Kv + FRR stand-ins for the firewalls, ISP routers, carriers, 3 hosts) | PROD host → internet 5/5 through the designed path with no lab-only changes; post-check 108 of 164 (the 56 failures: 44 BFD, absent on the virtual Nexus, and 12 summary routes with no lab host in DEV/CITRIX) |
+| DC1 lab path on AWS, 8 Oct (m8i.8xlarge, 18 nodes, 43 links: 9 N9Kv + FRR stand-ins for the firewalls, ISP routers, carriers, 3 hosts) | PROD host → internet 5/5 through the designed path with no lab-only changes; post-check 108 of 164 (the 56 failures: 44 BFD, absent on the virtual Nexus, and 12 summary routes with no lab host in DEV/CITRIX) |
+| DC1 and DC2 lab paths together on one cloud VM, 25 Oct (21 nodes, 49 links per site: 10 N9Kv + FRR stand-ins + hosts) | With BFD checks left out and lab-only DEV/CITRIX hosts: DC1 124 of 124, DC2 150 of 150. Lab-only: no BGP password on one DC2 Internal FW session (cause open) |
 | Failure tests | 14 documented with before/during/after captures; open: one Internet FW bundle member down stops traffic, vPC peer-link outage measured late (accepted for go-live) |
 | ZTP | blank N9Kv → `complete` on main in 233 s with the merged code |
 | Day-2 push | `configure replace` from the artifact completed on a carved N9Kv; the second check prints "Rollback Patch is Empty" |
@@ -192,6 +203,6 @@ objects/*.yml ──► Infrahub (branch main) ──► generator fabric_site �
 
 1. F5 load balancers: ports reserved on the DMZ pair, nothing rendered.
 2. FortiOS and IOS XR configs are rendered and checked, not run on real devices; FRR stand-ins speak the same BGP.
-3. BFD never observed (not on the virtual Nexus). DC2 never run in a lab.
+3. BFD never observed (not on the virtual Nexus).
 4. The unused schema choices `pop_circuit` / `pop_router` remain in a live schema that was loaded before the Denver POP was removed.
 5. `labctl push` needs netmiko in the same environment as infrahub-sdk for its SSH fallback (`lab/requirements-lab.txt`).

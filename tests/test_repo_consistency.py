@@ -82,11 +82,11 @@ def test_baselines_exist_and_are_named_by_device():
 
 
 def test_no_secret_in_baselines():
-    """The vamdadmin line carries a placeholder in every render; a real hash or password must never be committed."""
+    """The ciscoadmin line carries a placeholder in every render; a real hash or password must never be committed."""
     leaks = []
     for c in sorted((ROOT / "tests" / "expected").glob("*.cfg")):
         text = c.read_text()
-        if "username vamdadmin" in text and "__VAMDADMIN_HASH__" not in text:
+        if "username ciscoadmin" in text and "__CISCOADMIN_HASH__" not in text:
             leaks.append(c.name)
         if re.search(r"password 5 \$5\$|secret sha512 \$6\$", text):
             leaks.append(c.name)

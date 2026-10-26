@@ -4,7 +4,7 @@ kind: Object
 spec:
   kind: LocationSite
   data:
-    # Design sites (docs/design-decisions.md)
+    # Design sites
     - name: DC1
       shortname: MD01
       description: Maryland datacenter

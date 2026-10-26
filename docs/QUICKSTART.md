@@ -6,7 +6,7 @@ one Nexus 9000v fits a 12 GB laptop, the full DC1 site needs a host with about 8
 
 Run each command block in one go. Each step names the command that proves it worked.
 
-Status of this page: the build from Git alone was verified on an empty Infrahub at the Phase 0 commit (schema, objects,
+Status of this page: the build from Git alone was verified on an empty Infrahub on 26 Sep 2026 (schema, objects,
 pools, `fabric_site` for both sites, renders equal to the baselines), and every later addition was loaded the same way on
 its own branch before it was merged. The whole sequence has not yet been rerun from an empty instance at the current
 commit; docs/BUILD.md marks each step accordingly.
@@ -94,7 +94,8 @@ pools, then the three generators per site, each run first in plan-only mode and 
 ```
 infrahubctl schema load schemas --branch main --wait 120
 for f in objects/0[0-9]-*.yml; do infrahubctl object load "$f" --branch main || break; done
-python scripts/create_pools.py
+infrahubctl run scripts/load_design.py --branch main
+infrahubctl run scripts/create_pools.py --branch main
 for s in DC1 DC2; do
   FABRIC_DRY_RUN=1 infrahubctl generator fabric_site --branch main site=$s
   infrahubctl generator fabric_site --branch main site=$s
@@ -119,7 +120,7 @@ line `VERIFIED 134 configs and 58 lab artifacts on branch main`. The rendered fi
 
 ## 6. The switch password
 
-The NX-OS configs carry a local user `vamdadmin`. Its password hash is filled in when a switch gets its config, and is
+The NX-OS configs carry a local user `ciscoadmin`. Its password hash is filled in when a switch gets its config, and is
 never stored in Git:
 ```
 bash ztp/make-secret.sh
@@ -127,7 +128,16 @@ bash ztp/make-secret.sh
 It asks for a password and writes `~/.vamd/secrets.env` (mode 600). Keep that password: it is the SSH login of every switch
 in the lab, and ZTP cannot verify a switch without it.
 
-## 7. The lab
+## 7. Connect the repository (needed before the lab)
+
+`labctl` reads Infrahub's stored artifacts, which exist only once a repository is connected. Read-only on the public URL
+is enough and needs no credentials:
+```
+infrahubctl repository add Cisco-vxlan-evpn https://github.com/cciedata/Cisco-vxlan-evpn.git --read-only --ref main
+```
+Expected: `infrahubctl repository list` shows it, and the artifacts appear within a few minutes.
+
+## 8. The lab
 
 [docs/LAB.md](LAB.md): the Nexus 9000v image, one node on the laptop, the full DC1 site on a big host, post-checks,
 failure tests, ZTP and the Day-2 push.

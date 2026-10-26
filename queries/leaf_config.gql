@@ -16,7 +16,7 @@ query LeafConfig($device: String!) {
                     vlan_id { value }
                     l2_vni { value }
                     prefix { node { prefix { value } } }
-                    vrf { node { name { value } l3_vni { value } l3_vni_vlan { value } } }
+                    vrf { node { name { value } l3_vni { value } l3_vni_vlan { value } on_server_leaves { value } } }
                   }
                 }
               }
@@ -89,10 +89,63 @@ query LeafConfig($device: String!) {
               }
               ... on InterfacePhysical {
                 access_segment { node { name { value } vlan_id { value } } }
+                l2_mode { value }
+                tagged_segments { edges { node { name { value } vlan_id { value } } } }
               }
             }
           }
         }
+      }
+    }
+  }
+  # design values used by leaf_config.j2 (one FabricDesign object)
+  FabricDesign {
+    count
+    edges {
+      node {
+        underlay_ospf_area { value }
+        overlay_bfd_interval_ms { value }
+        overlay_bfd_multiplier { value }
+        anycast_gateway_mac { value }
+        mtu_svi { value }
+        evpn_maximum_paths { value }
+        vpc_keepalive_vrf { value }
+        vpc_keepalive_interval_ms { value }
+        vpc_keepalive_timeout_s { value }
+        vpc_keepalive_hold_timeout_s { value }
+        vpc_role_priority { value }
+        vpc_role_priority_order { value }
+        vpc_delay_restore_s { value }
+        vpc_auto_recovery_reload_delay_s { value }
+        vpc_stp_priority { value }
+        vpc_peer_link_port_channel { value }
+        vpc_backup_vlan { value }
+        local_admin_username { value }
+        local_admin_role { value }
+        dns_lookup { value }
+        oob_gateway_host { value }
+        evpn_rd_rt_mode { value }
+        mlag_peer_switch { value }
+        mlag_peer_gateway { value }
+        mlag_layer3_peer_router { value }
+        mlag_arp_sync { value }
+        segment_gateway_host { value }
+        distributed_anycast_gateway { value }
+        underlay_ospf_network_type { value }
+        access_port_stp_edge { value }
+        access_port_bpdu_guard { value }
+        lacp_mode { value }
+        vpc_peer_link_stp_port_type { value }
+        mlag_vtep_virtual_router_mac { value }
+        mlag_vtep_advertise_primary_ip { value }
+        arp_suppression { value }
+        evpn_bum_replication { value }
+        overlay_bgp_bfd { value }
+        overlay_send_community_standard { value }
+        ip_redirects { value }
+        dc1_overlay_bgp_password { value }
+        dc2_overlay_bgp_password { value }
+    nxos_scp_server { value }
       }
     }
   }
